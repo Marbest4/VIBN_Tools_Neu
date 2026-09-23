@@ -1,5 +1,6 @@
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
+using VIBN_Tools.Application;
 
 namespace VIBN_Tools.ContainerToFee;
 
@@ -38,7 +39,15 @@ internal static class ContainerObjectProvenance
         properties[ContainerIdKey] = container.GenerationProvenanceId;
         properties[ContainerTypeKey] = container.GenerationContainerType;
         properties[CreatedUtcKey] = DateTimeOffset.UtcNow.ToString("O");
-        await FeeTagPropertyStore.WriteAndVerifyAsync(feeObject.Guid, properties);
+        var result = await FeeTagPropertyStore.TryWriteAndVerifyAsync(feeObject.Guid, properties);
+        if (!result.Confirmed)
+        {
+            ApplicationLogService.Instance.Warning(
+                "Container2FEE Visual",
+                $"Objekt-Provenienz für '{feeObject.Name}' wurde von FEE nicht bestätigt; " +
+                "die fachliche Generierung wird fortgesetzt.",
+                result.Warning);
+        }
     }
 
     public static (string? ContainerId, string? ContainerType) Read(

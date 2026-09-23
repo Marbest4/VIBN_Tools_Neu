@@ -11,6 +11,13 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         public IReadOnlyDictionary<string, string> PersistentTags { get; init; } =
             new Dictionary<string, string>(StringComparer.Ordinal);
 
+        /// <summary>
+        /// Non-empty when FEE created the frame but did not expose the written
+        /// TagComponent values for confirmation. Generation remains usable;
+        /// only provenance-based reverse discovery is potentially incomplete.
+        /// </summary>
+        public string PersistentTagWarning { get; private set; } = string.Empty;
+
         //===================================================================================================================
         // C L A S S   S P E C I F I C   P R O P E R T I E S
         //===================================================================================================================
@@ -41,11 +48,12 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
             if (PersistentTags.Count > 0)
             {
-                await FeeTagPropertyStore.WriteAndVerifyAsync(
+                var result = await FeeTagPropertyStore.TryWriteAndVerifyAsync(
                     Guid,
                     PersistentTags,
                     preserveExisting: true,
                     verifyAfterWrite: false);
+                PersistentTagWarning = result.Warning;
             }
 
             return true;
@@ -55,7 +63,16 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         {
             var result = await base.SendAndWaitAsync();
             if (result && PersistentTags.Count > 0)
-                await FeeTagPropertyStore.VerifyAsync(Guid, PersistentTags);
+            {
+                // Retry the write after the object was sent. Some FEE builds
+                // expose TagComponent only after the first object update.
+                var tagResult = await FeeTagPropertyStore.TryWriteAndVerifyAsync(
+                    Guid,
+                    PersistentTags,
+                    preserveExisting: true,
+                    verifyAfterWrite: true);
+                PersistentTagWarning = tagResult.Warning;
+            }
             return result;
         }
     }

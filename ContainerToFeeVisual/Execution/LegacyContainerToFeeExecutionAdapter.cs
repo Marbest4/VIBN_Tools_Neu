@@ -29,6 +29,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
         {
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(new VisualGenerationProgress(5, "Generierungsplan und ModelValidation werden geprüft …"));
+            var executionWarnings = new List<VisualIssue>();
             var forcedRun = acceptedValidationErrors.Any(issue => issue.Severity == VisualIssueSeverity.Error);
             var excludedContainerIds = new HashSet<string>(StringComparer.Ordinal);
 
@@ -264,6 +265,18 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                 };
                 await basicFrame.CreateAsync();
                 await basicFrame.SendAndWaitAsync();
+                if (!string.IsNullOrWhiteSpace(basicFrame.PersistentTagWarning))
+                {
+                    var warning = new VisualIssue(
+                        VisualIssueSeverity.Warning,
+                        "PROVENANCE_TAG_UNCONFIRMED",
+                        basicFrame.PersistentTagWarning,
+                        selectedBindings.FirstOrDefault()?.PlanNode.Id);
+                    executionWarnings.Add(warning);
+                    logger.Warning(
+                        "FEE hat die Root-Provenienz nicht bestätigt; die bestätigte Generierung wird fortgesetzt.",
+                        basicFrame.PersistentTagWarning);
+                }
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (forcedRun)
@@ -290,6 +303,13 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                         };
                         await errorFrame.CreateAsync();
                         await errorFrame.SendAndWaitAsync();
+                        if (!string.IsNullOrWhiteSpace(errorFrame.PersistentTagWarning))
+                        {
+                            logger.Warning(
+                                $"Der FEE-Fehlerhinweis '{errorFrame.Name}' wurde erzeugt, seine Tag-Properties " +
+                                "wurden aber nicht bestätigt.",
+                                errorFrame.PersistentTagWarning);
+                        }
                     }
                 }
                 progress?.Report(new VisualGenerationProgress(50, "Generierungs-BasicFrame und Fehlerhinweise wurden erstellt."));
@@ -331,8 +351,15 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                     : "Generierung abgeschlossen: ") +
                 $"{selectedContainers.Length} Container wurden verarbeitet; " +
                 $"{signalPlan.ExistingBindings.Count} Signale wurden wiederverwendet und " +
-                $"{signalPlan.MissingSignals.Count} im Grob Generation Interface erzeugt.",
-                acceptedValidationErrors.Concat(modelPreflightIssues).Distinct().ToArray());
+                $"{signalPlan.MissingSignals.Count} im Grob Generation Interface erzeugt." +
+                (executionWarnings.Count > 0
+                    ? " Hinweis: FEE hat die Provenienz-Tags nicht bestätigt; Details stehen im Protokoll."
+                    : string.Empty),
+                acceptedValidationErrors
+                    .Concat(modelPreflightIssues)
+                    .Concat(executionWarnings)
+                    .Distinct()
+                    .ToArray());
         }
         catch (OperationCanceledException)
         {

@@ -105,6 +105,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] FEE2SpecialDevices findet bekannte Gerätelogiken auch in verschachtelten BasicFrames und unterdrückt doppelte Treffer desselben Geräts.
 - [ ] SpecialDevices2FEE zeigt den Gerätefortschritt und entfernt ein vollständig vorhandenes, eindeutig erkanntes Gerät ohne erneute Erzeugung aus der Warteschlange.
 - [ ] ViCo liest den Projektstart aus Custom-Field 508, ordnet Start und Deadline mit Kartentitel sowie Karten-ID zu und zeigt Planung/In Arbeit für `Angelegt (Tool)` ausklappbar an.
+- [ ] ViCo aktualisiert Karten ohne `fields`-Reduktion; ein leerer oder nicht mit Arbeitsplatz-Lanes verknüpfbarer API-Stand ersetzt keinen vorhandenen Cache und die Suche meldet keine interne Trefferspalte `Robotik`.
 - [ ] Containercheckboxen sowie Alle selektieren/deselektieren begrenzen die Aktion auf vollständige unterstützte Container; abgewählte Container werden nicht erzeugt.
 - [ ] Fehlende SimObject-Ziele sind rot, Erzeugungswünsche gelb und vorhandene Zuordnungen auf Ziel- und FEE-Objektseite grün dargestellt.
 - [ ] **Nur SimObjects verknüpfen** verbindet nach Model Validation → Update Objects vorhandene SimObjects mit genau einer gleichnamigen vorhandenen Logik und erzeugt kein Modellobjekt neu.
@@ -114,6 +115,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Fehlende ModelValidation-Pflichtsignale/-ziele brechen vor dem ersten Schreibzugriff ab; Stopper-Rückmeldungen werden über `Opened/Closed` geprüft.
 - [ ] Neu erzeugte SimObjects besitzen die dokumentierten bisherigen Container2FEE-Größen; Bewegungscontainer haben plausible Startparameter.
 - [ ] Container2FEE Visual erzeugt in FEE einen BasicFrame mit `vibn.container2fee.schema`-Tag; nach FEE-Speichern, Schließen und Öffnen findet FEE2Container denselben Root und exportiert ein semantisch gleiches ContainerFile.
+- [ ] Wird eine TagComponent-Property nach bestätigter Best-Effort-Freigabe von FEE nicht zurückbestätigt, läuft die fachliche Generierung weiter und protokolliert die eingeschränkte Provenienz, statt beim Root oder einem erzeugten Unterobjekt abzubrechen.
 - [ ] Eine direkte Slotänderung und eine PLC_IN-Änderung über MoveBit werden nach Save/Reload als eindeutige Route innerhalb des Roots exportiert; externe oder mehrdeutige Routen bleiben unverändert und erscheinen als Diagnose.
 - [ ] Model Validation, Model Control und Interface Operation funktionieren mit dem Testmodell; Update Objects protokolliert Objektzahl und Laufzeit und ist gegenüber dem Referenzmodell nicht langsamer.
 - [ ] Keine bestehende Funktion wurde durch ViCo-/Kanbanize-Aufrufe verändert.

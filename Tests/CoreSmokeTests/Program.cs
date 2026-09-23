@@ -48,6 +48,8 @@ try
     await VerifyWorkstationConfigurationWriteScopeAsync();
     Console.WriteLine("Running Kanbanize refresh/subtask API smoke test...");
     await VerifyKanbanizeRefreshApiAsync(temporaryRoot);
+    Console.WriteLine("Running Kanbanize invalid-refresh cache protection smoke test...");
+    await VerifyKanbanizeInvalidRefreshProtectionAsync(temporaryRoot);
     Console.WriteLine("Running role store and update smoke test...");
     await VerifyRoleStoreAndUpdateAsync(temporaryRoot);
     Console.WriteLine("Running administration identity smoke test...");
@@ -200,6 +202,10 @@ static async Task VerifyLegacyWorkstationCatalogAsync(string temporaryRoot)
         "Structured project start/deadline data was not retained from the workstation cache.");
     Assert(new ViCoWorkstationSearch().Search(snapshot.Workstations, "GM9000", ViCoSearchMode.Project).Count == 1,
         "Project-oriented workstation search failed.");
+    Assert(new ViCoWorkstationSearch()
+            .SearchWithMatches(snapshot.Workstations, "GM9000", ViCoSearchMode.All)
+            .All(hit => !hit.MatchedColumns.Contains("Robotik", StringComparer.OrdinalIgnoreCase)),
+        "Robot metadata must not add the internal 'Robotik' label to ViCo search results.");
 }
 
 static void VerifyWorkstationOccupancyAndUnifiedSearch()
@@ -895,8 +901,8 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
 
     Assert(handler.Requests.Any(url =>
                url.StartsWith("/api/v2/cards?board_ids=1541", StringComparison.Ordinal) &&
-               url.Contains("fields=card_id,title,deadline", StringComparison.OrdinalIgnoreCase)),
-        "The workstation card query must explicitly request deadline without positional fields.");
+               !url.Contains("fields=", StringComparison.OrdinalIgnoreCase)),
+        "The workstation card query must retain lane/column data by avoiding the tenant-incompatible fields reduction.");
     Assert(handler.Requests.Any(url => url.Contains("expand=custom_fields", StringComparison.OrdinalIgnoreCase)) &&
            handler.Requests.Contains("/api/v2/cards/501/subtasks", StringComparer.Ordinal),
         "The workstation query must load project start fields while the authoritative card-level endpoint remains responsible for KONFIGURATION subtasks.");
@@ -917,8 +923,37 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
         "Kanbanize project dates were not retained in the structured workstation cache.");
     var detailProject = cards.EnumerateArray().Single(card => card.GetProperty("id").GetInt32() == 503);
     Assert(detailProject.GetProperty("deadline").GetDateTimeOffset().Day == 15 &&
+           detailProject.GetProperty("laneId").GetString() == "28125" &&
+           handler.Requests.Contains("/api/v2/cards/503", StringComparer.Ordinal) &&
            handler.Requests.Contains("/api/v2/cards/503?fields=card_id,deadline", StringComparer.Ordinal),
-        "A deadline omitted by the list endpoint must be recovered from the card detail endpoint.");
+        "A position/deadline omitted by the list endpoint must be recovered from the card detail endpoints.");
+}
+
+static async Task VerifyKanbanizeInvalidRefreshProtectionAsync(string temporaryRoot)
+{
+    var cacheRoot = Path.Combine(temporaryRoot, "kanbanize-invalid-refresh");
+    Directory.CreateDirectory(cacheRoot);
+    var lanesPath = Path.Combine(cacheRoot, "AllPCLaneInfosWithChilds.txt");
+    var cardsPath = Path.Combine(cacheRoot, "AllCardsOfPCsV2.txt");
+    await File.WriteAllLinesAsync(lanesPath, new[] { "old-lane", "GM11111 Tool PC" });
+    await File.WriteAllLinesAsync(cardsPath, new[] { "#Working#GM1000/01-001", "old-lane" });
+
+    using var handler = new KanbanizeRefreshHttpMessageHandler(emptyWorkstationCards: true);
+    using var client = new HttpClient(handler);
+    var rejected = false;
+    try
+    {
+        await new KanbanizeRefreshService(client, "test-only-key", cacheRoot).RefreshAsync();
+    }
+    catch (InvalidDataException exception)
+    {
+        rejected = exception.Message.Contains("nicht überschrieben", StringComparison.OrdinalIgnoreCase);
+    }
+
+    Assert(rejected, "An empty/unjoinable Businessmap response must be rejected before replacing the ViCo cache.");
+    Assert((await File.ReadAllLinesAsync(lanesPath)).SequenceEqual(new[] { "old-lane", "GM11111 Tool PC" }) &&
+           (await File.ReadAllLinesAsync(cardsPath)).SequenceEqual(new[] { "#Working#GM1000/01-001", "old-lane" }),
+        "A rejected Kanbanize refresh replaced a previously usable cache.");
 }
 
 static async Task VerifyAdministrationIdentityAsync()
@@ -1247,7 +1282,7 @@ sealed class RecordingHttpMessageHandler : HttpMessageHandler
     }
 }
 
-sealed class KanbanizeRefreshHttpMessageHandler : HttpMessageHandler
+sealed class KanbanizeRefreshHttpMessageHandler(bool emptyWorkstationCards = false) : HttpMessageHandler
 {
     public List<string> Requests { get; } = new();
 
@@ -1262,7 +1297,11 @@ sealed class KanbanizeRefreshHttpMessageHandler : HttpMessageHandler
         {
             "/api/v2/boards/1541/lanes" => "{\"data\":[{\"lane_id\":28125,\"name\":\"GM12345 Tool PC\"}]}",
             var value when value.StartsWith("/api/v2/cards?board_ids=1541", StringComparison.Ordinal) =>
-                "{\"data\":{\"data\":[{\"card_id\":501,\"lane_id\":28125,\"column_id\":29373,\"title\":\"Arbeitsplatz KONFIGURATION\",\"subtasks\":[{\"card_id\":601,\"description\":\"STANDORT: Werk 1\"}]},{\"card_id\":502,\"lane_id\":28125,\"column_id\":29375,\"title\":\"GM9000/01-001\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-01T00:00:00Z\"}],\"deadline\":\"2026-09-30T00:00:00Z\"},{\"card_id\":503,\"lane_id\":28125,\"column_id\":29374,\"title\":\"GM9000/01-002\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-02T00:00:00Z\"}]}],\"pagination\":{\"all_pages\":1}}}",
+                emptyWorkstationCards
+                    ? "{\"data\":{\"data\":[],\"pagination\":{\"all_pages\":1}}}"
+                    : "{\"data\":{\"data\":[{\"card_id\":501,\"lane_id\":28125,\"column_id\":29373,\"title\":\"Arbeitsplatz KONFIGURATION\",\"subtasks\":[{\"card_id\":601,\"description\":\"STANDORT: Werk 1\"}]},{\"card_id\":502,\"lane_id\":28125,\"column_id\":29375,\"title\":\"GM9000/01-001\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-01T00:00:00Z\"}],\"deadline\":\"2026-09-30T00:00:00Z\"},{\"card_id\":503,\"title\":\"GM9000/01-002\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-02T00:00:00Z\"}]}],\"pagination\":{\"all_pages\":1}}}",
+            "/api/v2/cards/503" =>
+                "{\"data\":{\"card_id\":503,\"title\":\"GM9000/01-002\",\"current_position\":{\"lane_id\":28125,\"column_id\":29374}}}",
             "/api/v2/cards/503?fields=card_id,deadline" =>
                 "{\"data\":{\"card_id\":503,\"deadline\":{\"value\":\"2026-10-15T00:00:00Z\"}}}",
             "/api/v2/cards/501/subtasks" =>

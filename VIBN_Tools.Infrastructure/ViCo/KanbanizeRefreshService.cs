@@ -70,6 +70,8 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
             cardLines.Add(card.LaneId);
         }
 
+        ValidateWorkstationCache(structuredLanes, cards);
+
         Directory.CreateDirectory(_cacheRoot);
         await WriteAtomicallyAsync(
             Path.Combine(_cacheRoot, "AllPCLaneInfosWithChilds.txt"),
@@ -152,6 +154,10 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
             .GroupBy(card => card.Id)
             .Select(group => group.First())
             .ToList();
+        await LoadMissingCardPositionsAsync(cards, cancellationToken);
+        cards = cards
+            .Where(card => card.Id > 0 && card.LaneId.Length > 0 && card.Title.Length > 0)
+            .ToList();
         await LoadMissingProjectDeadlinesAsync(cards, cancellationToken);
         if (loadConfigurationSubtasks)
             await LoadConfigurationSubtasksAsync(cards, cancellationToken);
@@ -160,12 +166,55 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
 
     private static string BuildCardsUrl(int boardId, int page, int pageSize, bool expandSubtasks) =>
         $"/cards?board_ids={boardId}&page={page}&per_page={pageSize}" +
-        "&fields=card_id,title,deadline" +
         (expandSubtasks ? "&expand=custom_fields" : string.Empty);
 
     /// <summary>
-    /// Businessmap installations can omit <c>deadline</c> from the board list
-    /// although it was requested. Resolve only active project cards with a
+    /// The Businessmap tenant does not accept lane/column as explicit
+    /// <c>fields</c> values and may omit positional data from a reduced list
+    /// response. The unrestricted list is the normal path; this card-detail
+    /// fallback protects the workstation join if a server version still omits
+    /// one of the position values.
+    /// </summary>
+    private async Task LoadMissingCardPositionsAsync(
+        IEnumerable<WorkstationCardCacheEntry> cards,
+        CancellationToken cancellationToken)
+    {
+        var candidates = cards
+            .Where(card => card.Id > 0 &&
+                           (card.LaneId.Length == 0 || card.ColumnId.Length == 0 || card.Title.Length == 0))
+            .ToArray();
+        if (candidates.Length == 0)
+            return;
+
+        using var throttle = new SemaphoreSlim(6);
+        await Task.WhenAll(candidates.Select(async card =>
+        {
+            await throttle.WaitAsync(cancellationToken);
+            try
+            {
+                using var detail = await GetJsonAsync($"/cards/{card.Id}", cancellationToken);
+                var cardObject = EnumerateObjects(detail.RootElement)
+                    .FirstOrDefault(element => TryGetInt(element, "card_id", "id") == card.Id);
+                if (cardObject.ValueKind != JsonValueKind.Object)
+                    return;
+
+                if (card.LaneId.Length == 0)
+                    card.LaneId = ReadCardPosition(cardObject, "lane_id", "laneId");
+                if (card.ColumnId.Length == 0)
+                    card.ColumnId = ReadCardPosition(cardObject, "column_id", "columnId");
+                if (card.Title.Length == 0 && TryGetScalar(cardObject, "title", out var title))
+                    card.Title = title;
+            }
+            finally
+            {
+                throttle.Release();
+            }
+        }));
+    }
+
+    /// <summary>
+    /// Businessmap installations can omit <c>deadline</c> from the board list.
+    /// Resolve only active project cards with a
     /// missing value through the authoritative card endpoint; populated list
     /// values do not cause additional requests.
     /// </summary>
@@ -348,8 +397,8 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
             .Select(card => new WorkstationCardCacheEntry
             {
                 Id = TryGetInt(card, "card_id", "id"),
-                LaneId = TryGetScalar(card, "lane_id", out var laneId) ? laneId : string.Empty,
-                ColumnId = TryGetScalar(card, "column_id", out var columnId) ? columnId : string.Empty,
+                LaneId = ReadCardPosition(card, "lane_id", "laneId"),
+                ColumnId = ReadCardPosition(card, "column_id", "columnId"),
                 Title = TryGetScalar(card, "title", out var title) ? title : string.Empty,
                 // On the workstation board the project start is maintained in
                 // the established custom field 508. Keep the legacy property as
@@ -363,10 +412,37 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
                            TryGetDate(card, "end_date"),
                 Subtasks = GetSubtasks(card, isEndpointPayload: false)
             })
-            .Where(card => card.Id > 0 && card.LaneId.Length > 0)
+            .Where(card => card.Id > 0)
             .GroupBy(card => card.Id)
             .Select(group => group.First())
             .ToList();
+    }
+
+    private static string ReadCardPosition(JsonElement card, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (TryGetScalar(card, name, out var direct))
+                return direct;
+        }
+
+        foreach (var wrapperName in new[] { "current_position", "currentPosition", "position", "location" })
+        {
+            if (card.ValueKind != JsonValueKind.Object ||
+                !card.TryGetProperty(wrapperName, out var wrapper) ||
+                wrapper.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            foreach (var name in names)
+            {
+                if (TryGetScalar(wrapper, name, out var nested))
+                    return nested;
+            }
+        }
+
+        return string.Empty;
     }
 
     private static List<WorkstationSubtaskCacheEntry> GetSubtasks(
@@ -500,14 +576,45 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
             .Trim(' ', '-', ':', '|');
     }
 
+    private static void ValidateWorkstationCache(
+        IReadOnlyCollection<WorkstationLaneCacheEntry> lanes,
+        IReadOnlyCollection<WorkstationCardCacheEntry> cards)
+    {
+        var workstationLaneIds = lanes
+            .Where(lane => lane.Id.Length > 0 &&
+                           (lane.Name.Contains("GM", StringComparison.OrdinalIgnoreCase) ||
+                            lane.Name.Contains("GU", StringComparison.OrdinalIgnoreCase) ||
+                            lane.Name.Contains("Tool", StringComparison.OrdinalIgnoreCase)))
+            .Select(lane => lane.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var joinedCardCount = cards.Count(card =>
+            workstationLaneIds.Contains(card.LaneId) && card.Title.Length > 0);
+        if (workstationLaneIds.Count > 0 && joinedCardCount > 0)
+            return;
+
+        throw new InvalidDataException(
+            "Die Kanbanize-Antwort enthält keinen verwendbaren Arbeitsplatzstand " +
+            $"({lanes.Count} Lanes, {workstationLaneIds.Count} Arbeitsplatz-Lanes, " +
+            $"{cards.Count} Karten, {joinedCardCount} zuordenbare Karten). " +
+            "Der vorhandene ViCo-Cache wurde deshalb nicht überschrieben.");
+    }
+
     private static async Task WriteAtomicallyAsync(
         string destination,
         IEnumerable<string> lines,
         CancellationToken cancellationToken)
     {
-        var temporary = destination + ".tmp";
-        await File.WriteAllLinesAsync(temporary, lines, cancellationToken);
-        File.Move(temporary, destination, overwrite: true);
+        var temporary = CreateTemporaryPath(destination);
+        try
+        {
+            await File.WriteAllLinesAsync(temporary, lines, cancellationToken);
+            File.Move(temporary, destination, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary))
+                File.Delete(temporary);
+        }
     }
 
     private static async Task WriteJsonAtomicallyAsync(
@@ -515,18 +622,29 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
         WorkstationBoardCache value,
         CancellationToken cancellationToken)
     {
-        var temporary = destination + ".tmp";
-        await using (var stream = new FileStream(
-            temporary,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            bufferSize: 16 * 1024,
-            useAsync: true))
+        var temporary = CreateTemporaryPath(destination);
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, value, CacheJsonOptions, cancellationToken);
-            await stream.FlushAsync(cancellationToken);
+            await using (var stream = new FileStream(
+                temporary,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 16 * 1024,
+                useAsync: true))
+            {
+                await JsonSerializer.SerializeAsync(stream, value, CacheJsonOptions, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+            }
+            File.Move(temporary, destination, overwrite: true);
         }
-        File.Move(temporary, destination, overwrite: true);
+        finally
+        {
+            if (File.Exists(temporary))
+                File.Delete(temporary);
+        }
     }
+
+    private static string CreateTemporaryPath(string destination) =>
+        $"{destination}.{Environment.ProcessId}.{Guid.NewGuid():N}.tmp";
 }

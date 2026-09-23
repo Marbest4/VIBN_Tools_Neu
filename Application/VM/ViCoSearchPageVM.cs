@@ -459,6 +459,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         IsBusy = true;
         StatusText = "Kanbanize-Daten werden aktualisiert …";
         var onlineUpdateSucceeded = false;
+        string? onlineFailure = null;
         try
         {
             await _onlineRefresh.RefreshAsync();
@@ -467,6 +468,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
         catch (Exception exception)
         {
+            onlineFailure = exception.Message;
             _log.Error("Kanbanize", "Die Online-Aktualisierung ist fehlgeschlagen; der vorhandene Cache wird verwendet.", exception);
         }
         finally
@@ -476,7 +478,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
         await RefreshCachedDataAsync(onlineUpdateSucceeded
             ? null
-            : "Online-Aktualisierung fehlgeschlagen; vorhandener Cache wurde geladen.");
+            : "Online-Aktualisierung verworfen; vorhandener Cache wurde geladen. " + onlineFailure);
         ScheduleNextAutoRefresh();
     }
 

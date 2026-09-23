@@ -54,6 +54,37 @@ public static class FeeTagPropertyStore
             await VerifyAsync(objectGuid, properties);
     }
 
+    /// <summary>
+    /// Writes metadata without allowing an unavailable or eventually
+    /// consistent TagComponent to abort the actual FEE object generation.
+    /// Callers must surface <see cref="FeeTagPropertyWriteResult.Warning"/>
+    /// because reverse generation cannot rely on unconfirmed provenance.
+    /// </summary>
+    public static async Task<FeeTagPropertyWriteResult> TryWriteAndVerifyAsync(
+        Guid objectGuid,
+        IReadOnlyDictionary<string, string> properties,
+        bool preserveExisting = true,
+        bool verifyAfterWrite = true)
+    {
+        try
+        {
+            await WriteAndVerifyAsync(
+                objectGuid,
+                properties,
+                preserveExisting,
+                verifyAfterWrite);
+            return FeeTagPropertyWriteResult.Success;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            return FeeTagPropertyWriteResult.Unconfirmed(exception);
+        }
+    }
+
     public static async Task VerifyAsync(
         Guid objectGuid,
         IReadOnlyDictionary<string, string> expectedProperties)
@@ -68,4 +99,14 @@ public static class FeeTagPropertyStore
                 $"FEE TagComponent hat die Property '{missing.Key}' nicht mit dem erwarteten Wert bestätigt.");
         }
     }
+}
+
+public sealed record FeeTagPropertyWriteResult(bool Confirmed, string Warning)
+{
+    public static FeeTagPropertyWriteResult Success { get; } = new(true, string.Empty);
+
+    public static FeeTagPropertyWriteResult Unconfirmed(Exception exception) => new(
+        false,
+        "Die FEE-Tag-Properties konnten nicht bestätigt werden. Die Objekterzeugung wurde fortgesetzt; " +
+        $"FEE2Container kann diese Provenienz möglicherweise nicht auswerten. Ursache: {exception.Message}");
 }

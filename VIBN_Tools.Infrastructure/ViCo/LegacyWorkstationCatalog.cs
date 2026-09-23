@@ -596,8 +596,6 @@ public sealed class ViCoWorkstationSearch : IViCoWorkstationSearch
             Add("Sonstiges", workstation.WorkstationConfiguration.Other.Value);
             Add("FEE", workstation.FeeInformation);
             Add("Hardware", workstation.HardwareInformation);
-            foreach (var robot in workstation.RobotDetails)
-                Add("Robotik", $"{robot.Name} {robot.Status} {robot.SourceCard}");
         }
 
         if (mode is ViCoSearchMode.All or ViCoSearchMode.Project)
