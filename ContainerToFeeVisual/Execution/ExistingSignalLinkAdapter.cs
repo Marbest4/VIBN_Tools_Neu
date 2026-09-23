@@ -173,7 +173,7 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         {
             var element = System.Xml.Linq.XElement.Parse(xml[index]);
             var persisted = Guid.TryParse(
-                element.Element("Logic")?.Element("PersistedLogicGuid")?.Value,
+                ReadXmlValue(element, "PersistedLogicGuid"),
                 out var definitionGuid)
                 ? definitionGuid
                 : Guid.Empty;
@@ -186,6 +186,17 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
             });
         }
         return result;
+    }
+
+    private static string? ReadXmlValue(System.Xml.Linq.XElement root, string name)
+    {
+        var attribute = root.DescendantsAndSelf().SelectMany(item => item.Attributes())
+            .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(attribute?.Value))
+            return attribute.Value.Trim();
+        return root.DescendantsAndSelf()
+            .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase))
+            ?.Value.Trim();
     }
 
     internal static async Task<IReadOnlyList<FeeCabinetElement>> ReadExistingCabinetElementsAsync(

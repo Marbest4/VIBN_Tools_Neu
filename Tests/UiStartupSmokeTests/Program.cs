@@ -675,6 +675,15 @@ internal static class Program
                 throw new InvalidOperationException(
                     "Visual plan hierarchy must show Logic, Signals and SimObjects as sibling groups below the container.");
             }
+            var existingLogicPresence = VisualFeeContainerPresenceResolver.Resolve(
+                loaded.Plan,
+                [new VisualFeeContainerObject(
+                    Guid.NewGuid().ToString("D"),
+                    "Sensor_1",
+                    VisualFeeContainerObjectKind.Logic,
+                    @"Definitions\Grob_Sensor.xml")]);
+            if (existingLogicPresence[logic.Id].Kind != VisualFeeNodePresenceKind.Found)
+                throw new InvalidOperationException("An existing component/definition-matched FEE logic was not detected.");
 
             var container = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container);
             var signalNode = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Signal);
@@ -738,6 +747,8 @@ internal static class Program
                 restored.CurrentPlan.ExistingInterfaceSelection?.InterfaceGuid != selectedInterface.GuidString)
                 throw new InvalidOperationException("Visual sidecar was not restored correctly.");
 
+            VerifyCabinetAndUnknownPresence(directory);
+
             return restored;
         }
         finally
@@ -745,6 +756,66 @@ internal static class Program
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+    }
+
+    private static void VerifyCabinetAndUnknownPresence(string directory)
+    {
+        var cabinetPath = Path.Combine(directory, "Cabinet.xml");
+        File.WriteAllText(cabinetPath, """
+            <AutoCreate>
+              <Container id="switch-1">
+                <Component>Selector_1</Component><Type>Switch</Type>
+                <Entries><Entry><Slot>PLC_IN_NO1</Slot><Signal>Selector_NO</Signal><Address>%I12.0</Address><DataType>Bool</DataType><ID>SW1</ID></Entry></Entries>
+              </Container>
+            </AutoCreate>
+            """);
+        var cabinetService = new ContainerToFeeVisualPlanService();
+        var cabinetLoad = cabinetService.LoadXmlAsync(cabinetPath).GetAwaiter().GetResult();
+        if (!cabinetLoad.Success || cabinetLoad.Plan is null)
+            throw new InvalidOperationException("Cabinet visual plan could not be loaded.");
+        var cabinetPresence = VisualFeeContainerPresenceResolver.Resolve(
+            cabinetLoad.Plan,
+            [
+                new VisualFeeContainerObject(
+                    Guid.NewGuid().ToString("D"),
+                    "Cabinet Switches",
+                    VisualFeeContainerObjectKind.Cabinet,
+                    string.Empty),
+                new VisualFeeContainerObject(
+                    Guid.NewGuid().ToString("D"),
+                    "Selector_1",
+                    VisualFeeContainerObjectKind.CabinetElement,
+                    @"\CabinetDefinitions\Grob_2PositionSwitch.xml"),
+            ]);
+        var cabinetHelpers = cabinetLoad.Plan.Nodes
+            .Where(node => node.Kind == VisualNodeKind.TechnicalHelper)
+            .ToArray();
+        if (cabinetHelpers.Length != 2 || cabinetHelpers.Any(node =>
+                !cabinetPresence.TryGetValue(node.Id, out var presence) ||
+                presence.Kind != VisualFeeNodePresenceKind.Found))
+        {
+            throw new InvalidOperationException("Existing cabinet and CabinetElement nodes were not detected as present.");
+        }
+
+        var unknownPath = Path.Combine(directory, "Unknown.xml");
+        File.WriteAllText(unknownPath, """
+            <AutoCreate>
+              <Container id="unknown-1">
+                <Component>Legacy_1</Component><Type>FutureContainer</Type>
+                <Entries><Entry><Slot>PLC_IN_X</Slot><Signal>Legacy_X</Signal><Address>%I13.0</Address><DataType>Bool</DataType><ID>U1</ID></Entry></Entries>
+              </Container>
+            </AutoCreate>
+            """);
+        var unknownService = new ContainerToFeeVisualPlanService();
+        var unknownLoad = unknownService.LoadXmlAsync(unknownPath).GetAwaiter().GetResult();
+        if (!unknownLoad.Success || unknownLoad.Plan is null)
+            throw new InvalidOperationException("Unknown-container visual plan could not be loaded.");
+        var unknownViewModel = new ContainerToFeeVisualPageVM(unknownService);
+        var unknownSignal = unknownViewModel.TreeRoots
+            .SelectMany(root => root.SelfAndDescendants())
+            .Single(node => node.Kind == VisualNodeKind.UnknownSignal);
+        if (unknownSignal.StateBackground != "#FFFFF2CC")
+            throw new InvalidOperationException("An Unknown signal awaiting creation must be yellow, not red.");
     }
 
     private static void VerifyInstalledFeeVersionRequiresSdk()

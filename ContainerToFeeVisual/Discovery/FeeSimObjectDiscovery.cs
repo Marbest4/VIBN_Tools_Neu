@@ -8,7 +8,8 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 
 internal sealed record VisualFeeDiscoveryResult(
     IReadOnlyList<VisualFeeObject> Objects,
-    IReadOnlyDictionary<string, FeeAbstractObject> RuntimeObjects);
+    IReadOnlyDictionary<string, FeeAbstractObject> RuntimeObjects,
+    IReadOnlyList<VisualFeeContainerObject> ContainerObjects);
 
 /// <summary>Reads selectable FEE objects and keeps SDK instances out of the view model.</summary>
 internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
@@ -23,6 +24,11 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
         // The unchanged legacy search omits Button although Button_Container
         // exposes a target. Add it only for the new visual workflow.
         runtimeObjects.AddRange(await ReadAdditionalTypeAsync(nameof(Button), cancellationToken));
+
+        var logicsTask = ExistingSignalLinkAdapter.ReadExistingLogicsAsync(cancellationToken);
+        var cabinetElementsTask = ExistingSignalLinkAdapter.ReadExistingCabinetElementsAsync(cancellationToken);
+        var cabinetsTask = ReadNamedObjectsAsync("Cabinet", cancellationToken);
+        await Task.WhenAll(logicsTask, cabinetElementsTask, cabinetsTask);
 
         var uniqueRuntimeObjects = runtimeObjects
             .Where(item => !string.IsNullOrWhiteSpace(item.GuidString))
@@ -47,8 +53,27 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 GetAssignableTypeNames(runtimeObject.GetType())));
         }
 
-        logger.Information($"{objects.Count} zuweisbare FEE-SimObjects gelesen.");
-        return new VisualFeeDiscoveryResult(objects, byId);
+        var containerObjects = (await logicsTask)
+            .Select(item => new VisualFeeContainerObject(
+                item.Guid.ToString("D"),
+                item.Name ?? string.Empty,
+                VisualFeeContainerObjectKind.Logic,
+                item.LogicDefinitionName ?? string.Empty))
+            .Concat((await cabinetElementsTask).Select(item => new VisualFeeContainerObject(
+                item.Guid.ToString("D"),
+                item.Name ?? string.Empty,
+                VisualFeeContainerObjectKind.CabinetElement,
+                item.ElementType ?? string.Empty)))
+            .Concat((await cabinetsTask).Select(item => new VisualFeeContainerObject(
+                item.GuidString,
+                item.Name,
+                VisualFeeContainerObjectKind.Cabinet,
+                string.Empty)))
+            .ToArray();
+
+        logger.Information(
+            $"{objects.Count} zuweisbare FEE-SimObjects und {containerObjects.Length} vorhandene Logik-/Cabinet-Objekte gelesen.");
+        return new VisualFeeDiscoveryResult(objects, byId, containerObjects);
     }
 
     internal static string CreateFeeObjectId(string guidString) =>
@@ -100,4 +125,24 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
             .Where(item => item is not null)
             .ToArray()!;
     }
+
+    private static async Task<IReadOnlyList<NamedFeeObject>> ReadNamedObjectsAsync(
+        string objectType,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var guidStrings = (await Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(objectType))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (guidStrings.Length == 0)
+            return [];
+        var names = (await Services.ApiInstance.Object.GetPropertiesAsync(guidStrings, nameof(SceneObject.Name)))
+            .ToArray();
+        cancellationToken.ThrowIfCancellationRequested();
+        return guidStrings.Select((guid, index) => new NamedFeeObject(
+            guid,
+            Services.ApiInstance.XmlHelper.ConvertToString(names[index]))).ToArray();
+    }
+
+    private sealed record NamedFeeObject(string GuidString, string Name);
 }

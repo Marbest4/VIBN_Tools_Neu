@@ -538,6 +538,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             // live discovery colours only afterwards so complete-container
             // verification is not lost again in that rebuild.
             int automaticAssignments = _planService.AutoAssignMatches();
+            ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
             ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
             var verifiedContainers = await _planService
                 .DiscoverVerifiedContainerIdsAsync(cancellationToken);
@@ -549,9 +550,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 ? "FEE lieferte keine SimObjects oder Signale. Model Validation ausführen, damit der Projektzustand vollständig eingelesen wird, danach hier erneut 'FEE aktualisieren' wählen."
                 : "FEE-Daten wurden direkt über die API aktualisiert. Falls kürzlich geänderte SimObjects oder Signale fehlen: Model Validation ausführen und danach erneut aktualisieren.";
             StatusText = automaticAssignments > 0
-                ? $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
+                ? $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeContainerObjects.Count} Logik-/Cabinet-Objekte, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
                   $"{automaticAssignments} automatisch zugeordnet; {verifiedContainers.Count} Container vollständig verifiziert."
-                : $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
+                : $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeContainerObjects.Count} Logik-/Cabinet-Objekte, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
                   $"{verifiedContainers.Count} Container vollständig verifiziert.";
             _log.Information(LogArea, StatusText);
             InvalidateCommands();
@@ -922,6 +923,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
             RefreshFeeInterfaceProjection(_planService.DiscoveredFeeInterfaces);
             AvailableFeeSignals.ReplaceWith(_planService.DiscoveredFeeSignals);
+            ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
             ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
             ApplyVerifiedContainerStates(_verifiedContainerIds);
             PublishIssues(validation.Issues);
@@ -1040,7 +1042,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             return ContainerToFeeVisualNodeState.Verified;
 
         if (node.Kind == VisualNodeKind.UnknownSignal)
-            return ContainerToFeeVisualNodeState.Missing;
+            return ContainerToFeeVisualNodeState.Planned;
 
         if (node.Kind is VisualNodeKind.Group or VisualNodeKind.Root)
             return ContainerToFeeVisualNodeState.None;
@@ -1101,7 +1103,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             if (_planService.CurrentPlan?.SignalAssignments.Any(assignment =>
                     assignment.SignalNodeId == node.Id) == true)
             {
-                node.ApplyExecutionState(ContainerToFeeVisualNodeState.Verified, node.LinkedObjectDescription);
+                node.ApplyExecutionState(
+                    node.Kind == VisualNodeKind.UnknownSignal
+                        ? ContainerToFeeVisualNodeState.Planned
+                        : ContainerToFeeVisualNodeState.Verified,
+                    node.LinkedObjectDescription);
                 continue;
             }
             var matches = signals.Where(signal => string.Equals(
@@ -1129,8 +1135,30 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                         ? "Keine unterstützte Schnittstellenzuordnung – Unknown"
                         : "Noch nicht vorhanden – wird bei der Generierung angelegt";
             node.ApplyExecutionState(
-                node.Kind == VisualNodeKind.UnknownSignal ? ContainerToFeeVisualNodeState.Missing : state,
+                node.Kind == VisualNodeKind.UnknownSignal ? ContainerToFeeVisualNodeState.Planned : state,
                 connection);
+        }
+        RefreshAggregateTreeStates();
+    }
+
+    private void ApplyDiscoveredContainerObjectStates(
+        IReadOnlyList<VisualFeeContainerObject> objects)
+    {
+        var plan = _planService.CurrentPlan;
+        if (plan is null)
+            return;
+        var presenceByNode = VisualFeeContainerPresenceResolver.Resolve(plan, objects);
+        foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants()))
+        {
+            if (!presenceByNode.TryGetValue(node.Id, out var presence))
+                continue;
+            var state = presence.Kind switch
+            {
+                VisualFeeNodePresenceKind.Found => ContainerToFeeVisualNodeState.Verified,
+                VisualFeeNodePresenceKind.Ambiguous => ContainerToFeeVisualNodeState.Ambiguous,
+                _ => ContainerToFeeVisualNodeState.Planned,
+            };
+            node.ApplyExecutionState(state, presence.Description);
         }
         RefreshAggregateTreeStates();
     }

@@ -148,6 +148,37 @@ public sealed class VisualFeeObject
     public IReadOnlyCollection<string> AssignableTypeNames { get; }
 }
 
+/// <summary>Kind of non-draggable FEE object used to colour the generation plan.</summary>
+public enum VisualFeeContainerObjectKind
+{
+    Logic,
+    Cabinet,
+    CabinetElement,
+}
+
+/// <summary>
+/// Lightweight identity of an existing logic or cabinet object. These objects
+/// are deliberately kept separate from draggable SimObjects.
+/// </summary>
+public sealed record VisualFeeContainerObject(
+    string GuidString,
+    string Name,
+    VisualFeeContainerObjectKind Kind,
+    string Definition);
+
+public enum VisualFeeNodePresenceKind
+{
+    Found,
+    Planned,
+    Ambiguous,
+}
+
+/// <summary>Presence result for one logic/cabinet node in the visual tree.</summary>
+public sealed record VisualFeeNodePresence(
+    string NodeId,
+    VisualFeeNodePresenceKind Kind,
+    string Description);
+
 /// <summary>Read-only identity of an existing FEE interface selectable by the user.</summary>
 public sealed class VisualFeeInterface
 {

@@ -21,6 +21,7 @@ public sealed class ContainerToFeeVisualPlanService
     private readonly Stack<PlanState> _undo = new();
     private readonly Stack<PlanState> _redo = new();
     private IReadOnlyList<VisualFeeObject> _feeObjects = [];
+    private IReadOnlyList<VisualFeeContainerObject> _feeContainerObjects = [];
     private IReadOnlyDictionary<string, FeeAbstractObject> _runtimeObjects =
         new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
     private IReadOnlyList<VisualFeeInterface> _feeInterfaces = [];
@@ -56,6 +57,7 @@ public sealed class ContainerToFeeVisualPlanService
     public bool CanRedo => _redo.Count > 0;
 
     public IReadOnlyList<VisualFeeObject> DiscoveredFeeObjects => _feeObjects;
+    public IReadOnlyList<VisualFeeContainerObject> DiscoveredFeeContainerObjects => _feeContainerObjects;
 
     public IReadOnlyList<VisualFeeInterface> DiscoveredFeeInterfaces => _feeInterfaces;
     public IReadOnlyList<VisualFeeSignal> DiscoveredFeeSignals => _feeSignals;
@@ -174,6 +176,7 @@ public sealed class ContainerToFeeVisualPlanService
         var result = await _discovery.DiscoverAsync(cancellationToken);
         _feeObjects = result.Objects;
         _runtimeObjects = result.RuntimeObjects;
+        _feeContainerObjects = result.ContainerObjects;
         _hasDiscoveredFeeObjects = true;
         return _feeObjects;
     }
@@ -752,6 +755,7 @@ public sealed class ContainerToFeeVisualPlanService
         _undo.Clear();
         _redo.Clear();
         _feeObjects = [];
+        _feeContainerObjects = [];
         _runtimeObjects = new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
         _feeInterfaces = [];
         _feeSignals = [];

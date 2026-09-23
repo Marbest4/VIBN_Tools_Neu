@@ -46,13 +46,13 @@ internal static class ContainerMetadataCatalog
         string.IsNullOrWhiteSpace(logicName)
             ? []
             : Descriptors
-                .Where(item => SameLogicDefinition(item.Value.ExpectedLogicName, logicName))
+                .Where(item => IsSameLogicDefinition(item.Value.ExpectedLogicName, logicName))
                 .Select(item => item.Key)
                 .ToArray();
 
-    private static bool SameLogicDefinition(string? expected, string actual)
+    internal static bool IsSameLogicDefinition(string? expected, string? actual)
     {
-        if (string.IsNullOrWhiteSpace(expected))
+        if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrWhiteSpace(actual))
             return false;
         return string.Equals(
             NormalizeLogicDefinition(expected),
@@ -76,6 +76,7 @@ internal static class ContainerMetadataCatalog
         where TContainer : ContainerBaseClass, new()
     {
         var probe = new TContainer();
+        var cabinetOwner = probe as ICabinetElementOwner;
         var targets = probe is ISimObjectFindOrSelect selectable
             ? selectable.GetSimObjectTargets()
                 .Select((target, index) => new TargetDescriptor(
@@ -95,7 +96,9 @@ internal static class ContainerMetadataCatalog
             expectedLogicName,
             technicalHelpers ?? [],
             targets,
-            probe is ICreatableContainer);
+            probe is ICreatableContainer,
+            cabinetOwner?.CabinetName,
+            ContainerExistingObjectReuse.GetExpectedCabinetElementType(probe));
     }
 }
 
@@ -106,7 +109,9 @@ internal sealed record ContainerDescriptor(
     string? ExpectedLogicName,
     IReadOnlyList<string> TechnicalHelpers,
     IReadOnlyList<TargetDescriptor> Targets,
-    bool SupportsCreation);
+    bool SupportsCreation,
+    string? CabinetName,
+    string? ExpectedCabinetElementType);
 
 internal sealed record TargetDescriptor(
     int Index,
