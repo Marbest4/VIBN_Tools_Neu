@@ -662,6 +662,20 @@ internal static class Program
                 loaded.Plan.Edges.Count == 0)
                 throw new InvalidOperationException("Visual plan does not contain the expected target, signal and edges.");
 
+            var logic = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Logic);
+            var signalGroup = loaded.Plan.Nodes.Single(node =>
+                node.Kind == VisualNodeKind.Group && node.Name == "Signals");
+            var simObjectGroup = loaded.Plan.Nodes.Single(node =>
+                node.Kind == VisualNodeKind.Group && node.Name == "SimObjects");
+            if (logic.ParentId != loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container).Id ||
+                signalGroup.ParentId != logic.ParentId || simObjectGroup.ParentId != logic.ParentId ||
+                loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Signal).ParentId != signalGroup.Id ||
+                loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.SimObjectTarget).ParentId != simObjectGroup.Id)
+            {
+                throw new InvalidOperationException(
+                    "Visual plan hierarchy must show Logic, Signals and SimObjects as sibling groups below the container.");
+            }
+
             var container = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container);
             var signalNode = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Signal);
             if (!service.SetSlotOverride(signalNode.Id, "PLC_IN_PartPresent_Ch1") ||

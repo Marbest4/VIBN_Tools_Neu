@@ -398,6 +398,10 @@ internal static class Program
         var sensorSignal2 = Guid.NewGuid();
         var buttonSignal = Guid.NewGuid();
         var returnSignal = Guid.NewGuid();
+        var switchGuid = Guid.NewGuid();
+        var fuseGuid = Guid.NewGuid();
+        var switchSignal = Guid.NewGuid();
+        var fuseSignal = Guid.NewGuid();
         var result = FeeContainerLiveReconstructor.Reconstruct(
             rootGuid,
             "Existing main frame",
@@ -406,6 +410,10 @@ internal static class Program
                 new FeeContainerLiveObject(buttonGuid, "Button_1", "Button"),
                 new FeeContainerLiveObject(notGuid, "Return_1", "BoolNot"),
                 new FeeContainerLiveObject(unassignedGuid, "Air_1", "VersionedLogic", "Grob_PneumaticSupply"),
+                new FeeContainerLiveObject(switchGuid, "SwitchRaw;%I13.0", "FS.SDK.Scene.Objects.CabinetElement",
+                    CabinetDefinition: @"Definitions\Grob_2PositionSwitch.xml", Label: "Selector_1"),
+                new FeeContainerLiveObject(fuseGuid, "FuseRaw;%I14.0", "CabinetElement",
+                    CabinetDefinition: @"definitions/Grob_Fuse.XML", Label: "Fuse_1"),
                 new FeeContainerLiveObject(ignoredGuid, "Unrelated", "Decoration"),
             ],
             [
@@ -413,16 +421,20 @@ internal static class Program
                 new FeeContainerLiveVariable(sensorSignal2, "Sensor B", "%I10.1", "", "Bool", "S2"),
                 new FeeContainerLiveVariable(buttonSignal, "Button NO", "%I11.0", "", "Bool", "B1"),
                 new FeeContainerLiveVariable(returnSignal, "Return", "%Q12.0", "", "Bool", "R1"),
+                new FeeContainerLiveVariable(switchSignal, "Selector NO", "%I13.0", "", "Bool", "SW1"),
+                new FeeContainerLiveVariable(fuseSignal, "Fuse NC", "%I14.0", "", "Bool", "F1"),
             ],
             [
                 new FeeContainerLiveAssignment(sensorSignal1, sensorGuid, "PLC_IN_PartPresent_Ch1"),
                 new FeeContainerLiveAssignment(sensorSignal2, sensorGuid, "PLC_IN_PartPresent_Ch1"),
                 new FeeContainerLiveAssignment(buttonSignal, buttonGuid, "Pressed"),
                 new FeeContainerLiveAssignment(returnSignal, notGuid, "Input 01"),
+                new FeeContainerLiveAssignment(switchSignal, switchGuid, "NO1"),
+                new FeeContainerLiveAssignment(fuseSignal, fuseGuid, "NC"),
             ]);
 
         var containers = result.Snapshot.ContainerDocument.Descendants("Container").ToArray();
-        if (result.Snapshot.ContainerCount != 4 || result.Snapshot.SignalCount != 4 ||
+        if (result.Snapshot.ContainerCount != 6 || result.Snapshot.SignalCount != 6 ||
             result.IgnoredObjectCount != 1 || result.Issues.Count != 2 ||
             containers.Single(item => item.Element("Type")?.Value == "Sensor")
                 .Descendants("Entry").Count() != 2 ||
@@ -431,7 +443,13 @@ internal static class Program
             containers.Single(item => item.Element("Type")?.Value == "ReturnCircuit")
                 .Descendants("Slot").Single().Value != "PLC_OUT_Signal" ||
             containers.Single(item => item.Element("Type")?.Value == "PneumaticSupply")
-                .Descendants("Note").Single().Value.Contains("PRÜFEN", StringComparison.Ordinal) == false)
+                .Descendants("Note").Single().Value.Contains("PRÜFEN", StringComparison.Ordinal) == false ||
+            containers.Single(item => item.Element("Type")?.Value == "Switch")
+                .Element("Component")?.Value != "Selector_1" ||
+            containers.Single(item => item.Element("Type")?.Value == "Switch")
+                .Descendants("Slot").Single().Value != "PLC_IN_NO1" ||
+            containers.Single(item => item.Element("Type")?.Value == "Fuse")
+                .Descendants("Slot").Single().Value != "PLC_IN_NC")
         {
             throw new InvalidOperationException(
                 "Existing FEE BasicFrame reconstruction lost a supported container, fan-in, or slot mapping.");

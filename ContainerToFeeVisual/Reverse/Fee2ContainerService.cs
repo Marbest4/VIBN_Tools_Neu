@@ -187,11 +187,7 @@ public sealed class Fee2ContainerService
     {
         try
         {
-            var tagsXml = await Services.ApiInstance!.Object.GetPropertyAsync(
-                guid,
-                nameof(TagComponent.TagEntries),
-                nameof(TagComponent));
-            return Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+            return await FeeTagPropertyStore.ReadAsync(guid);
         }
         catch
         {
@@ -253,7 +249,7 @@ public sealed class Fee2ContainerService
                 var xml = XElement.Parse(xmlTexts[index]);
                 var type = xml.Attribute("Type")?.Value ?? xml.Name.LocalName;
                 var name = xml.Attribute("Name")?.Value ?? string.Empty;
-                var logicGuidText = xml.Element("Logic")?.Element("PersistedLogicGuid")?.Value;
+                var logicGuidText = ReadXmlValue(xml, "PersistedLogicGuid");
                 var logicName = Guid.TryParse(logicGuidText, out var logicGuid) &&
                                 logicNames.TryGetValue(logicGuid, out var resolvedLogicName)
                     ? resolvedLogicName
@@ -268,8 +264,8 @@ public sealed class Fee2ContainerService
                     name,
                     type,
                     logicName,
-                    xml.Element("Definition")?.Value,
-                    xml.Element("Label")?.Value,
+                    ReadXmlValue(xml, "Definition", "ElementType"),
+                    ReadXmlValue(xml, "Label"),
                     provenance.ContainerId,
                     provenance.ContainerType));
             }
@@ -344,6 +340,28 @@ public sealed class Fee2ContainerService
         return (await Task.WhenAll(reads))
             .Where(item => item.Item1 != Guid.Empty)
             .ToDictionary(item => item.Item1, item => item.Item2);
+    }
+
+    /// <summary>
+    /// FEE versions serialize some Cabinet/Logic properties either directly,
+    /// below a component element, or as an attribute. Read all compatible
+    /// representations without depending on one SDK XML layout.
+    /// </summary>
+    private static string? ReadXmlValue(XElement root, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var attribute = root.DescendantsAndSelf().Attributes()
+                .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(attribute?.Value))
+                return attribute.Value.Trim();
+
+            var element = root.DescendantsAndSelf()
+                .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(element?.Value))
+                return element.Value.Trim();
+        }
+        return null;
     }
 
     private static async Task<VariableAssignmentRead> ReadAssignmentsAsync(

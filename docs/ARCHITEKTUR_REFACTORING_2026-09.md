@@ -20,6 +20,8 @@ Ein eigenes Projekt pro sichtbarem Reiter ist nicht generell sinnvoll. Ein Reite
 | TIA | Contracts, Client und separaten Bridgeprozess beibehalten | unterschiedliche Laufzeitgrenzen und kontrollierbarer Fehler-/Abbruchbereich |
 | Container2FEE, ModelValidation, SpecialDevices | vorerst im Hauptprojekt | gemeinsame FEE-SDK-Objekte, `Services` und Containerklassen erzeugen noch eine starke Rückkopplung; ein Projekt pro Reiter würde diese Kopplung nur verdecken |
 
+Die gleichnamigen Ordner `ViCo` und `Kanbanize` in `VIBN_Tools.Core` und `VIBN_Tools.Infrastructure` sind daher keine doppelten Feature-Implementierungen. Core enthält Ports, unveränderliche Modelle und Regeln ohne Netzwerk-/Dateisystemzugriff; Infrastructure enthält die konkreten HTTP-, JSON-, Credential- und Cache-Adapter. Die UI-Orchestrierung verbleibt in `Application/VM`. Ein Zusammenlegen würde diese prüfbare Abhängigkeitsrichtung aufheben. Klassen werden innerhalb ihrer Schicht über fachlichen Namen und Namespace zugeordnet; zusätzliche Reiternamen in jedem Typnamen würden die Bezeichner verlängern, aber keine Mehrdeutigkeit beseitigen.
+
 ## Neue Projektgrenzen
 
 ```text

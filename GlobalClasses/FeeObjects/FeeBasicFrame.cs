@@ -41,14 +41,22 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
             if (PersistentTags.Count > 0)
             {
-                await Services.ApiInstance.Object.SetPropertyAsync(
+                await FeeTagPropertyStore.WriteAndVerifyAsync(
                     Guid,
-                    nameof(FS.SDK.Components.TagComponent.TagEntries),
-                    new Dictionary<string, string>(PersistentTags, StringComparer.Ordinal),
-                    nameof(FS.SDK.Components.TagComponent));
+                    PersistentTags,
+                    preserveExisting: true,
+                    verifyAfterWrite: false);
             }
 
             return true;
+        }
+
+        public override async Task<bool> SendAndWaitAsync()
+        {
+            var result = await base.SendAndWaitAsync();
+            if (result && PersistentTags.Count > 0)
+                await FeeTagPropertyStore.VerifyAsync(Guid, PersistentTags);
+            return result;
         }
     }
 }

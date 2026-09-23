@@ -20,15 +20,15 @@ Die Anwendung arbeitet defensiv: externe Aktionen werden erst nach einer bewusst
 | Zuli Converter | Zuli-Datei einlesen und Interface-Datei erzeugen | alle |
 | Container Generation | Container aus Interface- und Requirements-Dateien prüfen und generieren | Level7 |
 | Container2Fee | Container XML mit FEE-Simulationsobjekten verbinden | Level7 |
-| Container2FEE Visual | zusätzliche Planansicht mit Drag-and-drop; nutzt denselben Generator | Level7 |
-| FEE2Container | exportiert ContainerFiles aus auswählbaren BasicFrames; exakt per Provenienz oder geprüft aus bestehender FEE-Struktur rekonstruiert | Level7 + FEE-Verbindung |
-| AI-Test / Regelvorschläge | analysiert protokollierte Slotkorrekturen; geprüfte exakte Regeln mit Vorschau und Backup übernehmen | Level8 |
+| Container2FEE Visual | zusätzliche Planansicht mit Drag-and-drop; nutzt denselben Generator | Level9 |
+| FEE2Container | exportiert ContainerFiles aus auswählbaren BasicFrames; exakt per Provenienz oder geprüft aus bestehender FEE-Struktur rekonstruiert | Level9 + FEE-Verbindung |
+| AI-Test / Regelvorschläge | analysiert protokollierte Slotkorrekturen; geprüfte exakte Regeln mit Vorschau und Backup übernehmen | Level9 |
 | SpecialDevices2FEE | Geräte manuell oder aus TIA-Hardware vorbereiten und in FEE erzeugen | alle |
-| FEE2SpecialDevices | künftig erzeugte Special Devices über Provenienz aus FEE als JSON rücklesen | Level 7 oder höher |
+| FEE2SpecialDevices | künftig erzeugte Special Devices über Provenienz aus FEE als JSON rücklesen | Level9 |
 | Model Validation | Modell-/FEE-Daten prüfen | alle |
 | Model Control | Roboter, Achsen, Objekte und Simulation steuern | alle |
 | Interface Operation | Schnittstellen und Signale laden, verbinden und bearbeiten | alle |
-| AI-Test | Trainings-/Testbereich | Level8 |
+| AI-Test | Trainings-/Testbereich | Level9 |
 
 Die Berechtigungen sind im Detail in der [Rollenverwaltung](ROLLENVERWALTUNG.md) beschrieben.
 
@@ -65,7 +65,7 @@ Beim Programmstart wird die bewährte gemeinsame FEE-API-Instanz vorbereitet, ab
 
 ### PC-/Projektsuche
 
-Die Unterseite **PC-/Projektsuche** besitzt ein gemeinsames Suchfeld. Es durchsucht alle fachlichen Spalten unabhängig davon, ob sie aktuell eingeblendet sind; der Zeilen-Tooltip nennt die Spalten, in denen der Treffer gefunden wurde. Mehrere notwendige Begriffe werden mit Komma getrennt (`Motor, Sensor` bedeutet UND). Ein vorangestelltes `!` schließt Treffer aus (`Motor, !Alt, !Sensor`).
+Die Unterseite **PC-/Projektsuche** besitzt ein gemeinsames Suchfeld. Mit **Nur angezeigte Spalten durchsuchen** wird die Suche auf die aktuelle Spaltenauswahl begrenzt; ohne Haken werden auch ausgeblendete fachliche Spalten berücksichtigt. Der Zeilen-Tooltip nennt die Spalten, in denen der Treffer gefunden wurde. Mehrere notwendige Begriffe werden mit Komma getrennt (`Motor, Sensor` bedeutet UND). Ein vorangestelltes `!` schließt Treffer aus (`Motor, !Alt, !Sensor`). Die Auswahl wird zusammen mit den sichtbaren Spalten pro Windows-Benutzer gespeichert.
 
 ![ViCo-Arbeitsplatzsuche mit Konfiguration und Remote-Informationen](screenshots/vico-search.png)
 
@@ -77,7 +77,7 @@ Die Haupttabelle ist auf die Arbeitsplanung reduziert und zeigt in dieser Reihen
 | PC | dynamischer Arbeitsplatzname |
 | Online | Grün für erreichbar, Rot für offline |
 | Planung / In Arbeit | getrennte aktive Kartenlisten; Klick oder Rechtsklick öffnet die konkrete Karte im Browser; beim Arbeitsplatz `Angelegt (Tool)` erscheinen beide Listen wie die Abschlussliste ausklappbar mit Projektanzahl |
-| Start Planung / Ende Planung / Start In Arbeit / Ende In Arbeit | ausschließlich die getrennten Datumswerte der jeweiligen Projektkarten; Start aus Custom-Field 508, Ende aus der ausdrücklich abgefragten Karten-Deadline |
+| Start Planung / Ende Planung / Start In Arbeit / Ende In Arbeit | ausschließlich die getrennten Datumswerte der jeweiligen Projektkarten; Start aus Custom-Field 508, Ende aus der ausdrücklich abgefragten Karten-Deadline; lässt die Board-Liste die Deadline trotz Feldanforderung weg, wird sie gezielt am Kartenendpunkt nachgeladen |
 | Abgeschlossene Projekte | ausklappbare Karten der Swimlane **Abgeschlossen** |
 | Software | ausschließlich der Wert der Unteraufgabe `SW:` |
 | Benutzer | bevorzugter Remote-Benutzer aus der KONFIGURATION-Karte |
@@ -198,7 +198,7 @@ Hersteller, Gerätetyp, Präfix und Byteadressen auswählen. Das Gerät wird zun
 1. Auf der gemeinsamen Seite zum Bereich **Hardware aus geöffnetem TIA-Projekt lesen** wechseln.
 2. TIA-Version wählen, **Mit TIA verbinden** und PLC auswählen.
 3. **Hardware auslesen** drücken.
-4. Die nach Gerätename gruppierte Tabelle zeigt Gerätenamen und Gerätetyp im Gruppenkopf sowie Hardware-ID, GSDML, IP-Adresse, Modultyp, Firmware, E-/A-Bereich, Byte-Längen, Präfix, Logik, Zuordnungskandidat und Status. Die Diagnosefelder Traversierungsindex, Hierarchietiefe, Modul, Parent, Slot/Subslot, Pfad und Openness-Objektklasse sind aus der Bedienoberfläche entfernt. Kopf-/Interfaceelemente ohne Adresse werden ausgeblendet; ihre Netzwerk-/Firmwaredaten werden an adressführende Kindmodule vererbt. Getrennte PROFIsafe-Module bleiben getrennte Zeilen. Die Logik wird nur bei eindeutiger Erkennung vorausgewählt.
+4. Die nach Gerätename gruppierte Tabelle zeigt Gerätenamen und Gerätetyp im Gruppenkopf sowie Hardware-ID, GSDML, IP-Adresse, Modultyp, Firmware, E-/A-Bereich, Byte-Längen, Präfix, Logik, Zuordnungsquelle und Status. Die erste Logikzuordnung findet in `TiaHardwareDeviceRowVM` über `SpecialDeviceLogicOption.Suggest` statt. Berücksichtigt werden Gerätename, Gerätetyp, Hersteller, Modulpfad, Typkennung und GSD-Daten; nur eine eindeutige konservative Regel wird vorausgewählt. Die Spalte **Zuordnungsquelle** unterscheidet automatischen Vorschlag, gespeicherte lokale Zuordnung und manuelle Auswahl. Die Diagnosefelder Traversierungsindex, Hierarchietiefe, Modul, Parent, Slot/Subslot, Pfad und Openness-Objektklasse sind aus der Bedienoberfläche entfernt. Kopf-/Interfaceelemente ohne Adresse werden ausgeblendet; ihre Netzwerk-/Firmwaredaten werden an adressführende Kindmodule vererbt. Getrennte PROFIsafe-Module bleiben getrennte Zeilen.
 5. Erforderlichenfalls Logik, Präfix und Byteadressen korrigieren. **Keine Logik** ist eine bewusste Auswahl: Die Zeile wird auch mit gesetztem Übernehmen-Haken nicht zur Warteschlange hinzugefügt. Das vorgeschlagene Präfix stammt vom Gerätenamen (Fallback: PROFINET-/Modulname), nicht mehr vom einzelnen Modulnamen.
 6. **Zuordnung speichern** legt die geprüften Werte lokal ab und stellt sie beim nächsten Auslesen wieder her.
 7. Gewünschte Zeilen markieren und **Ausgewählte Geräte in Warteschlange übernehmen** drücken.

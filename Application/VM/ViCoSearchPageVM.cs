@@ -41,6 +41,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private bool? _lastObservedOnlineConfiguration;
     private IReadOnlyList<ViCoWorkstationRowVM> _selectedWorkstations = Array.Empty<ViCoWorkstationRowVM>();
     private bool _columnPreferencesLoaded;
+    private bool _searchVisibleColumnsOnly;
 
     public const string KanbanizeBoardUrl = "https://grobgroup.kanbanize.com/ctrl_board/1541";
 
@@ -201,6 +202,26 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             _searchText = value;
             OnPropertyChanged();
             _ = ApplySearchDebouncedAsync();
+        }
+    }
+
+    /// <summary>
+    /// When enabled, search fields are restricted to the logical columns
+    /// currently visible in the grid. The default remains the broader search
+    /// so existing user profiles keep their previous behaviour.
+    /// </summary>
+    public bool SearchVisibleColumnsOnly
+    {
+        get => _searchVisibleColumnsOnly;
+        set
+        {
+            if (_searchVisibleColumnsOnly == value)
+                return;
+            _searchVisibleColumnsOnly = value;
+            OnPropertyChanged();
+            ApplySearch();
+            if (_columnPreferencesLoaded)
+                _ = SaveDisplayPreferencesAsync();
         }
     }
 
@@ -480,9 +501,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             OnPropertyChanged(nameof(PcProjectsUnavailableReason));
             OnPropertyChanged(nameof(ServerPathActionUnavailableReason));
             ApplySearch();
-            StatusText = completionMessage ?? (snapshot.Warnings.Count == 0
-                ? $"{_allWorkstations.Count} Arbeitsstationen geladen. Kanbanize-Benutzer wurden synchronisiert."
-                : $"{_allWorkstations.Count} Arbeitsstationen geladen; {snapshot.Warnings.Count} Datenquelle(n) nicht erreichbar.");
+            StatusText = completionMessage ?? BuildWorkstationLoadStatus(snapshot);
             _log.Information("ViCo-Suche", StatusText);
             foreach (var warning in snapshot.Warnings)
                 _log.Warning("ViCo-Suche", "Eine Datenquelle konnte nicht gelesen werden.", warning);
@@ -554,8 +573,15 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private void ApplySearch()
     {
         var selected = SelectedWorkstation?.PcName;
+        IReadOnlyCollection<string>? searchableColumns = SearchVisibleColumnsOnly
+            ? ColumnOptions.Where(column => column.IsVisible).Select(column => column.Title).ToArray()
+            : null;
         Results.Clear();
-        foreach (var hit in _search.SearchWithMatches(_allWorkstations, SearchText, SearchMode))
+        foreach (var hit in _search.SearchWithMatches(
+                     _allWorkstations,
+                     SearchText,
+                     SearchMode,
+                     searchableColumns))
             Results.Add(new ViCoWorkstationRowVM(hit.Workstation, hit.MatchedColumns));
         SelectedWorkstation = Results.FirstOrDefault(item =>
             string.Equals(item.PcName, selected, StringComparison.OrdinalIgnoreCase)) ?? Results.FirstOrDefault();
@@ -1078,12 +1104,16 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     {
         _showExtendedInformation = OtherColumn?.IsVisible == true && ProjectIpColumn?.IsVisible == true;
         OnPropertyChanged(nameof(ShowExtendedInformation));
+        if (SearchVisibleColumnsOnly)
+            ApplySearch();
         if (_columnPreferencesLoaded)
             _ = SaveDisplayPreferencesAsync();
     }
 
     private void ApplyColumnPreferences(ViCoAutoRefreshSettings settings)
     {
+        _searchVisibleColumnsOnly = settings.SearchVisibleColumnsOnly;
+        OnPropertyChanged(nameof(SearchVisibleColumnsOnly));
         if (settings.VisibleColumns is { Count: > 0 })
         {
             var visible = settings.VisibleColumns.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -1115,7 +1145,23 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private ViCoAutoRefreshSettings BuildDisplaySettings(int intervalMinutes) => new(
         intervalMinutes,
         OtherColumn.IsVisible && ProjectIpColumn.IsVisible,
-        ColumnOptions.Where(column => column.IsVisible).Select(column => column.Key).ToArray());
+        ColumnOptions.Where(column => column.IsVisible).Select(column => column.Key).ToArray(),
+        SearchVisibleColumnsOnly);
+
+    private static string BuildWorkstationLoadStatus(ViCoWorkstationSnapshot snapshot)
+    {
+        if (snapshot.Workstations.Count > 0)
+        {
+            return snapshot.Warnings.Count == 0
+                ? $"{snapshot.Workstations.Count} Arbeitsstationen geladen. Kanbanize-Benutzer wurden synchronisiert."
+                : $"{snapshot.Workstations.Count} Arbeitsstationen geladen; {snapshot.Warnings.Count} Datenquellenhinweis(e).";
+        }
+
+        var reason = snapshot.Warnings.Count > 0
+            ? string.Join(" | ", snapshot.Warnings.Take(3))
+            : "Der ViCo-Cache enthält keine gültige Kombination aus Arbeitsplatz-Lane und Projektkarte.";
+        return $"Keine Arbeitsstation gefunden. {reason} API-Key, Board-Zugriff und Cache-Aktualisierung prüfen.";
+    }
 
     private void NotifyActionAvailabilityChanged()
     {

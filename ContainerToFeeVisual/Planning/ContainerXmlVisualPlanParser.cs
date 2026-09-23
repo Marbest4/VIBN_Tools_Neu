@@ -208,6 +208,17 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     $"Container-Typ '{xmlType}' ist unbekannt; seine Signale werden wie im bestehenden Ablauf in die Unknown-Schnittstelle übernommen.",
                     containerId));
 
+                var unknownSignalGroupId = $"{containerId}:signals";
+                AddNode(nodes, edges, new VisualNode(
+                    unknownSignalGroupId,
+                    containerId,
+                    containerId,
+                    VisualNodeKind.Group,
+                    "Signals",
+                    "Signalgruppe",
+                    null,
+                    false));
+
                 foreach (var entry in entries)
                 {
                     if (!hasUnknownSignals)
@@ -230,6 +241,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                         issues,
                         entry,
                         containerId,
+                        unknownSignalGroupId,
                         unknownInterfaceId,
                         null,
                         VisualNodeKind.UnknownSignal,
@@ -250,6 +262,32 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     VisualNodeKind.Logic,
                     descriptor.ExpectedLogicName,
                     "FeeLogic",
+                    null,
+                    false));
+            }
+
+            var signalGroupId = $"{containerId}:signals";
+            AddNode(nodes, edges, new VisualNode(
+                signalGroupId,
+                containerId,
+                containerId,
+                VisualNodeKind.Group,
+                "Signals",
+                "Signalgruppe",
+                null,
+                false));
+
+            string? simObjectGroupId = null;
+            if (descriptor.Targets.Count > 0)
+            {
+                simObjectGroupId = $"{containerId}:simobjects";
+                AddNode(nodes, edges, new VisualNode(
+                    simObjectGroupId,
+                    containerId,
+                    containerId,
+                    VisualNodeKind.Group,
+                    "SimObjects",
+                    "SimObject-Gruppe",
                     null,
                     false));
             }
@@ -278,7 +316,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     targetDescriptor.AllowMultiSelect));
                 AddNode(nodes, edges, new VisualNode(
                     targetId,
-                    logicNodeId ?? containerId,
+                    simObjectGroupId ?? containerId,
                     containerId,
                     VisualNodeKind.SimObjectTarget,
                     targetDescriptor.DisplayName,
@@ -305,6 +343,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     issues,
                     entry,
                     containerId,
+                    signalGroupId,
                     interfaceId,
                     logicNodeId,
                     VisualNodeKind.Signal,
@@ -346,6 +385,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
         List<VisualIssue> issues,
         XElement entry,
         string containerId,
+        string treeParentId,
         string interfaceId,
         string? logicNodeId,
         VisualNodeKind nodeKind,
@@ -359,7 +399,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
         var signalId = $"{containerId}:signal:{StableId.Encode($"{entryId}\u001f{address}\u001f{signal}\u001f{slot}\u001f{nodes.Count}")}";
         var signalNode = new VisualNode(
             signalId,
-            containerId,
+            treeParentId,
             containerId,
             nodeKind,
             string.IsNullOrWhiteSpace(signal) ? address : signal,

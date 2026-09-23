@@ -148,19 +148,19 @@
 
                     <TabItem Header="Container2FEE Visual"
                              ux:Icon.Kind="WorkpieceStation"
-                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:ContainerToFeeVisualPage/>
                     </TabItem>
 
                     <TabItem Header="FEE2Container"
                              ux:Icon.Kind="WorkpieceStation"
-                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:Fee2ContainerPage />
                     </TabItem>
 
                     <TabItem Header="FEE2SpecialDevices"
                              ux:Icon.Kind="DeviceVideoCamera"
-                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:Fee2SpecialDevicesPage />
                     </TabItem>
                     
@@ -192,7 +192,7 @@
 
                     <TabItem Header="AI-Test"
                              ux:Icon.Kind="Magazines"
-                             Visibility="{Binding CanUseLevel8Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:AITrainingTestPage/>
                     </TabItem>
 

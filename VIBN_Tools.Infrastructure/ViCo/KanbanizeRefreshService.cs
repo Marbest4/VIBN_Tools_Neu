@@ -152,6 +152,7 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
             .GroupBy(card => card.Id)
             .Select(group => group.First())
             .ToList();
+        await LoadMissingProjectDeadlinesAsync(cards, cancellationToken);
         if (loadConfigurationSubtasks)
             await LoadConfigurationSubtasksAsync(cards, cancellationToken);
         return cards;
@@ -161,6 +162,45 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
         $"/cards?board_ids={boardId}&page={page}&per_page={pageSize}" +
         "&fields=card_id,title,deadline" +
         (expandSubtasks ? "&expand=custom_fields" : string.Empty);
+
+    /// <summary>
+    /// Businessmap installations can omit <c>deadline</c> from the board list
+    /// although it was requested. Resolve only active project cards with a
+    /// missing value through the authoritative card endpoint; populated list
+    /// values do not cause additional requests.
+    /// </summary>
+    private async Task LoadMissingProjectDeadlinesAsync(
+        IEnumerable<WorkstationCardCacheEntry> cards,
+        CancellationToken cancellationToken)
+    {
+        var candidates = cards
+            .Where(card => card.Deadline is null && !IsConfigurationTitle(card.Title))
+            .Where(card => MapStatus(card.ColumnId) is "#Planning#" or "#Working#")
+            .ToArray();
+        if (candidates.Length == 0)
+            return;
+
+        using var throttle = new SemaphoreSlim(6);
+        await Task.WhenAll(candidates.Select(async card =>
+        {
+            await throttle.WaitAsync(cancellationToken);
+            try
+            {
+                using var detail = await GetJsonAsync(
+                    $"/cards/{card.Id}?fields=card_id,deadline",
+                    cancellationToken);
+                card.Deadline = EnumerateObjects(detail.RootElement)
+                    .Select(element => TryGetDate(element, "deadline") ??
+                                       TryGetDate(element, "due_date") ??
+                                       TryGetDate(element, "end_date"))
+                    .FirstOrDefault(value => value is not null);
+            }
+            finally
+            {
+                throttle.Release();
+            }
+        }));
+    }
 
     /// <summary>
     /// Positional fields are returned by Businessmap independently. Deadline
@@ -318,7 +358,9 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
                                 card,
                                 VibnWorkplaceSynchronizationPolicy.WorkplaceStartDateFieldId)
                             ?? TryGetDate(card, "start_date"),
-                Deadline = TryGetDate(card, "deadline"),
+                Deadline = TryGetDate(card, "deadline") ??
+                           TryGetDate(card, "due_date") ??
+                           TryGetDate(card, "end_date"),
                 Subtasks = GetSubtasks(card, isEndpointPayload: false)
             })
             .Where(card => card.Id > 0 && card.LaneId.Length > 0)
@@ -378,11 +420,28 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
 
     private static DateTimeOffset? TryGetDate(JsonElement value, string name)
     {
-        if (!TryGetScalar(value, name, out var raw) ||
+        if (value.ValueKind != JsonValueKind.Object ||
+            !value.TryGetProperty(name, out var property))
+            return null;
+        if (property.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var nestedName in new[] { "value", "date", "datetime" })
+            {
+                var nested = TryGetDate(property, nestedName);
+                if (nested is not null)
+                    return nested;
+            }
+            return null;
+        }
+        var raw = property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : property.ToString();
+        if (string.IsNullOrWhiteSpace(raw) ||
             !DateTimeOffset.TryParse(
                 raw,
                 System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal,
+                System.Globalization.DateTimeStyles.AssumeUniversal |
+                System.Globalization.DateTimeStyles.AdjustToUniversal,
                 out var parsed))
         {
             return null;

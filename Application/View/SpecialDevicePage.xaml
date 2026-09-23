@@ -98,7 +98,7 @@
                     <Button MinWidth="155" MinHeight="34" Margin="7,0,0,0" Content="Hardware auslesen" Command="{Binding ReadTiaHardwareCommand}" IsEnabled="{Binding CanReadTiaHardware}" ToolTip="{Binding ReadTiaHardwareUnavailableReason}" ToolTipService.ShowOnDisabled="True" />
                 </WrapPanel>
                 <StackPanel Grid.Row="1" Margin="0,8">
-                    <TextBlock Foreground="#FF666666" Text="Module sind nach Gerätename gruppiert. Logik, Präfix und E-/A-Start vor der Übernahme prüfen; gespeicherte Zuordnungen werden beim nächsten Auslesen wiederhergestellt." TextWrapping="Wrap" />
+                    <TextBlock Foreground="#FF666666" Text="Module sind nach Gerätename gruppiert. Der erste Logikvorschlag entsteht in TiaHardwareDeviceRowVM über konservative Hersteller-/Typregeln aus Gerätename, Gerätetyp, Hersteller, Modulpfad, Typkennung und GSD-Daten. Manuelle Auswahlen werden über den stabilen Hardware-Schlüssel lokal gespeichert und beim nächsten Auslesen bevorzugt wiederhergestellt." TextWrapping="Wrap" />
                     <TextBlock Margin="0,4,0,0" Foreground="#FF355C7D" Text="{Binding HardwareComparisonText}" TextWrapping="Wrap" />
                 </StackPanel>
                 <DataGrid Grid.Row="2" ItemsSource="{Binding Source={StaticResource GroupedTiaHardwareRows}}" AutoGenerateColumns="False" CanUserAddRows="False" EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizingWhenGrouping="True" RowHeight="34" ColumnHeaderHeight="36" HorizontalScrollBarVisibility="Auto">
@@ -137,7 +137,7 @@
                         <DataGridTemplateColumn Header="Logik" Width="235">
                             <DataGridTemplateColumn.CellTemplate><DataTemplate><ComboBox MinHeight="27" ItemsSource="{Binding DataContext.HardwareLogicOptions, RelativeSource={RelativeSource AncestorType=UserControl}}" DisplayMemberPath="DisplayName" SelectedItem="{Binding SelectedLogic}" ToolTip="Keine Logik auswählen, wenn das Hardwareelement nicht in die Warteschlange übernommen werden soll." /></DataTemplate></DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Zuordnungskandidat" Binding="{Binding SuggestedMapping, Mode=OneWay}" IsReadOnly="True" Width="235" />
+                        <DataGridTextColumn Header="Zuordnungsquelle" Binding="{Binding MappingSource, Mode=OneWay}" IsReadOnly="True" Width="260" />
                         <DataGridTextColumn Header="Status" Binding="{Binding State, Mode=OneWay}" IsReadOnly="True" Width="105" />
                     </DataGrid.Columns>
                 </DataGrid>

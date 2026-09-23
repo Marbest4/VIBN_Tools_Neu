@@ -76,6 +76,7 @@ public sealed class TiaHardwareDeviceRowVM : MvvmBase
     private RobotType? _selectedRobotType;
     private bool _isAdded;
     private bool _isConfigurationSaved;
+    private string _mappingSource;
 
     public TiaHardwareDeviceRowVM(TiaHardwareModuleInfo module)
     {
@@ -86,6 +87,9 @@ public sealed class TiaHardwareDeviceRowVM : MvvmBase
         var suggestion = SpecialDeviceLogicOption.Suggest(module);
         _selectedLogic = suggestion ?? SpecialDeviceLogicOption.None;
         _include = suggestion is not null;
+        _mappingSource = suggestion is null
+            ? "Keine automatische Regel hat eindeutig gepasst"
+            : "Automatischer Vorschlag aus TIA Hersteller-/Typmerkmalen";
     }
 
     public TiaHardwareModuleInfo Module { get; }
@@ -184,6 +188,9 @@ public sealed class TiaHardwareDeviceRowVM : MvvmBase
         ? SelectedLogic.DisplayName
         : "Keine eindeutige Zuordnung";
 
+    /// <summary>Explains whether the selection came from a rule, local persistence or the user.</summary>
+    public string MappingSource => _mappingSource;
+
     public string FirmwareVersion => Module.FirmwareVersion;
 
     public int InputLength => Module.InputLength;
@@ -254,10 +261,14 @@ public sealed class TiaHardwareDeviceRowVM : MvvmBase
         set
         {
             _selectedLogic = value;
+            _mappingSource = value is null || value.IsEmpty
+                ? "Manuell als 'Keine Logik' festgelegt"
+                : "Manuelle Auswahl in der TIA-Hardwaretabelle";
             _isConfigurationSaved = false;
             OnPropertyChanged();
             OnPropertyChanged(nameof(RequiresRobotType));
             OnPropertyChanged(nameof(SuggestedMapping));
+            OnPropertyChanged(nameof(MappingSource));
             OnPropertyChanged(nameof(State));
         }
     }
@@ -327,6 +338,7 @@ public sealed class TiaHardwareDeviceRowVM : MvvmBase
             ? robotType
             : null;
         _isConfigurationSaved = true;
+        _mappingSource = "Gespeicherte lokale TIA-Hardwarezuordnung";
 
         OnPropertyChanged(nameof(Include));
         OnPropertyChanged(nameof(Prefix));
@@ -338,6 +350,7 @@ public sealed class TiaHardwareDeviceRowVM : MvvmBase
         OnPropertyChanged(nameof(SelectedRobotType));
         OnPropertyChanged(nameof(RequiresRobotType));
         OnPropertyChanged(nameof(SuggestedMapping));
+        OnPropertyChanged(nameof(MappingSource));
         OnPropertyChanged(nameof(State));
         return true;
     }

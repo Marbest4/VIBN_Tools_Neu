@@ -260,6 +260,12 @@ static void VerifyWorkstationOccupancyAndUnifiedSearch()
         ViCoSearchMode.All).Single();
     Assert(hiddenHit.MatchedColumns.Contains("Kanbanize-Details"),
         "Hidden Kanbanize details must be searchable and identify the matching logical column.");
+    Assert(search.SearchWithMatches(
+               new[] { configured },
+               "nur-in-kanbanize-details",
+               ViCoSearchMode.All,
+               new[] { "PC", "Projekt Planung", "Projekt In Arbeit" }).Count == 0,
+        "Visible-column-only search must exclude values from hidden logical columns.");
     Assert(search.Search(new[] { configured }, "GM2000, TIA V20", ViCoSearchMode.All).Single() == configured,
         "Comma-separated positive terms must use AND semantics across all searchable columns.");
     Assert(search.Search(new[] { configured }, "GM2000, !Sensor, !Alt", ViCoSearchMode.All).Single() == configured,
@@ -898,7 +904,7 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
     using var cache = JsonDocument.Parse(await File.ReadAllTextAsync(
         Path.Combine(cacheRoot, "WorkstationBoardCache.json")));
     var cards = cache.RootElement.GetProperty("cards");
-    Assert(cards.GetArrayLength() == 2,
+    Assert(cards.GetArrayLength() == 3,
         "All cards returned for the workstation lane must be retained in the structured cache.");
     var configuration = cards.EnumerateArray().Single(card => card.GetProperty("id").GetInt32() == 501);
     Assert(configuration.GetProperty("subtasks").GetArrayLength() == 2 &&
@@ -909,6 +915,10 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
     Assert(project.GetProperty("startDate").GetDateTimeOffset().Day == 1 &&
            project.GetProperty("deadline").GetDateTimeOffset().Day == 30,
         "Kanbanize project dates were not retained in the structured workstation cache.");
+    var detailProject = cards.EnumerateArray().Single(card => card.GetProperty("id").GetInt32() == 503);
+    Assert(detailProject.GetProperty("deadline").GetDateTimeOffset().Day == 15 &&
+           handler.Requests.Contains("/api/v2/cards/503?fields=card_id,deadline", StringComparer.Ordinal),
+        "A deadline omitted by the list endpoint must be recovered from the card detail endpoint.");
 }
 
 static async Task VerifyAdministrationIdentityAsync()
@@ -1252,7 +1262,9 @@ sealed class KanbanizeRefreshHttpMessageHandler : HttpMessageHandler
         {
             "/api/v2/boards/1541/lanes" => "{\"data\":[{\"lane_id\":28125,\"name\":\"GM12345 Tool PC\"}]}",
             var value when value.StartsWith("/api/v2/cards?board_ids=1541", StringComparison.Ordinal) =>
-                "{\"data\":{\"data\":[{\"card_id\":501,\"lane_id\":28125,\"column_id\":29373,\"title\":\"Arbeitsplatz KONFIGURATION\",\"subtasks\":[{\"card_id\":601,\"description\":\"STANDORT: Werk 1\"}]},{\"card_id\":502,\"lane_id\":28125,\"column_id\":29375,\"title\":\"GM9000/01-001\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-01T00:00:00Z\"}],\"deadline\":\"2026-09-30T00:00:00Z\"}],\"pagination\":{\"all_pages\":1}}}",
+                "{\"data\":{\"data\":[{\"card_id\":501,\"lane_id\":28125,\"column_id\":29373,\"title\":\"Arbeitsplatz KONFIGURATION\",\"subtasks\":[{\"card_id\":601,\"description\":\"STANDORT: Werk 1\"}]},{\"card_id\":502,\"lane_id\":28125,\"column_id\":29375,\"title\":\"GM9000/01-001\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-01T00:00:00Z\"}],\"deadline\":\"2026-09-30T00:00:00Z\"},{\"card_id\":503,\"lane_id\":28125,\"column_id\":29374,\"title\":\"GM9000/01-002\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-02T00:00:00Z\"}]}],\"pagination\":{\"all_pages\":1}}}",
+            "/api/v2/cards/503?fields=card_id,deadline" =>
+                "{\"data\":{\"card_id\":503,\"deadline\":{\"value\":\"2026-10-15T00:00:00Z\"}}}",
             "/api/v2/cards/501/subtasks" =>
                 "{\"data\":{\"subtasks\":{\"601\":{\"subtask_id\":601,\"description\":\"STANDORT: Werk 1\"},\"602\":{\"description\":{\"text\":\"SW: TIA V20\"}}}}}",
             var value when value.StartsWith("/api/v2/cards?board_ids=846", StringComparison.Ordinal) =>

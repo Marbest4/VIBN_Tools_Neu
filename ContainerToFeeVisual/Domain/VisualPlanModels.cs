@@ -7,6 +7,7 @@ public enum VisualNodeKind
 {
     Root,
     Container,
+    Group,
     BasicFrame,
     Interface,
     Logic,

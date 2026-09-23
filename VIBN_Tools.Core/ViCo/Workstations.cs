@@ -203,7 +203,8 @@ public interface IViCoWorkstationSearch
     IReadOnlyList<ViCoWorkstationSearchHit> SearchWithMatches(
         IEnumerable<ViCoWorkstation> workstations,
         string query,
-        ViCoSearchMode mode);
+        ViCoSearchMode mode,
+        IReadOnlyCollection<string>? searchableColumns = null);
 }
 
 /// <summary>

@@ -46,12 +46,28 @@ internal static class ContainerMetadataCatalog
         string.IsNullOrWhiteSpace(logicName)
             ? []
             : Descriptors
-                .Where(item => string.Equals(
-                    item.Value.ExpectedLogicName,
-                    logicName,
-                    StringComparison.OrdinalIgnoreCase))
+                .Where(item => SameLogicDefinition(item.Value.ExpectedLogicName, logicName))
                 .Select(item => item.Key)
                 .ToArray();
+
+    private static bool SameLogicDefinition(string? expected, string actual)
+    {
+        if (string.IsNullOrWhiteSpace(expected))
+            return false;
+        return string.Equals(
+            NormalizeLogicDefinition(expected),
+            NormalizeLogicDefinition(actual),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLogicDefinition(string value)
+    {
+        var normalized = value.Trim().Replace('/', '\\');
+        var fileName = normalized[(normalized.LastIndexOf('\\') + 1)..];
+        return fileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^4]
+            : fileName;
+    }
 
     private static ContainerDescriptor Describe<TContainer>(
         string? expectedLogicName = null,

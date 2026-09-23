@@ -1,4 +1,3 @@
-using FS.SDK.Components;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
@@ -34,31 +33,12 @@ internal static class ContainerObjectProvenance
             return;
 
         var properties = new Dictionary<string, string>(StringComparer.Ordinal);
-        try
-        {
-            var existingXml = await Services.ApiInstance.Object.GetPropertyAsync(
-                feeObject.Guid,
-                nameof(TagComponent.TagEntries),
-                nameof(TagComponent));
-            foreach (var item in Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(existingXml))
-                properties[item.Key] = item.Value;
-        }
-        catch
-        {
-            // Newly created objects may not expose TagComponent until the
-            // first property write. Starting with an empty dictionary is safe.
-        }
-
         properties[SchemaKey] = CurrentSchema;
         properties[GeneratorKey] = Generator;
         properties[ContainerIdKey] = container.GenerationProvenanceId;
         properties[ContainerTypeKey] = container.GenerationContainerType;
         properties[CreatedUtcKey] = DateTimeOffset.UtcNow.ToString("O");
-        await Services.ApiInstance.Object.SetPropertyAsync(
-            feeObject.Guid,
-            nameof(TagComponent.TagEntries),
-            properties,
-            nameof(TagComponent));
+        await FeeTagPropertyStore.WriteAndVerifyAsync(feeObject.Guid, properties);
     }
 
     public static (string? ContainerId, string? ContainerType) Read(

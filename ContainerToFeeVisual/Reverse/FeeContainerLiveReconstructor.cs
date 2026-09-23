@@ -346,20 +346,26 @@ public static class FeeContainerLiveReconstructor
 
     private static string? MapCabinetType(string? definition)
     {
-        if (string.Equals(definition, "Grob_NotAus", StringComparison.OrdinalIgnoreCase))
+        var normalized = NormalizeToken(definition);
+        if (normalized.Contains("GROBNOTAUS", StringComparison.Ordinal))
             return "EStop";
-        if (string.Equals(definition, "Fuse", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains("FUSE", StringComparison.Ordinal))
             return "Fuse";
-        if (definition?.StartsWith("Lamp ", StringComparison.OrdinalIgnoreCase) == true)
+        if (normalized.Contains("LAMP", StringComparison.Ordinal))
             return "CabinetLamp";
-        if (string.Equals(definition, "Grob_2PositionSwitch", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains("GROB2POSITIONSWITCH", StringComparison.Ordinal) ||
+            normalized.Contains("POSITIONSWITCH2", StringComparison.Ordinal))
             return "Switch";
         return null;
     }
 
     private static bool EndsWithType(string value, string typeName) =>
-        string.Equals(value, typeName, StringComparison.OrdinalIgnoreCase) ||
-        value.EndsWith($".{typeName}", StringComparison.OrdinalIgnoreCase);
+        NormalizeToken(value).EndsWith(NormalizeToken(typeName), StringComparison.Ordinal);
+
+    private static string NormalizeToken(string? value) => new((value ?? string.Empty)
+        .Where(char.IsLetterOrDigit)
+        .Select(char.ToUpperInvariant)
+        .ToArray());
 
     private static string? FirstNotBlank(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));

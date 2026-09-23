@@ -46,7 +46,7 @@
                      Padding="8,5"
                      FontSize="14"
                      VerticalContentAlignment="Center"
-                     ToolTip="Mehrere Begriffe mit Komma trennen (UND-Suche), z. B. Motor, Sensor. Begriffe mit ! ausschließen, z. B. Motor, !Alt. Auch ausgeblendete Spalten werden durchsucht; die Trefferzeile zeigt die Fundspalten als Tooltip."
+                     ToolTip="Mehrere Begriffe mit Komma trennen (UND-Suche), z. B. Motor, Sensor. Begriffe mit ! ausschließen, z. B. Motor, !Alt. Der Suchumfang wird mit der Checkbox festgelegt; die Trefferzeile zeigt die Fundspalten als Tooltip."
                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
             <Button Grid.Column="1"
                     MinWidth="190"
@@ -80,6 +80,11 @@
                         </MenuItem.ItemContainerStyle>
                     </MenuItem>
                 </Menu>
+                <CheckBox Margin="18,0,0,0"
+                          VerticalAlignment="Center"
+                          Content="Nur angezeigte Spalten durchsuchen"
+                          IsChecked="{Binding SearchVisibleColumnsOnly, Mode=TwoWay}"
+                          ToolTip="Aus: Alle fachlichen Daten einschließlich ausgeblendeter Spalten und Kanbanize-Details werden durchsucht. Ein: Nur aktuell eingeblendete Tabellenspalten werden berücksichtigt." />
             </WrapPanel>
         </Grid>
 

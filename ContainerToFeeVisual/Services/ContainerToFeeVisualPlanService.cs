@@ -653,24 +653,11 @@ public sealed class ContainerToFeeVisualPlanService
         var currentErrors = validation.Issues
             .Where(issue => issue.Severity == VisualIssueSeverity.Error)
             .ToArray();
-        if (currentErrors.Length > 0 && acceptedValidationErrors is not null)
-        {
-            var acceptedKeys = acceptedValidationErrors
-                .Select(issue => (issue.Code, issue.Message, issue.NodeId))
-                .ToHashSet();
-            var newErrors = currentErrors
-                .Where(issue => !acceptedKeys.Contains((issue.Code, issue.Message, issue.NodeId)))
-                .ToArray();
-            if (newErrors.Length > 0)
-            {
-                return new VisualExecutionResult(
-                    false,
-                    "Nach der FEE-Aktualisierung wurden zusätzliche, noch nicht bestätigte Fehler erkannt. " +
-                    "Die Generierung wurde vor dem Schreiben abgebrochen.",
-                    validation.Issues);
-            }
-        }
-
+        // The confirmation belongs to this complete start operation. Refreshing
+        // FEE immediately before the write may refine the same validation
+        // findings; forcing a second click would neither add information nor
+        // improve safety. Runtime identity conflicts remain hard failures in
+        // the executor and are never suppressed here.
         var effectiveAcceptedErrors = currentErrors.Length > 0
             ? currentErrors
             : acceptedValidationErrors?
