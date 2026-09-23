@@ -1,0 +1,2347 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CAAMergeResult version="1.0.0.0" createdAt="2026-02-24 08:26:05" autoCreateFile="DE_AutoCreate_Master_V13.xml" zuli="Zuli_GM7049-01-130-1_correct.xlsx">
+  <ContainerList>
+    <Container id="">
+      <Component>Sicherung i.O. -81QB03 24V/DC-Netzgerät</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ025/A100/B/SEP5</ID>
+          <Address>I32.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -81QB03 24V/DC-Netzgerät</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherung i.O. -77FB03 Servicesteckdose</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ025/A100/B/SEP6</ID>
+          <Address>I32.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -77FB03 Servicesteckdose</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherung i.O. -85QB03 Klimagerät</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ037/A100/B/SEP2</ID>
+          <Address>I33.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -85QB03 Klimagerät</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Klimagerät Sammelstörung 1</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ037/A100/B/SEP3</ID>
+          <Address>I33.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Klimagerät Sammelstörung 1</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Klimagerät Sammelstörung 2</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/B</ID>
+          <Address>I33.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Klimagerät Sammelstörung 2</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherung i.O. -86QB03 Werkstückkühlanlage</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/B/SEP2</ID>
+          <Address>I33.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -86QB03 Werkstückkühlanlage</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherung i.O. -87QB03 Kettenzug 1</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/B/SEP3</ID>
+          <Address>I33.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -87QB03 Kettenzug 1</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Unterbrechungsfreie Stromversorgung 2 Steuerspannung i.O.</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/B/SEP4</ID>
+          <Address>I33.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Unterbrechungsfreie Stromversorgung 2 Steuerspannung i.O.</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Unterbrechungsfreie Stromversorgung 2 Pufferbereitschaft i.O.</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/B/SEP5</ID>
+          <Address>I33.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Unterbrechungsfreie Stromversorgung 2 Pufferbereitschaft i.O.</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Unterbrechungsfreie Stromversorgung 2 Ladezustand größer 85%</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/B/SEP6</ID>
+          <Address>I33.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Unterbrechungsfreie Stromversorgung 2 Ladezustand größer 85%</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherung i.O. -86QB13 Werkstückkühlanlage</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STL044/A100/B2</ID>
+          <Address>I34.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -86QB13 Werkstückkühlanlage</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Netzteil 24V/DC nach Netztrenneinrichtung kein Fehler</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STU007/A0/B2</ID>
+          <Address>I34.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Netzteil 24V/DC nach Netztrenneinrichtung kein Fehler</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -100FC05.1</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU030/A10/B1</ID>
+          <Address>I35.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -100FC05.1</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -100FC05.2</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU030/A0/B2</ID>
+          <Address>I35.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -100FC05.2</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -100FC05.3</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU004/A10/B2</ID>
+          <Address>I35.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -100FC05.3</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -100FC05.4</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU004/A10/B1</ID>
+          <Address>I35.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -100FC05.4</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -101FC02.1</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU004/A0/B2</ID>
+          <Address>I35.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -101FC02.1</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -101FC02.2</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU013/A10/B2</ID>
+          <Address>I35.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -101FC02.2</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -101FC02.3</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU013/A10/B1</ID>
+          <Address>I35.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -101FC02.3</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -101FC02.4</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU013/A1/B2</ID>
+          <Address>I35.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -101FC02.4</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -102FC02.1</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU024/A10/B2</ID>
+          <Address>I37.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -102FC02.1</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -102FC02.2</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU024/A10/B1</ID>
+          <Address>I37.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -102FC02.2</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherungsfall 24V/DC -102FC02.3</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU024/A0/B2</ID>
+          <Address>I37.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherungsfall 24V/DC -102FC02.3</Signal>
+          <Slot>PLC_IN_NC</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherung i.O. -20QB08 Schienensystem 400 V AC vor Netztrenneinrichtung</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>STU026/A10/B2</ID>
+          <Address>I38.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -20QB08 Schienensystem 400 V AC vor Netztrenneinrichtung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Rückführkreis Leistung einschalten i.O.</Component>
+      <Type>ReturnCurcuit</Type>
+      <DataList>
+        <Entry>
+          <ID>STU034/A10/B1</ID>
+          <Address>I38.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Rückführkreis Leistung einschalten i.O.</Signal>
+          <Slot>PLC_IN_Signal</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL012/A100/S1</ID>
+          <Address>Q1100.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Leistung einschalten</Signal>
+          <Slot>PLC_OUT_Signal</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Rückführkreis Schutzbereich Bandantriebe i.O.</Component>
+      <Type>ReturnCurcuit</Type>
+      <DataList>
+        <Entry>
+          <ID>STU034/A1/B2</ID>
+          <Address>I38.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Rückführkreis Schutzbereich Bandantriebe i.O.</Signal>
+          <Slot>PLC_IN_Signal</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU013/A0/S1</ID>
+          <Address>Q1100.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Schutzbereich Bandantriebe</Signal>
+          <Slot>PLC_OUT_Signal</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Leistungsschalter Bandantriebe und Antriebe Hubquereinheiten i.O.</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STU035/A10/B2</ID>
+          <Address>I38.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Leistungsschalter Bandantriebe und Antriebe Hubquereinheiten i.O.</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Werkstückkühlkammer 2 Filterüberwachung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STU046/A10/B1</ID>
+          <Address>I40.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer 2 Filterüberwachung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Werkstückkühlkammer 2 Temperaturalarm</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STU046/A0/B2</ID>
+          <Address>I40.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer 2 Temperaturalarm</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Sicherung i.O. -29QB07 Schienensystem</Component>
+      <Type>Fuse</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.0</ID>
+          <Address>I40.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Sicherung i.O. -29QB07 Schienensystem</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Einspeisung 1 Pneumatik</Component>
+      <Type>PneumaticSupply</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.1</ID>
+          <Address>I400.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 1 Pneumatik Druck i.O.</Signal>
+          <Slot>PLC_IN_Signal</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STQ025/A121/S1/SEP2</ID>
+          <Address>Q400.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 1 Pneumatik einschalten</Signal>
+          <Slot>PLC_OUT_Signal</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT10 Hubeinheit</Component>
+      <Type>LiftUnit</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.2</ID>
+          <Address>I400.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT10 Hubeinheit unten</Signal>
+          <Slot>PLC_IN_InHomePos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>I1.4</ID>
+          <Address>I401.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT10 Hubeinheit oben</Signal>
+          <Slot>PLC_IN_InWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU034/A10/S2</ID>
+          <Address>Q405.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT10 Hubeinheit heben</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU035/A10/S1</ID>
+          <Address>Q405.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT10 Hubeinheit senken</Signal>
+          <Slot>PLC_OUT_ToHomePos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT10 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.3</ID>
+          <Address>I400.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT10 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV9 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.4</ID>
+          <Address>I400.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV9 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Bedienstelle 1 Freigabetaster Werkstück beladen betätigt</Component>
+      <Type>Button</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.5</ID>
+          <Address>I400.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Bedienstelle 1 Freigabetaster Werkstück beladen betätigt</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV9 Staustopp Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.6</ID>
+          <Address>I400.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV9 Staustopp Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Stopp 2 Werkstückträger Werkstück vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I0.7</ID>
+          <Address>I400.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Stopp 2 Werkstückträger kein Werkstück vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Stopp 2 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I1.0</ID>
+          <Address>I400.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Stopp 2 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT10 Auslauf 3 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I1.5</ID>
+          <Address>I401.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT10 Auslauf 3 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I1.6</ID>
+          <Address>I401.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Stopp 2 Auslauf Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I2.4</ID>
+          <Address>I401.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Stopp 2 Auslauf Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Übertrage-/Ladestation 2 Spannungsversorgung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>I3.0</ID>
+          <Address>I402.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Übertrage-/Ladestation 2 Spannungsversorgung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Übertrage-/Ladestation 1 Spannungsversorgung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>I3.1</ID>
+          <Address>I402.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Übertrage-/Ladestation 1 Spannungsversorgung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Werkstückkühlkammer Betriebsbereit</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ002/A100/S1/SEP3</ID>
+          <Address>I41.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer Betriebsbereit</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Werkstückkühlkammer Filterüberwachung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ002/A100/S1/SEP6</ID>
+          <Address>I41.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer Filterüberwachung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Werkstückkühlkammer Temperaturalarm</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ002/A100/S1/SEP7</ID>
+          <Address>I41.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer Temperaturalarm</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV1 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ002/A121/S1/SEP3</ID>
+          <Address>I450.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV1 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT2 Hubeinheit</Component>
+      <Type>LiftUnit</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ002/A121/S1/SEP4</ID>
+          <Address>I450.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT2 Hubeinheit unten</Signal>
+          <Slot>PLC_IN_InHomePos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STQ002/A121/S1/SEP10</ID>
+          <Address>I451.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT2 Hubeinheit oben</Signal>
+          <Slot>PLC_IN_InWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STO036/A1122/S1</ID>
+          <Address>Q450.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT2 Hubeinheit heben</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STO036/A135/S2</ID>
+          <Address>Q450.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT2 Hubeinheit senken</Signal>
+          <Slot>PLC_OUT_ToHomePos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT2 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ002/A121/S1/SEP5</ID>
+          <Address>I450.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT2 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT2 Auslauf 3 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A100/S1</ID>
+          <Address>I451.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT2 Auslauf 3 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Stopp 2 Werkstückträger Werkstück vorhanden 1</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A100/S1/SEP7</ID>
+          <Address>I500.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 2 Werkstückträger Werkstück vorhanden 1</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STQ003/A121/S1/SEP7</ID>
+          <Address>I501.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 2 Werkstückträger Werkstück vorhanden 1</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Stopp 2 Werkstückträger Werkstück vorhanden 2</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A100/S1/SEP8</ID>
+          <Address>I500.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 2 Werkstückträger kein Werkstück vorhanden 2</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STQ003/A121/S1/SEP8</ID>
+          <Address>I501.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 2 Werkstückträger Werkstück vorhanden 2</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Bedienstelle 1 Freigabetaster Werkstück beladen betätigt</Component>
+      <Type>Button</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A121/S1/SEP3</ID>
+          <Address>I500.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Bedienstelle 1 Freigabetaster Werkstück beladen betätigt</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Ablage 1 Werkstück vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A121/S1/SEP4</ID>
+          <Address>I500.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Ablage 1 Werkstück nicht vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STQ001/A121/S1</ID>
+          <Address>I501.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Ablage 1 Werkstück nicht vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Stopp 2 Auslauf Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A121/S1/SEP5</ID>
+          <Address>I500.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 2 Auslauf Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A121/S1/SEP6</ID>
+          <Address>I500.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Stopp 2 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ001/A121/S1/SEP3</ID>
+          <Address>I501.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 2 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT5 Hubeinheit</Component>
+      <Type>LiftUnit</Type>
+      <DataList>
+        <Entry>
+          <ID>STL006/A100/S1</ID>
+          <Address>I502.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Hubeinheit unten</Signal>
+          <Slot>PLC_IN_InHomePos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL010/A121/S1</ID>
+          <Address>I503.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Hubeinheit oben</Signal>
+          <Slot>PLC_IN_InWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>I1010.1</ID>
+          <Address>Q503.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Hubeinheit heben</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>++CC1+C-81QB03:14</ID>
+          <Address>Q503.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Hubeinheit senken</Signal>
+          <Slot>PLC_OUT_ToHomePos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT5 Auslauf 3 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STL010/A100/S1/SEP2</ID>
+          <Address>I502.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Auslauf 3 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT5 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STL006/A121/S1</ID>
+          <Address>I502.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 kein Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU007/A32/S1</ID>
+          <Address>I503.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 kein Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Übertrage-/Ladestation Spannungsversorgung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STL009/A121/S1</ID>
+          <Address>I502.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Übertrage-/Ladestation Spannungsversorgung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV4 Vereinzelung 2 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU007/A10/S2</ID>
+          <Address>I504.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV4 Vereinzelung 2 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC1 Stopp 1 Ein-/Auslauf Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU007/A33/S1</ID>
+          <Address>I504.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Stopp 1 Ein-/Auslauf Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC1 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ008/A121/S1</ID>
+          <Address>I504.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV4 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU004/A10/S1</ID>
+          <Address>I505.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV4 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC1 Stopp 1 Werkstückträger Werkstück vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU004/A0/S1</ID>
+          <Address>I505.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Stopp 1 Werkstückträger kein Werkstück vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT7 Hubeinheit</Component>
+      <Type>LiftUnit</Type>
+      <DataList>
+        <Entry>
+          <ID>STU004/A10/S2</ID>
+          <Address>I550.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 Hubeinheit unten</Signal>
+          <Slot>PLC_IN_InHomePos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>I4.3</ID>
+          <Address>I551.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 Hubeinheit oben</Signal>
+          <Slot>PLC_IN_InWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>++CC1+C-87QB03:14</ID>
+          <Address>Q550.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 Hubeinheit heben</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>++CC1+C-86QB13:14</ID>
+          <Address>Q550.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 Hubeinheit senken</Signal>
+          <Slot>PLC_OUT_ToHomePos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT7 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU004/A20/S1</ID>
+          <Address>I550.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 kein Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>I4.4</ID>
+          <Address>I551.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT7 Auslauf 3 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>TR028/A100/S1</ID>
+          <Address>I550.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 Auslauf 3 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC2 Stopp 1 Ein-/Auslauf Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I4.1</ID>
+          <Address>I550.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Stopp 1 Ein-/Auslauf Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC2 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>I4.2</ID>
+          <Address>I550.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC2 Stopp 1 Werkstückträger Werkstück vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>TR011/A100/S1</ID>
+          <Address>I551.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Stopp 1 Werkstückträger kein Werkstück vorhanden</Signal>
+          <Slot>PLC_IN_NoPartPresent</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb LT5</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ014/A100/S1</ID>
+          <Address>Q33.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT5 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL016/A100/S1</ID>
+          <Address>Q33.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT5 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU035/A0/B2</ID>
+          <Address>I39.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT5 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU015/A10/B1</ID>
+          <Address>I36.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb LT5 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb CV4</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STL012/A121/S1</ID>
+          <Address>Q33.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV4 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU013/A10/S2</ID>
+          <Address>Q33.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV4 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU035/A3/B2</ID>
+          <Address>I39.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV4 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU015/A0/B2</ID>
+          <Address>I36.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb CV4 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Reset Sicherungen 24V/DC nach Netztrenneinrichtung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>STU013/A20/S1</ID>
+          <Address>Q33.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Reset Sicherungen 24V/DC nach Netztrenneinrichtung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb FOC1</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ014/A121/S1</ID>
+          <Address>Q33.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb FOC1 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL016/A121/S1</ID>
+          <Address>Q33.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb FOC1 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU035/A10/B1</ID>
+          <Address>I39.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb FOC1 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU015/A10/B2</ID>
+          <Address>I36.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb FOC1 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb CV3</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU015/A20/S1</ID>
+          <Address>Q34.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV3 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL017/A100/S1</ID>
+          <Address>Q34.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV3 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU039/A10/B2</ID>
+          <Address>I39.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV3 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU020/A10/B2</ID>
+          <Address>I36.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb CV3 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb LT2</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU020/A33/S1</ID>
+          <Address>Q35.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT2 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STQ021/A100/S1</ID>
+          <Address>Q35.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT2 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU039/A10/B1</ID>
+          <Address>I39.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT2 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU020/A10/B1</ID>
+          <Address>I36.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb LT2 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb CV1</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STL023/A100/S1</ID>
+          <Address>Q35.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV1 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL017/A121/S1</ID>
+          <Address>Q35.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV1 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU039/A0/B2</ID>
+          <Address>I39.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV1 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU020/A0/B2</ID>
+          <Address>I36.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb CV1 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb LT10</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU020/A10/S2</ID>
+          <Address>Q35.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT10 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU020/A20/S1</ID>
+          <Address>Q35.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT10 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU039/A1/B2</ID>
+          <Address>I39.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT10 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU022/A10/B2</ID>
+          <Address>I36.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb LT10 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb CV9</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ021/A121/S1</ID>
+          <Address>Q35.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV9 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL023/A121/S1</ID>
+          <Address>Q35.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV9 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU040/A10/B2</ID>
+          <Address>I39.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV9 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU022/A10/B1</ID>
+          <Address>I36.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb CV9 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb CV8</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU022/A10/S1</ID>
+          <Address>Q36.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV8 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU022/A0/S1</ID>
+          <Address>Q36.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV8 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU040/A10/B1</ID>
+          <Address>I40.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV8 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU022/A0/B2</ID>
+          <Address>I37.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb CV8 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb LT7</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU022/A33/S1</ID>
+          <Address>Q36.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT7 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU022/A10/S2</ID>
+          <Address>Q36.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT7 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU040/A0/B2</ID>
+          <Address>I40.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb LT7 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU018/A10/B2</ID>
+          <Address>I37.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb LT7 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb FOC2</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU022/A20/S1</ID>
+          <Address>Q36.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb FOC2 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU018/A10/S1</ID>
+          <Address>Q36.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb FOC2 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU040/A1/B2</ID>
+          <Address>I40.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb FOC2 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU018/A10/B1</ID>
+          <Address>I37.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb FOC2 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bandantrieb CV6</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>STU018/A0/S1</ID>
+          <Address>Q36.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV6 Rechtslauf einschalten</Signal>
+          <Slot>PLC_OUT_Clockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU018/A32/S1</ID>
+          <Address>Q36.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV6 Linkslauf einschalten</Signal>
+          <Slot>PLC_OUT_CounterClockwise</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STU046/A10/B2</ID>
+          <Address>I40.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bandantrieb CV6 Motor läuft</Signal>
+          <Slot>PLC_IN_ConveyorActive</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU018/A1/B2</ID>
+          <Address>I37.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Bandantrieb CV6 i.O.</Signal>
+          <Slot>PLC_IN_ConveyorOk</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV9 Vereinzelung 1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ032/A100/S1/SEP3</ID>
+          <Address>Q404.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV9 Vereinzelung 1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT10 Stopp 0 Dämpfung</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>STU034/A10/S1</ID>
+          <Address>Q404.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT10 Stopp 0 Dämpfung vor</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STU034/A0/S1</ID>
+          <Address>Q404.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STU034/A1/S1</ID>
+          <Address>Q404.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Stopp 2 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV9 Staustopp 1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STU034/A32/S1</ID>
+          <Address>Q404.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV9 Staustopp 1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV1 Vereinzelung 1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STO036/A135/S1</ID>
+          <Address>Q450.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV1 Vereinzelung 1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT2 Stopp 0 Dämpfung</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>STO036/A1121/S1</ID>
+          <Address>Q450.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT2 Stopp 0 Dämpfung vor</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV4 Vereinzelung 1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/S1/SEP2</ID>
+          <Address>Q502.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV4 Vereinzelung 1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CV4 Vereinzelung 2 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ042/A100/S1/SEP3</ID>
+          <Address>Q502.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CV4 Vereinzelung 2 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>STU039/A21/S1</ID>
+          <Address>Q502.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC1 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>I1000.0</ID>
+          <Address>Q502.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Stopp 2 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>I1000.1</ID>
+          <Address>Q502.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>I1000.2</ID>
+          <Address>Q502.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Stopp 2 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT5 Stopp 0</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>I1000.3</ID>
+          <Address>Q503.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 0 schließen</Signal>
+          <Slot>PLC_OUT_Close</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>I1010.3</ID>
+          <Address>Q503.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 0 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL009/A100/S1</ID>
+          <Address>I502.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 0 geöffnet</Signal>
+          <Slot>PLC_IN_Opened</Slot>
+          <Note>Multiple slots PLC_IN_InWorkPos PLC_IN_Opened found for signal: LT5 Stopp 0 geöffnet'</Note>
+        </Entry>
+        <Entry>
+          <ID>STL010/A121/S1/SEP2</ID>
+          <Address>I503.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 0 geschlossen</Signal>
+          <Slot>PLC_IN_Closed</Slot>
+          <Note>Multiple slots PLC_IN_InHomePos PLC_IN_Closed found for signal: LT5 Stopp 0 geschlossen'</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT5 Stopp 0 Dämpfung</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>I1010.0</ID>
+          <Address>Q503.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 0 Dämpfung vor</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>I32.0</ID>
+          <Address>Q503.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 0 Dämpfung zurück</Signal>
+          <Slot>PLC_OUT_ToHomePos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT5 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>I1010.2</ID>
+          <Address>Q503.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 2 schließen</Signal>
+          <Slot>PLC_OUT_Close</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>++CC1+C-77FB03:14</ID>
+          <Address>Q503.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 2 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>STL010/A100/S1</ID>
+          <Address>I502.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 2 geöffnet</Signal>
+          <Slot>PLC_IN_Opened</Slot>
+          <Note>Multiple slots PLC_IN_InWorkPos PLC_IN_Opened found for signal: LT5 Stopp 2 geöffnet'</Note>
+        </Entry>
+        <Entry>
+          <ID>STL029/A121/S1</ID>
+          <Address>I503.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 2 geschlossen</Signal>
+          <Slot>PLC_IN_Closed</Slot>
+          <Note>Multiple slots PLC_IN_InHomePos PLC_IN_Closed found for signal: LT5 Stopp 2 geschlossen'</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT5 Stopp 2 Dämpfung</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>I32.3</ID>
+          <Address>Q504.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 2 Dämpfung vor</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+        <Entry>
+          <ID>I32.7</ID>
+          <Address>Q504.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT5 Stopp 2 Dämpfung zurück</Signal>
+          <Slot>PLC_OUT_ToHomePos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LT7 Stopp 0 Dämpfung</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>++CC1+C-86QB03:14</ID>
+          <Address>Q550.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LT7 Stopp 0 Dämpfung vor</Signal>
+          <Slot>PLC_OUT_ToWorkPos</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC2 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>++CC1+C-92TB01:X2:3</ID>
+          <Address>Q550.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Stopp 1 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FOC2 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>++CC1+C-92TB01:X2:6</ID>
+          <Address>Q550.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Stopp 2 öffnen</Signal>
+          <Slot>PLC_OUT_Open</Slot>
+          <Note />
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>WS auf WT vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ001/A100/S1</ID>
+          <Address>I501.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>WS auf WT vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note>Multiple slots PLC_OUT_ToWorkPos PLC_IN_PartPresent found for signal: WS auf WT vorhanden'</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>WS auf WT vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ003/A121/S1</ID>
+          <Address>I500.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>WS auf WT vorhanden</Signal>
+          <Slot>PLC_IN_PartPresent</Slot>
+          <Note>Multiple slots PLC_OUT_ToWorkPos PLC_IN_PartPresent found for signal: WS auf WT vorhanden'</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Bauteil schräg aufgelegt</Component>
+      <Type>SensorX</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ001/A100/S1/SEP2</ID>
+          <Address>I501.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bauteil schräg aufgelegt</Signal>
+          <Slot>PLC_orientation_nOK</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ003/A121/S1/SEP2</ID>
+          <Address>I500.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bauteil nicht schräg aufgelegt</Signal>
+          <Slot>PLC_orientation_OK</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Signal- / Meldeleuchte 1</Component>
+      <Type>Stacklight</Type>
+      <DataList>
+        <Entry>
+          <ID>STU026/A0/S1</ID>
+          <Address>Q402.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Signal- / Meldeleuchte 1 Gelb</Signal>
+          <Slot>PLC_NO_Yellow</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU026/A10/S1</ID>
+          <Address>Q402.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Signal- / Meldeleuchte 1 Grün</Signal>
+          <Slot>PLC_NO_Green</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU026/A33/S1</ID>
+          <Address>Q402.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Signal- / Meldeleuchte 1 Rot</Signal>
+          <Slot>PLC_NO_Red</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Signal- / Meldeleuchte 1</Component>
+      <Type>Stacklight</Type>
+      <DataList>
+        <Entry>
+          <ID>STU039/A10/S1</ID>
+          <Address>Q501.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Signal- / Meldeleuchte 1 Gelb</Signal>
+          <Slot>PLC_NO_Yellow</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ037/A121/S1/SEP3</ID>
+          <Address>Q501.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Signal- / Meldeleuchte 1 Grün</Signal>
+          <Slot>PLC_NO_Green</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU039/A0/S1</ID>
+          <Address>Q501.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Signal- / Meldeleuchte 1 Rot</Signal>
+          <Slot>PLC_NO_Red</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Signal- / Meldeleuchte 2</Component>
+      <Type>Stacklight</Type>
+      <DataList>
+        <Entry>
+          <ID>I5.2</ID>
+          <Address>Q403.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Signal- / Meldeleuchte 2 Gelb</Signal>
+          <Slot>PLC_NO_Yellow</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>I5.1</ID>
+          <Address>Q403.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Signal- / Meldeleuchte 2 Grün</Signal>
+          <Slot>PLC_NO_Green</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>I5.3</ID>
+          <Address>Q403.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Signal- / Meldeleuchte 2 Rot</Signal>
+          <Slot>PLC_NO_Red</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Arbeitsraumbeleuchtung 1</Component>
+      <Type>CabinetLamp</Type>
+      <DataList>
+        <Entry>
+          <ID>STO036/A1122/S2</ID>
+          <Address>Q500.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Arbeitsraumbeleuchtung 1 einschalten</Signal>
+          <Slot>PLC_OUT_ON</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Arbeitsraumbeleuchtung 1</Component>
+      <Type>CabinetLamp</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ025/A121/S1/SEP6</ID>
+          <Address>Q401.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Arbeitsraumbeleuchtung 1 einschalten</Signal>
+          <Slot>PLC_OUT_ON</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Arbeitsraumbeleuchtung 2</Component>
+      <Type>CabinetLamp</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ025/A121/S1/SEP7</ID>
+          <Address>Q401.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Arbeitsraumbeleuchtung 2 einschalten</Signal>
+          <Slot>PLC_OUT_ON</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Freigabetaster 1 LED Grün</Component>
+      <Type>CabinetLamp</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ037/A100/S1/SEP2</ID>
+          <Address>Q500.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Freigabetaster 1 LED Grün einschalten</Signal>
+          <Slot>PLC_OUT_ON</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU2 Freigabetaster 1 LED Grün</Component>
+      <Type>CabinetLamp</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ025/A121/S1/SEP3</ID>
+          <Address>Q400.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU2 Freigabetaster 1 LED Grün einschalten</Signal>
+          <Slot>PLC_OUT_ON</Slot>
+          <Note>Excluded</Note>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>unknown</Component>
+      <Type>unknown</Type>
+      <DataList>
+        <Entry>
+          <ID>STQ002/A100/S1/SEP4</ID>
+          <Address>I41.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer Störung</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ002/A100/S1/SEP5</ID>
+          <Address>I41.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer Standby</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ002/A100/S1/SEP8</ID>
+          <Address>I41.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer 2 Betriebsbereit</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ002/A121/S1</ID>
+          <Address>I41.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer 2 Störung</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ002/A121/S1/SEP2</ID>
+          <Address>I41.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer 2 Standby</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU013/A33/S1</ID>
+          <Address>Q33.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Motorstarter Reset</Signal>
+          <Slot />
+          <Note>Excluded</Note>
+        </Entry>
+        <Entry>
+          <ID>STU020/A10/S1</ID>
+          <Address>Q34.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer Freigabe</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU020/A0/S1</ID>
+          <Address>Q34.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer Standby</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ019/A100/S1</ID>
+          <Address>Q37.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer 2 Freigabe</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STL027/A100/S1</ID>
+          <Address>Q37.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Werkstückkühlkammer 2 Standby</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU015/A10/S2</ID>
+          <Address>Q34.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Bediengehäuse Ausschleusplatz Meldeleuchte PF3 Bestätigung Teilentnahme</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU007/A10/B1</ID>
+          <Address>I34.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Bediengehäuse Riegel Taster S3 Bestätigung Teilentnahme</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU015/A0/S1</ID>
+          <Address>Q34.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Bediengehäuse Ausschleusplatz Meldeleuchte PF3 Bestätigung Teilentnahme</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STQ047/A100/B/SEP3</ID>
+          <Address>I34.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Bediengehäuse Riegel Taster S3 Bestätigung Teilentnahme</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STL045/A100/B/SEP2</ID>
+          <Address>I34.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Bediengehäuse Riegel Taster S1 Leer-WT Einspeisung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU015/A10/S1</ID>
+          <Address>Q34.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC1 Bediengehäuse Ausschleusplatz Meldeleuchte PF1 Leer-WT Einspeisung</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU015/A31/S1</ID>
+          <Address>Q34.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Bediengehäuse Ausschleusplatz Meldeleuchte PF1 Leer-WT Einspeisung</Signal>
+          <Slot />
+          <Note>No matching components.</Note>
+        </Entry>
+        <Entry>
+          <ID>STU007/A10/B2</ID>
+          <Address>I34.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FOC2 Bediengehäuse Riegel Taster S1 Leer-WT Einspeisung</Signal>
+          <Slot>PLC_IN_NO</Slot>
+          <Note>No matching components.</Note>
+        </Entry>
+      </DataList>
+    </Container>
+  </ContainerList>
+</CAAMergeResult>

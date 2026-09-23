@@ -1,0 +1,5 @@
+<PluginAssemblies>
+	<EntryAssemblies>
+		<Assembly>GrobGenerationInterface.dll</Assembly>
+	</EntryAssemblies>
+</PluginAssemblies>

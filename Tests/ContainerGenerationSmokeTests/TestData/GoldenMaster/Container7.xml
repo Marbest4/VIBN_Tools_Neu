@@ -1,0 +1,1391 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CAAMergeResult version="1.0.0.0" createdAt="2025-04-17 09:49:08" autoCreateFile="DE_AutoCreate_Master.xml" zuli="Zuli_GM7234-01-1040_correct.xlsx">
+  <ContainerList>
+    <Container id="">
+      <Component>Ablage 1 Absteckbolzen vorhanden</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>iRest1LckPinPr</ID>
+          <Address>I100.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Ablage 1 Absteckbolzen vorhanden</Signal>
+          <Slot>PLC_NO</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Anschlag 1</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Sto1Retd</ID>
+          <Address>I100.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 1 hinten</Signal>
+          <Slot>PLC_InHomePos</Slot>
+        </Entry>
+        <Entry>
+          <ID>iFdu1Sto1Advd</ID>
+          <Address>I101.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 1 vorn</Signal>
+          <Slot>PLC_InWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Sto1Adv</ID>
+          <Address>Q204.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 1 vor</Signal>
+          <Slot>PLC_ToWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Sto1Ret</ID>
+          <Address>Q204.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 1 zurück</Signal>
+          <Slot>PLC_ToHomePos</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Werkstückträger 1 vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Pal1Pr</ID>
+          <Address>I100.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Werkstückträger 1 vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Schwenkeinheit 1</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Swivel1Pos2</ID>
+          <Address>I100.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Schwenkeinheit 1 in Position 2</Signal>
+          <Slot>PLC_InHomePos</Slot>
+        </Entry>
+        <Entry>
+          <ID>iFdu1Swivel1Pos1</ID>
+          <Address>I101.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Schwenkeinheit 1 in Position 1</Signal>
+          <Slot>PLC_InWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Swivel1Pos1</ID>
+          <Address>Q205.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Schwenkeinheit 1 zur Position 1</Signal>
+          <Slot>PLC_ToWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Swivel1Pos2</ID>
+          <Address>Q205.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Schwenkeinheit 1 zur Position 2</Signal>
+          <Slot>PLC_ToHomePos</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Schwenkeinheit 1 Klemmung</Component>
+      <Type>Clamping</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Swivel1Clpg1ReldPresOk</ID>
+          <Address>I100.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Schwenkeinheit 1 Klemmung gelöst Druck i.O.</Signal>
+          <Slot>PLC_ClampingReleased</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Swivel1Clpg1Rel</ID>
+          <Address>Q205.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Schwenkeinheit 1 Klemmung lösen</Signal>
+          <Slot>PLC_ReleaseClamping</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Ablage 2 Achssicherung vorhanden</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>iRest2AxLckPr</ID>
+          <Address>I100.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Ablage 2 Achssicherung vorhanden</Signal>
+          <Slot>PLC_NO</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Anschlag 2</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Sto2Retd</ID>
+          <Address>I100.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 2 hinten</Signal>
+          <Slot>PLC_InHomePos</Slot>
+        </Entry>
+        <Entry>
+          <ID>iFdu1Sto2Advd</ID>
+          <Address>I101.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 2 vorn</Signal>
+          <Slot>PLC_InWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Sto2Adv</ID>
+          <Address>Q205.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 2 vor</Signal>
+          <Slot>PLC_ToWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Sto2Ret</ID>
+          <Address>Q205.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Anschlag 2 zurück</Signal>
+          <Slot>PLC_ToHomePos</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Werkstückträger 2 vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Pal2Pr</ID>
+          <Address>I100.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Werkstückträger 2 vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 ZF1-Achse Achssicherung vorhanden</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1ZF1AxAxLckPr</ID>
+          <Address>I102.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 ZF1-Achse Achssicherung vorhanden</Signal>
+          <Slot>PLC_NO</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Vereinzelung 1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Sep1Sto1Clsd</ID>
+          <Address>I102.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 1 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+        <Entry>
+          <ID>iFdu1Sep1Sto1Opnd</ID>
+          <Address>I103.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 1 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Sep1Sto1Opn</ID>
+          <Address>Q202.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Vereinzelung 1 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Sep1Sto2Clsd</ID>
+          <Address>I102.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 2 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+        <Entry>
+          <ID>iFdu1Sep1Sto2Opnd</ID>
+          <Address>I103.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 2 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qFdu1Sep1Sto2Opn</ID>
+          <Address>Q202.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 2 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Sep1Sto1PalPr</ID>
+          <Address>I102.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Vereinzelung 1 Stopp 2 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Sep1Sto2PalPr</ID>
+          <Address>I102.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 2 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Vereinzelung 2 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1Sep2Sto1PalPr</ID>
+          <Address>I102.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 2 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>GTY1 Z11-Achse Ablage Achssicherung vorhanden</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>iGty1Z11AxRestAxLckPr</ID>
+          <Address>I102.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Z11-Achse Ablage Achssicherung vorhanden</Signal>
+          <Slot>PLC_NO</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>ASU1 Greifer 11.1</Component>
+      <Type>Gripper</Type>
+      <DataList>
+        <Entry>
+          <ID>iAsu1Grp11_1Reld</ID>
+          <Address>I104.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 11.1 gelöst</Signal>
+          <Slot>PLC_Unclamped</Slot>
+        </Entry>
+        <Entry>
+          <ID>iAsu1Grp11_1Clpd</ID>
+          <Address>I105.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 11.1 gespannt</Signal>
+          <Slot>PLC_Clamped</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Grp11_1Clp</ID>
+          <Address>Q204.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 11.1 spannen</Signal>
+          <Slot>PLC_Clamp</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Grp11_1Rel</ID>
+          <Address>Q204.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 11.1 lösen</Signal>
+          <Slot>PLC_Unclamp</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>ASU1 Greifer 12.1</Component>
+      <Type>Gripper</Type>
+      <DataList>
+        <Entry>
+          <ID>iAsu1Grp12_1Reld</ID>
+          <Address>I104.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 12.1 gelöst</Signal>
+          <Slot>PLC_Unclamped</Slot>
+        </Entry>
+        <Entry>
+          <ID>iAsu1Grp12_1Clpd</ID>
+          <Address>I105.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 12.1 gespannt</Signal>
+          <Slot>PLC_Clamped</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Grp12_1Clp</ID>
+          <Address>Q204.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 12.1 spannen</Signal>
+          <Slot>PLC_Clamp</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Grp12_1Rel</ID>
+          <Address>Q204.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Greifer 12.1 lösen</Signal>
+          <Slot>PLC_Unclamp</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>ASU1 Verstellung 1</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>iAsu1Adj1Retd</ID>
+          <Address>I104.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Verstellung 1 hinten</Signal>
+          <Slot>PLC_InHomePos</Slot>
+        </Entry>
+        <Entry>
+          <ID>iAsu1Adj1Advd</ID>
+          <Address>I105.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Verstellung 1 vorn</Signal>
+          <Slot>PLC_InWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Adj1Adv</ID>
+          <Address>Q204.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Verstellung 1 vor</Signal>
+          <Slot>PLC_ToWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Adj1Ret</ID>
+          <Address>Q204.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Verstellung 1 zurück</Signal>
+          <Slot>PLC_ToHomePos</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>ASU1</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>iAsu1Drive1Ready</ID>
+          <Address>I134.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 betriebsbereit</Signal>
+          <Slot>PLC_Ready</Slot>
+        </Entry>
+        <Entry>
+          <ID>iAsu1Drive1On</ID>
+          <Address>I134.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 eingeschaltet</Signal>
+          <Slot>PLC_ActiveOn</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Drive1Dir1TuOn</ID>
+          <Address>Q134.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 Drehrichtung 1 einschalten</Signal>
+          <Slot>PLC_Clockwise</Slot>
+        </Entry>
+        <Entry>
+          <ID>qAsu1Drive1Dir2TuOn</ID>
+          <Address>Q134.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 Drehrichtung 2 einschalten</Signal>
+          <Slot>PLC_CounterClockwise</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Einspeisung 2 Vakuumpumpe</Component>
+      <Type>Conveyor</Type>
+      <DataList>
+        <Entry>
+          <ID>iSup2VacPumpOn</ID>
+          <Address>I136.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Antrieb eingeschaltet</Signal>
+          <Slot>PLC_ActiveOn</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto1Opnd</ID>
+          <Address>I140.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 1 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qLcv1Sto1Opn</ID>
+          <Address>Q201.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 1 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV1 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto1PalPr</ID>
+          <Address>I140.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV1 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto2Opnd</ID>
+          <Address>I140.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 2 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qLcv1Sto2Opn</ID>
+          <Address>Q201.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 2 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV1 Stopp 2 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto2PalPr</ID>
+          <Address>I140.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 2 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LVC1 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto1Clsd</ID>
+          <Address>I140.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LVC1 Stopp 1 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LVC1 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto2Clsd</ID>
+          <Address>I140.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LVC1 Stopp 2 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV1 Stopp 3</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto3Opnd</ID>
+          <Address>I142.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 3 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qLcv1Sto3Opn</ID>
+          <Address>Q201.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 3 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV1 Stopp 3 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto3PalPr</ID>
+          <Address>I142.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV1 Stopp 3 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>CHU1 Ablage 1 Werkstück vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>Chu1PartRest1PartPr</ID>
+          <Address>I142.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>CHU1 Ablage 1 Werkstück vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LVC1 Stopp 3</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv1Sto3Clsd</ID>
+          <Address>I142.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LVC1 Stopp 3 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV2 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto1Opnd</ID>
+          <Address>I145.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 1 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qLcv2Sto1Opn</ID>
+          <Address>Q201.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 1 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV2 Stopp 1 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto1PalPr</ID>
+          <Address>I145.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 1 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV2 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto2Opnd</ID>
+          <Address>I145.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 2 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qLcv2Sto2Opn</ID>
+          <Address>Q201.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 2 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV2 Stopp 2 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto2PalPr</ID>
+          <Address>I145.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 2 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LVC2 Stopp 1</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto1Clsd</ID>
+          <Address>I145.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LVC2 Stopp 1 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LVC2 Stopp 2</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto2Clsd</ID>
+          <Address>I145.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LVC2 Stopp 2 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV2 Stopp 3</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto3Opnd</ID>
+          <Address>I147.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 3 geöffnet</Signal>
+          <Slot>PLC_Opened</Slot>
+        </Entry>
+        <Entry>
+          <ID>qLcv2Sto3Opn</ID>
+          <Address>Q201.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 3 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LCV2 Stopp 3 Werkstückträger vorhanden</Component>
+      <Type>Sensor</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto3PalPr</ID>
+          <Address>I147.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LCV2 Stopp 3 Werkstückträger vorhanden</Signal>
+          <Slot>PLC_present</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>LVC2 Stopp 3</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>iLcv2Sto3Clsd</ID>
+          <Address>I147.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>LVC2 Stopp 3 geschlossen</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Greifer 11.1 Auffahrkontrolle</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>iGrp11_1ColChkAdvd</ID>
+          <Address>I221.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Auffahrkontrolle vorn</Signal>
+          <Slot>PLC_InWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qGrp11_1ColChkAdv</ID>
+          <Address>Q221.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Auffahrkontrolle vor</Signal>
+          <Slot>PLC_ToWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qGrp11_1ColChkRet</ID>
+          <Address>Q221.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Auffahrkontrolle zurück</Signal>
+          <Slot>PLC_ToHomePos</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Greifer 11.2 Auffahrkontrolle</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>iGrp11_2ColChkAdvd</ID>
+          <Address>I221.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Auffahrkontrolle vorn</Signal>
+          <Slot>PLC_InWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qGrp11_2ColChkAdv</ID>
+          <Address>Q221.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Auffahrkontrolle vor</Signal>
+          <Slot>PLC_ToWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qGrp11_2ColChkRet</ID>
+          <Address>Q221.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Auffahrkontrolle zurück</Signal>
+          <Slot>PLC_ToHomePos</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>GTY1 Greifer 11.1 Auffahrkontrolle</Component>
+      <Type>Cylinder</Type>
+      <DataList>
+        <Entry>
+          <ID>iGty1Grp11_1ColChkAdvd</ID>
+          <Address>I240.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Auffahrkontrolle vorn</Signal>
+          <Slot>PLC_InWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qGty1Grp11_1ColChkAdv</ID>
+          <Address>Q231.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Auffahrkontrolle vor</Signal>
+          <Slot>PLC_ToWorkPos</Slot>
+        </Entry>
+        <Entry>
+          <ID>qGty1Grp11_1ColChkRet</ID>
+          <Address>Q231.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Auffahrkontrolle zurück</Signal>
+          <Slot>PLC_ToHomePos</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>GTY1 Z11-Achse Achssicherung vorhanden</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>iGty1Z11AxAxLckPr</ID>
+          <Address>I240.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Z11-Achse Achssicherung vorhanden</Signal>
+          <Slot>PLC_NO</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Schutztür 3 Kanal 1</Component>
+      <Type>SafetyDoor</Type>
+      <DataList>
+        <Entry>
+          <ID>iDoor3LckdCh1</ID>
+          <Address>I320.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Schutztür 3 geschlossen Kanal 1</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Schutztür 4 Kanal 1</Component>
+      <Type>SafetyDoor</Type>
+      <DataList>
+        <Entry>
+          <ID>iDoor4LckdCh1</ID>
+          <Address>I320.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Schutztür 4 geschlossen Kanal 1</Signal>
+          <Slot>PLC_Closed</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Ethernet Switch 1 keine Störung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>iEthernetSw1NFault</ID>
+          <Address>I80.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Ethernet Switch 1 keine Störung</Signal>
+          <Slot>PLC_NO</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>Klimagerät Sammelstörung</Component>
+      <Type>Switch</Type>
+      <DataList>
+        <Entry>
+          <ID>iCabinetTempOk</ID>
+          <Address>I81.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Klimagerät Sammelstörung</Signal>
+          <Slot>PLC_NO</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>FDU1 Vereinzelung 1 Stopp 3</Component>
+      <Type>Stop</Type>
+      <DataList>
+        <Entry>
+          <ID>qFdu1Sep1Sto3Opn</ID>
+          <Address>Q202.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 Vereinzelung 1 Stopp 3 öffnen</Signal>
+          <Slot>PLC_Open</Slot>
+        </Entry>
+      </DataList>
+    </Container>
+    <Container id="">
+      <Component>unknown</Component>
+      <Type>unknown</Type>
+      <DataList>
+        <Entry>
+          <ID>iFdu1ZF1AxAxLckNPr</ID>
+          <Address>I103.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>FDU1 ZF1-Achse Achssicherung nicht vorhanden</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGty1Z11AxRestAxLckNPr</ID>
+          <Address>I103.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Z11-Achse Ablage Achssicherung nicht vorhanden</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iRepMod1Off</ID>
+          <Address>I130.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Reparaturmodul 1 ausgeschaltet</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iPwrMod1Ok</ID>
+          <Address>I132.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisemodul 1 i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iPwrMod1SafeSignalOk</ID>
+          <Address>I132.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisemodul 1 Sicherheitssignal i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsuDrive1Fault</ID>
+          <Address>I134.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 Fehler</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1Drive1War</ID>
+          <Address>I134.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 Warnung</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1DriveMotCurrent1Bit0</ID>
+          <Address>I134.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Motorstrom 1 Bit 0</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1DriveMotCurrent1Bit1</ID>
+          <Address>I134.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Motorstrom 1 Bit 1</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1DriveMotCurrent1Bit2</ID>
+          <Address>I134.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Motorstrom 1 Bit 2</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1DriveMotCurrent1Bit3</ID>
+          <Address>I134.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Motorstrom 1 Bit 3</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1DriveMotCurrent1Bit4</ID>
+          <Address>I135.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Motorstrom 1 Bit 4</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1DriveMotCurrent1Bit5</ID>
+          <Address>I135.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Motorstrom 1 Bit 5</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iAsu1Drive1HandModTuOn</ID>
+          <Address>I135.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 Handbetrieb einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpReady</ID>
+          <Address>I136.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe betriebsbereit</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpFault</ID>
+          <Address>I136.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Fehler</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpWar</ID>
+          <Address>I136.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Warnung</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpMotCurrentBit0</ID>
+          <Address>I136.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Motorstrom Bit 0</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpMotCurrentBit1</ID>
+          <Address>I136.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Motorstrom Bit 1</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpMotCurrentBit2</ID>
+          <Address>I136.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Motorstrom Bit 2</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpMotCurrentBit3</ID>
+          <Address>I136.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Motorstrom Bit 3</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpMotCurrentBit4</ID>
+          <Address>I137.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Motorstrom Bit 4</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpMotCurrentBit5</ID>
+          <Address>I137.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Motorstrom Bit 5</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup2VacPumpHandModTuOn</ID>
+          <Address>I137.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Handbetrieb einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iSup1VacPresOk</ID>
+          <Address>I200.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 1 Vakuum Druck i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGrp11_1VacPresOk</ID>
+          <Address>I220.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Vakuum Druck i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGrp11_2VacPresOk</ID>
+          <Address>I220.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Vakuum Druck i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGrp11_1ColChkOk</ID>
+          <Address>I221.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Auffahrkontrolle i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGrp11_2ColChkOk</ID>
+          <Address>I221.6</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Auffahrkontrolle i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGty1Grp11_1ColChkOk</ID>
+          <Address>I240.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Auffahrkontrolle i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGty1Grp11_1VacPresOk</ID>
+          <Address>I240.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Vakuum Druck i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iGty1Z11AxAxLckNPr</ID>
+          <Address>I240.7</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Z11-Achse Achssicherung nicht vorhanden</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iCircuitBreakerOkImmediateStop</ID>
+          <Address>I80.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Schutzschalter i.O. (Sofort Halt)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iCircuitBreakerOkWarning</ID>
+          <Address>I81.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Schutzschalter i.O. (Meldung)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iE2PowerDistributionSys1StatusImmediateStop</ID>
+          <Address>I82.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>E2 Stromverteilungssystem 1 Status (Sofort Halt)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iE2PowerDistributionSys2StatusImmediateStop</ID>
+          <Address>I82.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>E2 Stromverteilungssystem 2 Status (Sofort Halt)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iE2PowerDistributionSys3StatusImmediateStop</ID>
+          <Address>I82.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>E2 Stromverteilungssystem 3 Status (Sofort Halt)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iUps1BatChargeAct</ID>
+          <Address>I82.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Unterbrechungsfreie Stromversorgung 1 Ladebetrieb aktiv</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iUps1BatChargeOver85</ID>
+          <Address>I82.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Unterbrechungsfreie Stromversorgung 1 Ladezustand größer 85</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iE1PowerDistributionSys1StatusImmediateStop</ID>
+          <Address>I83.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>E1 Stromverteilungssystem 1 Status (Sofort Halt)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iE1PowerDistributionSys2StatusImmediateStop</ID>
+          <Address>I83.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>E1 Stromverteilungssystem 2 Status (Sofort Halt)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iE1PowerDistributionSys3StatusImmediateStop</ID>
+          <Address>I83.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>E1 Stromverteilungssystem 3 Status (Sofort Halt)</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iUps1BatAct</ID>
+          <Address>I83.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Unterbrechungsfreie Stromversorgung 1 Batteriebetrieb aktiv</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>iUps1ReadinessBufOk</ID>
+          <Address>I83.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Unterbrechungsfreie Stromversorgung 1 Pufferbereitschaft i.O.</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGrp11_1VacTuOn</ID>
+          <Address>Q120.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Vakuum einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGrp11_1VacTuOff</ID>
+          <Address>Q120.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Vakuum ausschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGrp11_2VacTuOn</ID>
+          <Address>Q120.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Vakuum einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGrp11_2VacTuOff</ID>
+          <Address>Q120.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Vakuum ausschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qAsu1Drive1BrakeRel</ID>
+          <Address>Q134.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 Bremse lösen</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qAsu1Drive1Reset</ID>
+          <Address>Q134.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 zurücksetzen</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qAsu1Drive1SelfTestTuOn</ID>
+          <Address>Q134.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>ASU1 Antrieb 1 Selbsttest einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qSup2VacPumpDir1TuOn</ID>
+          <Address>Q136.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Drehrichtung 1 einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qSup2VacPumpDir2TuOn</ID>
+          <Address>Q136.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Drehrichtung 2 einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qSup2VacPumpBrakeRel</ID>
+          <Address>Q136.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Bremse lösen</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qSup2VacPumpReset</ID>
+          <Address>Q136.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe zurücksetzen</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qSup2VacPumpSelfTestTuOn</ID>
+          <Address>Q136.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Einspeisung 2 Vakuumpumpe Selbsttest einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qSwitchOnPowerSupplyMainValve</ID>
+          <Address>Q200.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Spannungsversorgung Hauptventil einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qSwitchOnPowerSupplyRobAreaValve</ID>
+          <Address>Q220.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Spannungsversorgung Bereichsventil Roboter einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGrp11_1VacBlowTuOn</ID>
+          <Address>Q221.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.1 Vakuum Blasluft einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGrp11_2VacBlowTuOn</ID>
+          <Address>Q221.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Greifer 11.2 Vakuum Blasluft einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGty1Grp11_1VacBlowTuOn</ID>
+          <Address>Q231.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Vakuum Blasluft einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGty1Grp11_1VacTuOff</ID>
+          <Address>Q370.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Vakuum ausschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qGty1Grp11_1VacTuOn</ID>
+          <Address>Q370.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>GTY1 Greifer 11.1 Vakuum einschalten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>StackLight_1_Red</ID>
+          <Address>Q70.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Maschine im Manuell gestoppt Maschine im Auto gestoppt</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>StackLight_1_Yellow</ID>
+          <Address>Q70.1</Address>
+          <DataType>BOOL</DataType>
+          <Signal>STARVED Blockiert</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>StackLight_1_Blue</ID>
+          <Address>Q70.2</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bypass Betrieb Aufwärm- oder Setup-Betrieb</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>StackLight_1_Green</ID>
+          <Address>Q70.3</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Automatik laufend Warnung</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>StackLight_1_White</ID>
+          <Address>Q70.4</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bypass QLS Qualitätsprüfung Werkzeugwechsel angefordert</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>StackLight_1_Horn</ID>
+          <Address>Q70.5</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Warnung - Zyklus starten</Signal>
+          <Slot />
+        </Entry>
+        <Entry>
+          <ID>qOpMso2SlctLedTuOn</ID>
+          <Address>Q80.0</Address>
+          <DataType>BOOL</DataType>
+          <Signal>Bedienstelle MO2 anwählen LED einschalten</Signal>
+          <Slot />
+        </Entry>
+      </DataList>
+    </Container>
+  </ContainerList>
+</CAAMergeResult>

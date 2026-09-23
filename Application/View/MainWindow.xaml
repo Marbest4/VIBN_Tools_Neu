@@ -1,0 +1,210 @@
+﻿<Window x:Class="VIBN_Tools.Application.View.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:ux="http://Grob.com/wpf.ux"
+        xmlns:uxb="http://Grob.com/wpf.ux.behaviors"
+        xmlns:local="clr-namespace:VIBN_Tools.Application.View"
+        xmlns:p="clr-namespace:VIBN_Tools.Application.View"
+        mc:Ignorable="d"
+        Title="VIBN Tools"
+        Height="900" Width="1600"
+        MinHeight="650" MinWidth="1000"
+        WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True"
+        WindowStyle="None" AllowsTransparency="True">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/Grob.UX;component/Styles/General.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <Style TargetType="{x:Type TabItem}" BasedOn="{StaticResource {x:Type TabItem}}">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Center" />
+                <Setter Property="Width" Value="190" />
+                <Setter Property="HeaderTemplate">
+                    <Setter.Value>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding}" TextAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="MinWidth" Value="145" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding DataContext.IsNavigationExpanded, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                                                <Setter Property="MinWidth" Value="0" />
+                                                <Setter Property="MaxWidth" Value="0" />
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </DataTemplate>
+                    </Setter.Value>
+                </Setter>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding DataContext.IsNavigationExpanded, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                        <Setter Property="Width" Value="54" />
+                        <Setter Property="ToolTip" Value="{Binding Header, RelativeSource={RelativeSource Self}}" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+
+    <AdornerDecorator>
+        <Border BorderBrush="Gray" BorderThickness="1">
+            <!--Allow window resizing-->
+            <i:Interaction.Behaviors>
+                <uxb:ResizeBehavior/>
+            </i:Interaction.Behaviors>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <ux:WindowBar Grid.Row="0" HorizontalContentAlignment="Stretch">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Right" Margin="18,0,12,0" VerticalAlignment="Center"
+                                   Foreground="#666666" FontSize="11"
+                                   Text="{Binding BuildInformation}"
+                                   ToolTip="Versionsnummer der Anwendung und Änderungszeitpunkt der aktuell gestarteten Programmdatei." />
+                        <TextBlock Style="{StaticResource H1Style }" Text="VIBN Tools" Margin="10,0,0,0"/>
+                    </DockPanel>
+                </ux:WindowBar>
+
+                <ux:AppHeader Grid.Row="1">
+                    <DockPanel LastChildFill="True">
+                        <Button DockPanel.Dock="Right"
+                                Margin="8"
+                                MinWidth="155"
+                                Content="{Binding NavigationToggleText}"
+                                Command="{Binding ToggleNavigationCommand}"
+                                ToolTip="Blendet die Texte der linken Navigation ein oder aus. Alt+N aktiviert die Schaltfläche."
+                                ToolTipService.ShowOnDisabled="True" />
+                        <TextBlock Style="{StaticResource H2Style }" Text="Tools for Modeling and Virtual Commissioning" Margin="10"/>
+                    </DockPanel>
+                </ux:AppHeader>
+
+                <ux:NavigationBar Grid.Row="2" TabStripPlacement="Left">
+                    <TabItem Header="Project Settings" ux:Icon.Kind="Settings">
+                        <p:SettingsPage/>
+                    </TabItem>
+
+                    <TabItem Header="Kanbanize Karten"
+                             ux:Icon.Kind="TaskListAssigned"
+                             Visibility="{Binding CanUseLevel8Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:KanbanizeCardPage/>
+                    </TabItem>
+
+                    <TabItem Header="ViCo" ux:Icon.Kind="TaskListAssigned">
+                        <p:ViCoWorkspacePage/>
+                    </TabItem>
+
+                    <TabItem Header="Transfer" ux:Icon.Kind="FileSync">
+                        <p:ViCoCopyPage />
+                    </TabItem>
+
+                    <TabItem Header="TIA Portal" ux:Icon.Kind="Cad">
+                        <p:TiaPortalPage />
+                    </TabItem>
+
+                    <TabItem Header="Administration"
+                             ux:Icon.Kind="Settings"
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ViCoAdministrationPage />
+                    </TabItem>
+                    
+                    <TabItem Header="CAD Wizard"
+                             ux:Icon.Kind="Cad"
+                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:CadWizardPage/>
+                    </TabItem>
+                    
+                    <TabItem Header="Zuli Converter" ux:Icon.Kind="FileSync">
+                        <p:ZuliConverterPage/>
+                    </TabItem>
+
+                    <TabItem Header="Container Generation"
+                             ux:Icon.Kind="TaskListAssigned"
+                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ContainerGenerationPage/>
+                    </TabItem>
+
+                    <TabItem Header="Container2Fee"
+                             ux:Icon.Kind="WorkpieceStation"
+                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ContainerToFeePage/>
+                    </TabItem>
+
+                    <TabItem Header="Container2FEE Visual"
+                             ux:Icon.Kind="WorkpieceStation"
+                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ContainerToFeeVisualPage/>
+                    </TabItem>
+
+                    <TabItem Header="FEE2Container"
+                             ux:Icon.Kind="WorkpieceStation"
+                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:Fee2ContainerPage />
+                    </TabItem>
+
+                    <TabItem Header="FEE2SpecialDevices"
+                             ux:Icon.Kind="DeviceVideoCamera"
+                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:Fee2SpecialDevicesPage />
+                    </TabItem>
+                    
+                    <TabItem Header="SpecialDevices2FEE" ux:Icon.Kind="DeviceVideoCamera">
+                        <p:SpecialDevicePage/>
+                    </TabItem>
+                    
+
+                    <TabItem Header="Model Validation"
+                             ux:Icon.Kind="Wipe"
+                             IsEnabled="{Binding Connection.CanUseFeeFeatures}"
+                             ToolTip="{Binding Connection.UnavailableReason}"
+                             ToolTipService.ShowOnDisabled="True">
+                        <p:ModelValidationPage/>
+                    </TabItem>
+                 
+                    <TabItem Header="Model Control"
+                             ux:Icon.Kind="RobotWorkpiece"
+                             IsEnabled="{Binding Connection.CanUseFeeFeatures}"
+                             ToolTip="{Binding Connection.UnavailableReason}"
+                             ToolTipService.ShowOnDisabled="True">
+                        <p:ModelControlPage/>
+                    </TabItem>
+
+
+                    <TabItem Header="Interface Operation" ux:Icon.Kind="Node">
+                        <p:InterfaceOperationPage/>
+                    </TabItem>                  
+
+                    <TabItem Header="AI-Test"
+                             ux:Icon.Kind="Magazines"
+                             Visibility="{Binding CanUseLevel8Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:AITrainingTestPage/>
+                    </TabItem>
+
+                </ux:NavigationBar>
+
+                <local:DiagnosticsPanel Grid.Row="3" Margin="8,0,8,8" />
+
+
+            </Grid>
+
+        </Border>
+    </AdornerDecorator>
+
+
+</Window>

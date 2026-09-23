@@ -1,0 +1,97 @@
+<UserControl x:Class="VIBN_Tools.Application.View.ViCoAdministrationPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <WrapPanel VerticalAlignment="Center">
+                <Button MinWidth="120" Content="Aktualisieren" Command="{Binding RefreshCommand}" />
+                <TextBlock Margin="24,0,0,0" VerticalAlignment="Center" Text="Angemeldet als:" />
+                <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding CurrentUser}" />
+                <TextBlock Margin="24,0,0,0" VerticalAlignment="Center" Text="Rolle:" />
+                <TextBlock Margin="6,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding CurrentLevel}" />
+                <TextBlock Margin="24,0,0,0" VerticalAlignment="Center" Foreground="#FF666666" Text="Änderungen sind nur mit Level9 möglich." />
+            </WrapPanel>
+            <TextBlock Margin="0,8,0,0" Text="{Binding RoleStatus}" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="2*" />
+            </Grid.ColumnDefinitions>
+
+            <GroupBox Grid.Column="0" Header="Heutige Outlook-Termine">
+                <ListBox ItemsSource="{Binding Meetings}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="4">
+                                <TextBlock FontWeight="SemiBold" Text="{Binding Subject}" />
+                                <TextBlock>
+                                    <Run Text="{Binding Start, StringFormat={}{0:HH:mm}}" />
+                                    <Run Text=" – " />
+                                    <Run Text="{Binding End, StringFormat={}{0:HH:mm}}" />
+                                </TextBlock>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </GroupBox>
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <GroupBox Grid.Row="0" Header="Benutzer- und Rollenverwaltung">
+                    <DataGrid ItemsSource="{Binding RoleEntries}"
+                              SelectedItem="{Binding SelectedRole}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              EnableRowVirtualization="True"
+                              EnableColumnVirtualization="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Benutzer" Binding="{Binding UserName, Mode=OneWay}" Width="*" />
+                            <DataGridTextColumn Header="Stufe" Binding="{Binding Level, Mode=OneWay}" Width="130" />
+                            <DataGridTextColumn Header="Quelle" Binding="{Binding Source, Mode=OneWay}" Width="180" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </GroupBox>
+                <Grid Grid.Row="1" Margin="0,8,0,0" IsEnabled="{Binding CanManageUsers}" ToolTip="{Binding ManageUsersUnavailableReason}" ToolTipService.ShowOnDisabled="True">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <WrapPanel Grid.Row="0" VerticalAlignment="Center">
+                        <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Neuer Benutzer:" />
+                        <TextBox Width="180" MinHeight="30" Text="{Binding NewUserName, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="16,0,8,0" VerticalAlignment="Center" Text="Stufe:" />
+                        <ComboBox Width="120" MinHeight="30" ItemsSource="{Binding RoleLevels}" SelectedItem="{Binding SelectedLevel}" />
+                        <Button MinWidth="130" Margin="8,0,0,0" Content="Benutzer hinzufügen" Command="{Binding AddUserCommand}" />
+                    </WrapPanel>
+                    <WrapPanel Grid.Row="1" Margin="0,8,0,0" VerticalAlignment="Center">
+                        <TextBlock Margin="0,0,8,0" VerticalAlignment="Center" Text="Ausgewählter Benutzer:" />
+                        <TextBlock MinWidth="140" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding SelectedRole.UserName}" />
+                        <TextBlock Margin="16,0,8,0" VerticalAlignment="Center" Text="Neue Stufe:" />
+                        <ComboBox Width="120" MinHeight="30" IsEnabled="{Binding CanEditSelectedRole}" ItemsSource="{Binding RoleLevels}" SelectedItem="{Binding SelectedLevel}" ToolTip="{Binding EditSelectedRoleUnavailableReason}" ToolTipService.ShowOnDisabled="True" />
+                        <Button MinWidth="120" Margin="8,0,0,0" IsEnabled="{Binding CanEditSelectedRole}" Content="Stufe speichern" Command="{Binding SaveRoleCommand}" ToolTip="{Binding EditSelectedRoleUnavailableReason}" ToolTipService.ShowOnDisabled="True" />
+                        <Button MinWidth="140" Margin="8,0,0,0" IsEnabled="{Binding CanEditSelectedRole}" Content="Benutzer entfernen" Command="{Binding RemoveUserCommand}" ToolTip="{Binding EditSelectedRoleUnavailableReason}" ToolTipService.ShowOnDisabled="True" />
+                    </WrapPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <WrapPanel Grid.Row="2" Margin="0,12,0,0" VerticalAlignment="Center">
+            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Level9CoverageText}" />
+            <Button MinWidth="170" Margin="24,0,0,0" Content="Versionsordner öffnen" Command="{Binding OpenUpdateCommand}" />
+            <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding LatestUpdate.Version}" />
+            <TextBlock Margin="24,0,0,0" VerticalAlignment="Center" Text="{Binding StatusText}" TextWrapping="Wrap" />
+        </WrapPanel>
+    </Grid>
+</UserControl>

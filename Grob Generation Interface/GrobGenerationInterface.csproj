@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<UseWPF>true</UseWPF>
+		<!--<BaseOutputPath>G:\GM\KO\EL\ALLG\Abtlg\ZD\Simulation\Plugins\FEE_V4\GenerationInterface\Build</BaseOutputPath>-->
+		<BaseOutputPath>C:\_Projekt\CodingBuild\GenerationInterface\Build</BaseOutputPath>
+	</PropertyGroup>
+	<ItemGroup>
+	  <Reference Include="FS.SDK">
+	    <HintPath>..\..\..\Program Files\fe.screen-sim V5\5.0.11.48415\Bin\FS.SDK.dll</HintPath>
+	  </Reference>
+	  <Reference Include="FS.SDK.Localization">
+	    <HintPath>..\..\..\Program Files\fe.screen-sim V5\5.0.11.48415\Bin\FS.SDK.Localization.dll</HintPath>
+	  </Reference>
+	  <Reference Include="FS.SDK.Network">
+	    <HintPath>..\..\..\Program Files\fe.screen-sim V5\5.0.11.48415\Bin\FS.SDK.Network.dll</HintPath>
+	  </Reference>
+	  <Reference Include="FS.SDK.Packets">
+	    <HintPath>..\..\..\Program Files\fe.screen-sim V5\5.0.11.48415\Bin\FS.SDK.Packets.dll</HintPath>
+	  </Reference>
+	  <Reference Include="FS.SDK.Util">
+	    <HintPath>..\..\..\Program Files\fe.screen-sim V5\5.0.11.48415\Bin\FS.SDK.Util.dll</HintPath>
+	  </Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Simplugin Include="$(TargetName).simplugin"></Simplugin>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Update="GrobGenerationInterface.simplugin">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
+	</ItemGroup>
+
+
+
+</Project>

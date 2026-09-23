@@ -1,0 +1,50 @@
+<Project>
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <!-- Pin the language independently from the installed SDK. This prevents
+         new contextual keywords from changing an otherwise identical build. -->
+    <LangVersion>12.0</LangVersion>
+  </PropertyGroup>
+
+  <!-- One override replaces all version-specific FS.* HintPaths. The build
+       script discovers the newest installed version and passes this property. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'VIBN_Tools' or '$(MSBuildProjectName)' == 'GrobGenerationInterface'">
+    <FeeScreenSimInstallRoot Condition="'$(FeeScreenSimInstallRoot)' == ''">$(ProgramFiles)\fe.screen-sim V5</FeeScreenSimInstallRoot>
+    <FeeScreenSimRoot Condition="'$(FEE_SCREEN_SIM_ROOT)' != ''">$(FEE_SCREEN_SIM_ROOT)</FeeScreenSimRoot>
+    <RepositoryFeeSdkRoot>$(MSBuildThisFileDirectory)SDK</RepositoryFeeSdkRoot>
+  </PropertyGroup>
+
+  <!-- Visual Studio builds do not execute Build.ps1. Discover complete SDK
+       installations during project evaluation and ignore folders which do
+       not contain Bin\FS.SDK.dll. Build.ps1 additionally resolves the newest
+       version when more than one complete SDK is installed. -->
+  <PropertyGroup Condition="('$(MSBuildProjectName)' == 'VIBN_Tools' or '$(MSBuildProjectName)' == 'GrobGenerationInterface') and '$(FeeScreenSimRoot)' == ''">
+    <_InstalledFeeSdkMarkerPath Condition="Exists('$(FeeScreenSimInstallRoot)')">$([System.String]::Join(';', $([System.IO.Directory]::GetFiles('$(FeeScreenSimInstallRoot)', 'FS.SDK.dll', System.IO.SearchOption.AllDirectories))))</_InstalledFeeSdkMarkerPath>
+    <_HasMultipleInstalledFeeSdks>$([System.Text.RegularExpressions.Regex]::IsMatch('$(_InstalledFeeSdkMarkerPath)', ';'))</_HasMultipleInstalledFeeSdks>
+    <FeeScreenSimRoot Condition="'$(_InstalledFeeSdkMarkerPath)' != '' and '$(_HasMultipleInstalledFeeSdks)' != 'True'">$([System.IO.Path]::GetDirectoryName($([System.IO.Path]::GetDirectoryName('$(_InstalledFeeSdkMarkerPath)'))))</FeeScreenSimRoot>
+    <FeeScreenSimRoot Condition="'$(FeeScreenSimRoot)' == '' and '$(_InstalledFeeSdkMarkerPath)' == '' and Exists('$(MSBuildThisFileDirectory)external\fe-screen-sim\Bin\FS.SDK.dll')">$(MSBuildThisFileDirectory)external\fe-screen-sim</FeeScreenSimRoot>
+    <FeeScreenSimRoot Condition="'$(FeeScreenSimRoot)' == '' and '$(_InstalledFeeSdkMarkerPath)' == '' and Exists('$(RepositoryFeeSdkRoot)\FS.SDK.dll')">$(RepositoryFeeSdkRoot)</FeeScreenSimRoot>
+  </PropertyGroup>
+
+  <!-- Keep the delivered Grob Generation Interface project byte-for-byte
+       unchanged. Selected SDK and output locations are injected
+       from the solution root instead of editing its vendor project file. -->
+  <!-- Product installations contain Bin and a nested plugin directory. The
+       explicitly supplied repository SDK is intentionally kept byte-for-byte
+       in its flat upload layout. Both layouts feed the same project references. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'VIBN_Tools' or '$(MSBuildProjectName)' == 'GrobGenerationInterface'">
+    <FeeScreenSimBinPath Condition="Exists('$(FeeScreenSimRoot)\Bin\FS.SDK.dll')">$(FeeScreenSimRoot)\Bin</FeeScreenSimBinPath>
+    <FeeScreenSimBinPath Condition="'$(FeeScreenSimBinPath)' == '' and Exists('$(FeeScreenSimRoot)\FS.SDK.dll')">$(FeeScreenSimRoot)</FeeScreenSimBinPath>
+    <FeeReadingUnitPluginPath Condition="Exists('$(FeeScreenSimBinPath)\Plugins\ReadingUnitPlugin\ReadingUnitPlugin.dll')">$(FeeScreenSimBinPath)\Plugins\ReadingUnitPlugin\ReadingUnitPlugin.dll</FeeReadingUnitPluginPath>
+    <FeeReadingUnitPluginPath Condition="'$(FeeReadingUnitPluginPath)' == '' and Exists('$(FeeScreenSimBinPath)\ReadingUnitPlugin.dll')">$(FeeScreenSimBinPath)\ReadingUnitPlugin.dll</FeeReadingUnitPluginPath>
+  </PropertyGroup>
+
+  <!-- Keep the delivered Grob Generation Interface project unchanged while
+       making its effective references follow the SDK selected by the CMD. -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'GrobGenerationInterface'">
+    <GrobGenerationInterfaceSdkRoot>$(FeeScreenSimBinPath)</GrobGenerationInterfaceSdkRoot>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts\plugin-build\</BaseOutputPath>
+    <OutDir>$(MSBuildThisFileDirectory)artifacts\plugin-build\$(Configuration)\net8.0-windows\</OutDir>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,58 @@
+<Project>
+  <Target Name="ResolveFeeScreenSimSdkVersion"
+          BeforeTargets="ValidateFeeScreenSimSdk;GenerateAssemblyInfo"
+          Condition="'$(MSBuildProjectName)' == 'VIBN_Tools' and Exists('$(FeeScreenSimBinPath)\FS.SDK.dll')">
+    <GetAssemblyIdentity AssemblyFiles="$(FeeScreenSimBinPath)\FS.SDK.dll">
+      <Output TaskParameter="Assemblies" ItemName="_FeeSdkIdentity" />
+    </GetAssemblyIdentity>
+    <PropertyGroup>
+      <FeeScreenSimSdkVersion>@(_FeeSdkIdentity->'%(Version)')</FeeScreenSimSdkVersion>
+    </PropertyGroup>
+    <ItemGroup>
+      <AssemblyMetadata Remove="FeeSdkVersion" />
+      <AssemblyMetadata Include="FeeSdkVersion" Value="$(FeeScreenSimSdkVersion)" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="ValidateFeeScreenSimSdk"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(MSBuildProjectName)' == 'VIBN_Tools'">
+    <Error Condition="'$(FeeScreenSimRoot)' == '' and '$(_HasMultipleInstalledFeeSdks)' == 'True'"
+           Text="Mehrere vollständige FEE-SDK-Versionen wurden gefunden. Prepare-Development.cmd starten, SDK auswählen und Visual Studio neu starten; ohne Auswahl verwendet Build.ps1 die höchste Version." />
+    <Error Condition="'$(FeeScreenSimBinPath)' == '' or !Exists('$(FeeScreenSimBinPath)\FS.SDK.dll')"
+           Text="Kein vollständiges FEE-SDK gefunden. Unterstützt werden Installationsordner mit Bin\FS.SDK.dll und der unveränderte Repository-Ordner SDK\FS.SDK.dll. Build.ps1 verwenden oder FEE_SCREEN_SIM_ROOT setzen." />
+    <Error Condition="'$(FeeReadingUnitPluginPath)' == '' or !Exists('$(FeeReadingUnitPluginPath)')"
+           Text="ReadingUnitPlugin.dll fehlt im ausgewählten FEE-SDK. Erwartet unter Bin\Plugins\ReadingUnitPlugin oder direkt im flachen Repository-SDK." />
+    <Message Condition="Exists('$(FeeScreenSimBinPath)\FS.SDK.dll')"
+             Importance="High"
+             Text="FEE SDK erkannt: Version $(FeeScreenSimSdkVersion) unter '$(FeeScreenSimBinPath)'." />
+  </Target>
+
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'GrobGenerationInterface'">
+    <Reference Remove="FS.SDK;FS.SDK.Localization;FS.SDK.Network;FS.SDK.Packets;FS.SDK.Util" />
+    <Reference Include="FS.SDK" HintPath="$(GrobGenerationInterfaceSdkRoot)\FS.SDK.dll" Private="true" />
+    <Reference Include="FS.SDK.Localization" HintPath="$(GrobGenerationInterfaceSdkRoot)\FS.SDK.Localization.dll" Private="true" />
+    <Reference Include="FS.SDK.Network" HintPath="$(GrobGenerationInterfaceSdkRoot)\FS.SDK.Network.dll" Private="true" />
+    <Reference Include="FS.SDK.Packets" HintPath="$(GrobGenerationInterfaceSdkRoot)\FS.SDK.Packets.dll" Private="true" />
+    <Reference Include="FS.SDK.Util" HintPath="$(GrobGenerationInterfaceSdkRoot)\FS.SDK.Util.dll" Private="true" />
+    <!-- FS.Bridge from the supplied SDK targets System.Text.Json 9. Match the
+         host dependency explicitly instead of suppressing MSB3277. -->
+    <PackageReference Include="System.Text.Json" Version="10.0.0" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'GrobGenerationInterface'">
+    <!-- The vendor project declares a machine-specific absolute output path.
+         Override it after project evaluation without modifying that project. -->
+    <BaseOutputPath>$(MSBuildThisFileDirectory)artifacts\plugin-build\</BaseOutputPath>
+    <OutputPath>$(BaseOutputPath)$(Configuration)\</OutputPath>
+  </PropertyGroup>
+
+  <Target Name="ValidateGrobGenerationInterfaceSdk"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(MSBuildProjectName)' == 'GrobGenerationInterface'">
+    <Error Condition="'$(GrobGenerationInterfaceSdkRoot)' == '' or !Exists('$(GrobGenerationInterfaceSdkRoot)\FS.SDK.dll') or !Exists('$(GrobGenerationInterfaceSdkRoot)\FS.SDK.Localization.dll')"
+           Text="Das Grob Generation Interface benötigt den durch Prepare-Development.cmd ausgewählten SDK-Satz einschließlich FS.SDK.Localization.dll." />
+    <Message Importance="High"
+             Text="Grob Generation Interface verwendet unveränderte Quellen mit dem ausgewählten SDK aus '$(GrobGenerationInterfaceSdkRoot)'." />
+  </Target>
+</Project>

@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "VIBN Tools",
+    "Projects": [
+      {
+        "Path": "VIBN_Tools.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

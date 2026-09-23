@@ -1,0 +1,105 @@
+<UserControl x:Class="VIBN_Tools.Application.View.Fee2SpecialDevicesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
+             mc:Ignorable="d"
+             d:DesignHeight="700" d:DesignWidth="1200">
+    <UserControl.DataContext>
+        <vm:Fee2SpecialDevicesPageVM />
+    </UserControl.DataContext>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock FontSize="24" FontWeight="SemiBold" Text="FEE2SpecialDevices" />
+            <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
+                       Text="Liest die gesamte BasicFrame-Hierarchie. Versionierte Provenienz wird bevorzugt; ältere Geräte werden nur bei einer eindeutigen bekannten Logikdefinition rekonstruiert." />
+        </StackPanel>
+        <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
+            <Button MinWidth="175" MinHeight="34"
+                    Content="FEE-Geräte einlesen"
+                    Command="{Binding RefreshCommand}"
+                    IsEnabled="{Binding CanRefresh}"
+                    ToolTip="{Binding RefreshUnavailableReason}"
+                    ToolTipService.ShowOnDisabled="True" />
+            <Button Margin="8,0,0,0" MinWidth="180" MinHeight="34"
+                    Content="Gerät als JSON exportieren"
+                    Command="{Binding ExportCommand}"
+                    IsEnabled="{Binding CanExport}"
+                    ToolTip="{Binding ExportUnavailableReason}"
+                    ToolTipService.ShowOnDisabled="True" />
+            <Button Margin="8,0,0,0" MinWidth="180" MinHeight="34"
+                    Content="Alle als JSON exportieren"
+                    Command="{Binding ExportAllCommand}"
+                    IsEnabled="{Binding CanExportAll}" />
+            <Button Margin="8,0,0,0" MinWidth="150" MinHeight="34"
+                    Content="Auswahl entfernen"
+                    Command="{Binding RemoveSelectedCommand}"
+                    IsEnabled="{Binding CanRemoveSelected}"
+                    ToolTip="Entfernt nur den eingelesenen Listeneintrag, nicht das FEE-Objekt." />
+            <Button Margin="8,0,0,0" MinWidth="130" MinHeight="34"
+                    Content="Liste leeren"
+                    Command="{Binding RemoveAllCommand}"
+                    IsEnabled="{Binding CanRemoveAll}"
+                    ToolTip="Entfernt alle eingelesenen Listeneinträge, nicht die FEE-Objekte." />
+            <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
+        </WrapPanel>
+        <DataGrid Grid.Row="2"
+                  ItemsSource="{Binding Roots}"
+                  SelectedItem="{Binding SelectedRoot}"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True"
+                  EnableRowVirtualization="True"
+                  EnableColumnVirtualization="True">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="FEE-Root" Binding="{Binding Name}" Width="2*" />
+                <DataGridTextColumn Header="Präfix" Binding="{Binding Snapshot.Prefix}" Width="*" />
+                <DataGridTextColumn Header="Hersteller" Binding="{Binding Snapshot.Manufacturer}" Width="*" />
+                <DataGridTextColumn Header="Gerätetyp" Binding="{Binding Snapshot.DeviceType}" Width="1.5*" />
+                <DataGridTextColumn Header="E-Byte" Binding="{Binding Snapshot.InputByte}" Width="75">
+                    <DataGridTextColumn.HeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="ToolTip" Value="Kleinste gefundene und verknüpfte Byteadresse" />
+                        </Style>
+                    </DataGridTextColumn.HeaderStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="A-Byte" Binding="{Binding Snapshot.OutputByte}" Width="75">
+                    <DataGridTextColumn.HeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="ToolTip" Value="Kleinste gefundene und verknüpfte Byteadresse" />
+                        </Style>
+                    </DataGridTextColumn.HeaderStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="PLC_IN verbunden" Binding="{Binding ConnectedInputSignalCount}" Width="115" />
+                <DataGridTextColumn Header="PLC_IN vorhanden" Binding="{Binding InputSignalCount}" Width="115" />
+                <DataGridTextColumn Header="PLC_OUT verbunden" Binding="{Binding ConnectedOutputSignalCount}" Width="125" />
+                <DataGridTextColumn Header="PLC_OUT vorhanden" Binding="{Binding OutputSignalCount}" Width="125" />
+                <DataGridTextColumn Header="Fehlende PLC-Slots" Binding="{Binding MissingPlcSlots}" Width="2*" />
+                <DataGridTextColumn Header="Signale" Binding="{Binding Snapshot.Signals.Count}" Width="75" />
+                <DataGridTextColumn Header="Aktuell" Binding="{Binding UpdatedSignalCount}" Width="75" />
+                <DataGridTextColumn Header="Fehlend" Binding="{Binding MissingSignalCount}" Width="75" />
+            </DataGrid.Columns>
+        </DataGrid>
+        <ItemsControl Grid.Row="3" Margin="0,8,0,0" ItemsSource="{Binding Issues}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <TextBlock Foreground="DarkRed" TextWrapping="Wrap" Text="{Binding}" />
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel Grid.Row="4" Margin="0,10,0,0">
+            <ProgressBar Height="7" Minimum="0"
+                         Maximum="{Binding ProgressMaximum, Mode=OneWay}"
+                         Value="{Binding ProgressValue, Mode=OneWay}" />
+            <TextBlock Margin="0,5,0,0" TextWrapping="Wrap" Text="{Binding StatusText}" />
+        </StackPanel>
+    </Grid>
+</UserControl>

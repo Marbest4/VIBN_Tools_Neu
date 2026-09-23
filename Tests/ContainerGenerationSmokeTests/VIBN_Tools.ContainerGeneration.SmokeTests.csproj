@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\VIBN_Tools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\Interface5.xlsx" Link="TestData\Interface5.xlsx" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\Interface7.xlsx" Link="TestData\Interface7.xlsx" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TestData\GoldenMaster\*.*" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The test now loads Container2FEE runtime types. Project-reference
+         transitivity does not copy vendor file references into this test
+         output, therefore use the unchanged repository SDK closure. -->
+    <Content Include="..\..\SDK\FS.*.dll"
+             Link="%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,1242 @@
+<AutoCreate>
+	<Components>
+		<Component name="PneumaticCylinder" type="Cylinder">
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="false">Bremse</Key>
+					<Key keep="false">Alles</Key>
+					<Key keep="false">Klemmung</Key>
+					<Key keep="false">Spannmodul</Key>
+					<Key keep="false">Hubeinheit</Key>
+					<Key keep="false">Hub-Quereinheit</Key>
+					<Key keep="false">Spanner</Key>
+					<Key keep="false">Hydraulik</Key>
+					<Key keep="false">Linkslauf</Key>
+					<Key keep="false">Rechtslauf</Key>
+					<Key keep="false">Auflagekontrolle</Key>
+					<Key keep="false">Leistungsmessung</Key>
+					<Key keep="false">Netzteil</Key>
+					<Key keep="false">Netztrenneinrichtung</Key>
+					<Key keep="false">Schutztürschalter</Key>
+					<Key keep="false">Rückführkreis</Key>
+					<Key keep="false">Runge</Key>
+					<Key keep="false">Greifer</Key>
+					<Key keep="false">Schutztür</Key>
+					<Key keep="false">Stopp</Key>
+				</KeySet>
+			</Keygroup>		
+			<Slots>					
+				<Slot name="PLC_OUT_ToWorkPos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">zur Arbeitsposition</Key>
+							<Key keep="false">heben</Key>
+							<Key keep="false">auf</Key>
+							<Key keep="false">vor</Key>
+							<Key keep="false">ausfahren</Key>
+							<Key keep="false">zur Endposition</Key>
+							<Key keep="false">zur Löseposition</Key>
+							<Key keep="false">nach oben</Key>
+							<Key keep="false">nach rechts</Key>
+							<Key keep="false">zur Position 1</Key>
+							<Key keep="false">zu 180°</Key>
+							<Key keep="false">zur Position -90° (Reinigungsposition)</Key>
+							<Key keep="false">Rolltor öffnen</Key>
+							<Key keep="false">entriegeln</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_ToHomePos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">zur Grundposition</Key>
+							<Key keep="false">senken</Key>
+							<Key keep="false">lösen</Key>
+							<Key keep="false">ab</Key>
+							<Key keep="false">zurück</Key>
+							<Key keep="false">einfahren</Key>
+							<Key keep="false">zur Wechselposition</Key>
+							<Key keep="false">drucklos schalten</Key>
+							<Key keep="false">nach unten</Key>
+							<Key keep="false">nach links</Key>
+							<Key keep="false">zur Position 2</Key>
+							<Key keep="false">zu 0°</Key>
+							<Key keep="false">zur Position 0° (Übergabe GTY)</Key>
+							<Key keep="false">zur Grundstellung</Key>
+							<Key keep="false">zur Rückstellposition</Key>
+							<Key keep="false">Rolltor schließen</Key>
+						    <Key keep="false">Rolltor schliessen</Key>
+						    <Key keep="false">verriegeln</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+				<Slot name="PLC_IN_InWorkPos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">in Arbeitsposition</Key>
+							<Key keep="false">oben AS</Key>
+							<Key keep="false">oben GS</Key>
+							<Key keep="false">oben</Key>
+							<Key keep="false">unten (in Arbeitsstellung)</Key>
+							<Key keep="false">ausgefahren</Key>
+							<Key keep="false">in Endposition</Key>
+              				<Key keep="false">.1 vorn</Key>              
+              				<Key keep="false">.2 vorn</Key>
+              				<Key keep="false">.3 vorn</Key>              
+              				<Key keep="false">.4 vorn</Key>
+              				<Key keep="false">vorn 1</Key>
+              				<Key keep="false">vorn 2</Key>
+							<Key keep="false">vorn</Key>
+							<Key keep="false">vorne</Key>
+							<Key keep="false">in Löseposition</Key>
+							<Key keep="false">rechts</Key>
+							<Key keep="false">in Position 1</Key>
+							<Key keep="false">180°</Key>
+							<Key keep="false">in Position -90° (Reinigungsposition)</Key>
+							<Key keep="false">Rolltor geöffnet</Key>
+							<Key keep="false">geöffnet</Key>
+							<Key keep="false">entriegelt</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+				<Slot name="PLC_IN_InHomePos">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">in Grundposition</Key>
+							<Key keep="false">unten GS</Key>
+							<Key keep="false">unten AS</Key>
+							<Key keep="false">unten</Key>
+							<Key keep="false">oben (Grundstellung)</Key>
+							<Key keep="false">eingefahren</Key>
+							<Key keep="false">in Wechselposition</Key>
+							<Key keep="false">in Rückstellposition</Key>
+							<Key keep="false">drucklos</Key>
+							<Key keep="false">links</Key>
+							<Key keep="false">in Position 0° (Übergabe GTY)</Key>
+							<Key keep="false">0°</Key>
+							<Key keep="false">in Position 2</Key>
+							<Key keep="false">.1 zurück</Key>
+							<Key keep="false">.2 zurück</Key>
+							<Key keep="false">.3 zurück</Key>
+							<Key keep="false">.4 zurück</Key>
+							<Key keep="false">.1 hinten</Key>
+							<Key keep="false">.2 hinten</Key>
+							<Key keep="false">.3 hinten</Key>
+							<Key keep="false">.4 hinten</Key>
+							<Key keep="false">hinten 1</Key>
+							<Key keep="false">hinten 2</Key>
+							<Key keep="false">hinten</Key>
+							<Key keep="false">Rolltor geschlossen</Key>
+							<Key keep="false">geschlossen</Key>
+							<Key keep="false">verriegelt</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="FeedSafetyDoor" type="FeedSafetyDoor">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Einlauf</Key>
+					<Key keep="true">Auslauf</Key>	
+					<Key keep="true">Drosselklappe</Key>	
+				</KeySet>
+			</Keygroup>	
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="false">Stopp</Key>
+					<Key keep="false">Indexiereinheit</Key>
+				</KeySet>
+			</Keygroup>		
+			<Slots>					
+				<Slot name="PLC_OUT_ToWorkPos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">öffnen</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_ToHomePos">
+					<Keygroup	 type="required">
+						<KeySet name="">	
+							<Key keep="false">schließen</Key>
+							<Key keep="false">schliessen</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+				<Slot name="PLC_IN_InWorkPos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">geöffnet</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+				<Slot name="PLC_IN_InHomePos">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">geschlossen Kanal 1</Key>
+							<Key keep="false">geschlossen Kanal 2</Key>
+							<Key keep="false">geschlossen</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="LiftUnit" type="LiftUnit">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Hubeinheit</Key>
+					<Key keep="true">Hub-Quereinheit</Key>
+				</KeySet>
+			</Keygroup>		
+			<Slots>					
+				<Slot name="PLC_OUT_ToWorkPos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">zur Arbeitsposition</Key>
+							<Key keep="false">heben</Key>
+							<Key keep="false">auf</Key>
+							<Key keep="false">vor</Key>
+							<Key keep="false">ausfahren</Key>
+							<Key keep="false">zur Endposition</Key>
+							<Key keep="false">zur Löseposition</Key>
+							<Key keep="false">nach oben</Key>
+							<Key keep="false">nach rechts</Key>
+							<Key keep="false">zur Position 1</Key>
+							<Key keep="false">zu 180°</Key>
+							<Key keep="false">zur Position -90° (Reinigungsposition)</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_ToHomePos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">zur Grundposition</Key>
+							<Key keep="false">senken</Key>
+							<Key keep="false">ab</Key>
+							<Key keep="false">zurück</Key>
+							<Key keep="false">einfahren</Key>
+							<Key keep="false">zur Wechselposition</Key>
+							<Key keep="false">drucklos schalten</Key>
+							<Key keep="false">nach unten</Key>
+							<Key keep="false">nach links</Key>
+							<Key keep="false">zur Position 2</Key>
+							<Key keep="false">zu 0°</Key>
+							<Key keep="false">zur Position 0° (Übergabe GTY)</Key>
+							<Key keep="false">zur Grundstellung</Key>
+							<Key keep="false">zur Rückstellposition</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+				<Slot name="PLC_IN_InWorkPos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">in Arbeitsposition</Key>
+							<Key keep="false">Position oben</Key>
+							<Key keep="false">oben 1</Key>
+							<Key keep="false">oben 2</Key>
+							<Key keep="false">oben</Key>
+							<Key keep="false">unten (in Arbeitsstellung)</Key>
+							<Key keep="false">ausgefahren</Key>
+							<Key keep="false">in Endposition</Key>
+							<Key keep="false">vorn</Key>
+							<Key keep="false">in Löseposition</Key>
+							<Key keep="false">rechts</Key>
+							<Key keep="false">in Position 1</Key>
+							<Key keep="false">180°</Key>
+							<Key keep="false">in Position -90° (Reinigungsposition)</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+				<Slot name="PLC_IN_InHomePos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">in Grundposition</Key>
+							<Key keep="false">hinten</Key>
+							<Key keep="false">Position unten</Key>
+							<Key keep="false">unten 1</Key>
+							<Key keep="false">unten 2</Key>
+							<Key keep="false">unten</Key>
+							<Key keep="false">oben (Grundstellung)</Key>
+							<Key keep="false">eingefahren</Key>
+							<Key keep="false">in Wechselposition</Key>
+							<Key keep="false">in Rückstellposition</Key>
+							<Key keep="false">drucklos</Key>
+							<Key keep="false">links</Key>
+							<Key keep="false">in Position 0° (Übergabe GTY)</Key>
+							<Key keep="false">0°</Key>
+							<Key keep="false">in Position 2</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+				<Slot name="PLC_IN_InMiddlePos">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">Position Mitte</Key>
+							<Key keep="false">Mittelstellung</Key>
+						</KeySet>
+					</Keygroup>			
+				</Slot>
+			</Slots>	
+		</Component>
+		<Component name="GripperBasic" type="GripperBasic">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Greifer</Key>
+					<Key keep="true">Robotergreifer</Key>
+					<Key keep="true">PFU1 Greifer</Key>
+					<Key keep="true">Spanner</Key>
+				</KeySet>
+			</Keygroup>
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Schutztür</Key>
+					<Key keep="true">Zustellung</Key>
+					<Key keep="true">Klemmung</Key>
+				</KeySet>
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_OUT_Clamp">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">spannen</Key>
+							<Key keep="false">schließen</Key>
+							<Key keep="false">schliessen</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Clamped">
+					<Keygroup	 type="required" > <!-- operator="AND" -->
+						<KeySet name="">
+							<Key keep="false">gespannt Druck i.O.</Key>
+							<Key keep="false">gespannt</Key>
+							<Key keep="false">geschlossen</Key>
+						</KeySet>		
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_Unclamp">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">lösen</Key>
+							<Key keep="false">öffnen</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Unclamped">
+					<Keygroup	 type="required" > <!-- operator="AND" -->
+						<KeySet name="">
+							<Key keep="false">gelöst</Key>
+							<Key keep="false">geöffnet</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ClampedWithPart">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">gespannt mit Werkstück</Key>
+							<Key keep="false">gespannt mit WS</Key>
+							<Key keep="false">geschlossen mit Werkstück</Key>
+							<Key keep="false">gespannt mit Werkstück</Key>
+							<Key keep="false">geschlossen Werkstück vorhanden</Key>
+							<Key keep="false">geschlossen Druck</Key>
+							<Key keep="false">gespannt Druck</Key>
+							<Key keep="false">geschlossen mit WS</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup	 type="exclude">
+						<KeySet name="">
+							<Key keep="false">Achsausgleich</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ClampedWithoutPart">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">gespannt ohne Werkstück</Key>
+							<Key keep="false">geschlossen kein Werkstück vorhanden</Key>
+							<Key keep="false">geschlossen ohne WS</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>				
+			</Slots>
+		</Component>
+		<Component name="Clamping" type="Clamping">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Klemmung</Key>
+					<Key keep="true">Schublade 1 zugehalten Eingang</Key>
+				</KeySet>
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_OUT_ReleaseClamping">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">lösen</Key>
+							<Key keep="false">entblocken</Key>
+							<Key keep="false">entriegeln</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ClampingReleased">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">gelöst Druck i.O.</Key>
+							<Key keep="false">gelöst</Key>
+							<Key keep="false">entblockt</Key>
+							<Key keep="false">entriegelt</Key>
+							<Key keep="false">zugehalten Eingang</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="Conveyor" type="Conveyor">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Bandantrieb 1</Key>
+					<Key keep="true">Bandantrieb 2</Key>
+          <Key keep="true">Bandantrieb</Key>
+          <Key keep="true">Antrieb</Key>
+          <Key keep="true">Antrieb 1</Key>
+          <Key keep="true">Antrieb 2</Key>
+          <Key keep="true">Antrieb 3</Key>
+          <Key keep="true">Antrieb 4</Key>
+          <Key keep="true">Antrieb 5</Key>
+          <Key keep="true">Antrieb 6</Key>
+				</KeySet>
+			</Keygroup>
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Band</Key>
+				</KeySet>
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_IN_ReadyForOperation">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">Betriebsbereit</Key>
+							<Key keep="false">betriebsbereit</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ConveyorActive">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">Eingeschaltet</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_Clockwise">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">Rechtslauf einschalten</Key>
+              <Key keep="false">Rechtslauf</Key>
+							<Key keep="false">CW</Key>
+							<Key keep="false">Drehrichtung 1 einschalten</Key>
+							<Key keep="false">Bandantrieb 1 einschalten</Key>
+							<Key keep="false">Bandantrieb Drehrichtung 1 einschalten</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_CounterClockwise">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">Linkslauf einschalten</Key>
+              <Key keep="false">Linkslauf</Key>
+							<Key keep="false">CCW</Key>
+							<Key keep="false">Drehrichtung 2 einschalten</Key>
+							<Key keep="false">Bandantrieb 2 einschalten</Key>
+							<Key keep="false">Bandantrieb Drehrichtung 2 einschalten</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ConveyorOk">
+					<Keygroup	 type="required" operator="AND">
+						<KeySet name="">
+							<Key keep="false">Motorstarter i.O.</Key>
+						</KeySet>
+						<KeySet name="">
+							<Key keep="false">CA1</Key>
+							<Key keep="false">CA51</Key>
+							<Key keep="false">CA52</Key>
+							<Key keep="false">CA53</Key>
+							<Key keep="false">CA54</Key>
+							<Key keep="false">CA55</Key>
+							<Key keep="false">CA56</Key>
+							<Key keep="false">CA57</Key>
+							<Key keep="false">CA58</Key>
+							<Key keep="false">CA59</Key>
+							<Key keep="false">CA60</Key>
+							<Key keep="false">CA61</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="SafetySensor" type="Sensor">
+			<Keygroup	 type="required" operator="AND">
+				<KeySet name="">
+					<Key keep="true">vorhanden</Key>
+					<Key keep="true">frei</Key>
+					<Key keep="true">Lichtvorhang</Key>
+					<Key keep="true">Abfrage</Key>
+					<Key keep="true">Bandgeschwindigkeit</Key>
+				</KeySet>
+				<KeySet name="">
+					<Key keep="true">WT</Key>
+					<Key keep="true">Werkstückträger</Key>
+					<Key keep="true">Zelle</Key>
+					<Key keep="true">Werkstück</Key>
+					<Key keep="true">Bereich</Key>
+					<Key keep="true">Übergabebereich</Key>
+					<Key keep="true">Teil</Key>
+					<Key keep="true">Behältnis</Key>
+					<Key keep="true">platte</Key>
+					<Key keep="true">Klebevorrichtung</Key>
+					<Key keep="true">Draht</Key>
+					<Key keep="true">KLT</Key>
+					<Key keep="true">Isolationsfolie</Key>
+					<Key keep="true">Modul</Key>
+					<Key keep="true">Bauteil</Key>
+					<Key keep="true">Behälter</Key>
+					<Key keep="true">WS</Key>
+					<Key keep="true">reduzieren</Key>
+				</KeySet>						
+			</Keygroup>
+			<Slots>					
+				<Slot name="PLC_IN_PartPresent">
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="true">nicht</Key>
+							<Key keep="true">kein</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_NoPartPresent">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="false">nicht</Key>
+							<Key keep="false">kein</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="Stop" type="Stop">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Stopp</Key>
+					<Key keep="true">Vorstopp</Key>
+				</KeySet>						
+			</Keygroup>				
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Greifer</Key>
+					<Key keep="true">Schutztür</Key>
+				</KeySet>						
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_OUT_Open">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">öffnen</Key>
+						</KeySet>
+					</Keygroup>	
+				</Slot>
+				<Slot name="PLC_IN_Opened">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">geöffnet</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_Close">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">schließen</Key>
+							<Key keep="false">schliessen</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Closed">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">geschlossen</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="SafetyDoor" type="SafetyDoor">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Schutztür</Key>
+					<Key keep="true">SPC1 Schublade</Key>
+				</KeySet>						
+			</Keygroup>	
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Einlauf</Key>
+					<Key keep="true">Auslauf</Key>
+				</KeySet>						
+			</Keygroup>	
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Werkstückträger vorhanden</Key>
+				</KeySet>						
+			</Keygroup>			
+			<Slots>
+				<Slot name="PLC_OUT_Unlock">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">entriegeln</Key>
+							<Key keep="false">Zuhaltung lösen</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">anwählen</Key>
+							<Key keep="false">angewählt</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_Start">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Automatikbetrieb LED</Key>
+							<Key keep="false">LED Start</Key>
+							<Key keep="false">starten LED</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_RequestEntry">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">verriegeln/entriegeln angewählt</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Unlocked">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">entriegelt</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Opened">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">geöffnet</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Closed_Ch1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">mit Zuhaltung geschlossen</Key>
+							<Key keep="false">geschlossen Kanal 1</Key>
+							<Key keep="false">geschlossen</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">und zugehalten</Key>
+							<Key keep="false">und verriegelt</Key>
+							<Key keep="false">Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Closed_Ch2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">mit Zuhaltung geschlossen</Key>
+							<Key keep="false">geschlossen Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">und zugehalten</Key>
+							<Key keep="false">und verriegelt</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ClosedAndLocked">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">geschlossen und zugehalten / nicht zugehalten</Key>
+							<Key keep="false">geschlossen und zugehalten</Key>
+							<Key keep="false">geschlossen und verriegelt</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">Kanal 1</Key>
+							<Key keep="false">Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ClosedAndLocked_Ch1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">geschlossen und verriegelt Kanal 1</Key>
+							<Key keep="false">geschlossen und zugehalten Kanal 1</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_ClosedAndLocked_Ch2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">geschlossen und verriegelt Kanal 2</Key>
+							<Key keep="false">geschlossen und zugehalten Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_EStopPressed_Ch1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt betätigt</Key>
+							<Key keep="false">Not-Halt betätigt Kanal 1</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">Kanal 2</Key>
+						</KeySet>						
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_EStopPressed_Ch2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt betätigt Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_EStopNotPressed_Ch1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt nicht betätigt Kanal 1</Key>
+							<Key keep="false">Not-Halt Kanal 1</Key>
+							<Key keep="false">Not-Halt nicht betätigt</Key>
+						</KeySet>						
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">Kanal 2</Key>
+						</KeySet>						
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_EStopNotPressed_Ch2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt nicht betätigt Kanal 2</Key>
+							<Key keep="false">Not-Halt Kanal 2</Key>
+						</KeySet>
+					</Keygroup>					
+				</Slot>
+				<Slot name="PLC_IN_Start">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Drucktaster - Automatik Start</Key>
+							<Key keep="false">Automatikbetrieb einschalten</Key>
+							<Key keep="false">Automatikbetrieb starten</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">LED</Key>
+						</KeySet>						
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Quit">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Drucktaster - Quittierung</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_RequestEntry">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Drucktaster - Anforderung Zutritt</Key>
+							<Key keep="false">verriegeln/entriegeln anwählen</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_Fault">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Fehler</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="Stacklight" type="Stacklight">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Signalleuchte</Key>
+					<Key keep="true">Maschinenzustandsleuchte</Key>
+				</KeySet>							
+			</Keygroup>				
+			<Slots>
+				<Slot name="PLC_NO_Red">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">rot einschalten Ausgang</Key>
+							<Key keep="false">rot</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_NO_Yellow">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">gelb einschalten Ausgang</Key>
+							<Key keep="false">gelb</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_NO_Green">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">grün einschalten Ausgang</Key>
+							<Key keep="false">grün</Key>
+							<Key keep="false">gruen</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_NO_Blue">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">blau einschalten Ausgang</Key>
+							<Key keep="false">blau</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_NO_White">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">weiß einschalten Ausgang</Key>
+							<Key keep="false">weiß</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>				
+			</Slots>
+		</Component>
+		<Component name="StaticSignals" type="Switch">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">i.O</Key>
+					<Key keep="true">i.O.</Key>
+					<Key keep="true">in Ordnung</Key>
+					<Key keep="true">nicht schwach</Key>
+					<Key keep="true">kein Fehler</Key>
+					<Key keep="true">Vorwarnung</Key>
+					<Key keep="true">Vorwarnstufe</Key>
+					<Key keep="true">Alarm</Key>
+					<Key keep="true">keine</Key>
+					<Key keep="true">Lade</Key>
+					<Key keep="true">Füllstand</Key>
+					<Key keep="true">Riemenbruchkontrolle</Key>
+					<Key keep="true">Achssicherung</Key>
+					<Key keep="true">Absteckbolzen</Key>
+					<Key keep="true">nicht erreicht</Key>
+					<Key keep="true">Brandmelder aktiv</Key>
+					<Key keep="true">OK</Key>
+					<Key keep="true">Sammelstörung</Key>
+					<Key keep="true">Meldung</Key>
+					<Key keep="true">Netztrenneinrichtung</Key>
+					<Key keep="true">400V Versorgung</Key>
+					<Key keep="true">Sammelfehler</Key>
+					<Key keep="true">Drehzahlmeldung</Key>
+					<Key keep="true">Temperaturmeldung</Key>
+					<Key keep="true">nicht voll</Key>
+					<Key keep="true">nicht Minimum</Key>
+					<Key keep="true">nicht nachfüllen</Key>
+					<Key keep="true">nicht max.</Key>
+					<Key keep="true">kein Zonenfehler</Key>
+					<Key keep="true">nicht überschritten</Key>
+					<Key keep="true">nicht minimum</Key>
+					<Key keep="true">nicht zu hoch</Key>
+					<Key keep="true">nicht zu niedrig</Key>
+					<Key keep="true">Schaltschrank verriegelt</Key>
+					<Key keep="true">Filterüberwachung</Key>
+					<Key keep="true">Temperaturalarm</Key>
+					<Key keep="true">nicht min.</Key>
+					<Key keep="true">Keine Störung</Key>
+					<Key keep="true">Fernwartung</Key>
+					<Key keep="true">Handwagen vorhanden</Key>
+					<Key keep="true">in Ablageposition</Key>
+					<Key keep="true">Absaugung betriebsbereit</Key>
+					<Key keep="true">Werkstückkühlkammer betriebsbereit</Key>
+					<Key keep="true">Spindel betriebsbereit</Key>
+					<Key keep="true">CU1 betriebsbereit</Key>
+					<Key keep="true">Stromversorgung betriebsbereit</Key>
+					<Key keep="true">Steuerung betriebsbereit</Key>
+					<Key keep="true">Absturzsicherung</Key>
+					<Key keep="true">nicht Maximum</Key>
+					<Key keep="true">Reparaturschaltermodul</Key>
+					<Key keep="true">Schutzschalter</Key>
+					<Key keep="true">Stromverteilungssystem</Key>
+					<Key keep="true">Unterbrechungsfreie Stromversorgung</Key>
+					<Key keep="true">Temperatur i.O.</Key>
+					<Key keep="true">Temperatur iO</Key>
+					<Key keep="true">Spannungsversorgung</Key>
+					<Key keep="true">Leistungsschalter</Key>
+					<Key keep="true">Profinet</Key>
+					<Key keep="true">Ethernet</Key>
+					<Key keep="true">Netzschütz</Key>
+					<Key keep="true">Druckkontrolle</Key>
+				</KeySet>						
+			</Keygroup>				
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Pneumatik</Key>
+					<Key keep="true">Rückführkreis</Key>
+					<Key keep="true">Transportfreigabe</Key>
+					<Key keep="true">Greifer</Key>
+					<Key keep="true">Schutztür</Key>
+					<Key keep="true">Riemenbruchkontrolle</Key>
+					<Key keep="true">Spannmodul</Key>
+					<Key keep="true">Vor Druck</Key>
+					<Key keep="true">Zurück Druck</Key>
+					<Key keep="true">Löseleitung Druck</Key>
+					<Key keep="true">Plasmatreat</Key>
+					<Key keep="true">Schutzbereich</Key>
+					<Key keep="true">Sender</Key>
+					<Key keep="true">Lichtstrahl</Key>
+					<Key keep="true">Werkstücklage</Key>
+					<Key keep="true">Zentralschmieranlage Druck</Key>
+					<Key keep="true">Zentralschmieranlage Kreis</Key>
+					<Key keep="true">Zentralschmierung Druck</Key>
+					<Key keep="true">Klemmung</Key>
+					<Key keep="true">nicht IO</Key>
+					<Key keep="true">nicht in Ablageposition</Key>
+					<Key keep="true">Druck i.O.</Key>
+					<Key keep="true">Bandantrieb Betriebsbereit</Key>
+					<Key keep="true">Lichtvorhang</Key>
+					<Key keep="true">n.i.O.</Key>
+					<Key keep="true">Sicherung</Key>
+					<Key keep="true">Motorstarter</Key>
+				</KeySet>						
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_IN_NO">
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="true">nicht max.</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>			
+				<Slot name="PLC_IN_NC">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="true">nicht max.</Key>
+							<Key keep="false">nicht</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="true">nicht min.</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>
+		<Component name="Fuse" type="Fuse">
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Achssicherung</Key>
+					<Key keep="true">Absturzsicherung</Key>
+					<Key keep="true">Greifer</Key>
+					<Key keep="true">Klemmung</Key>
+					<Key keep="true">Ablage</Key>
+				</KeySet>						
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_IN_NO">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="true">Sicherung</Key>
+							<Key keep="true">Stromverteilung</Key>
+							<Key keep="true">Stromverteilungsystem</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_NC">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="true">Sicherungsfall</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>			
+			</Slots>			
+		</Component>
+		<Component name="EStop" type="EStop">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Not-Halt</Key>
+				</KeySet>
+			</Keygroup>
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Schutztür</Key>
+				</KeySet>
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_IN_NO1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt betätigt Kanal 1</Key>
+							<Key keep="false">betätig</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>				
+				<Slot name="PLC_IN_NO2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt betätigt Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">Kanal 1</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>		
+				<Slot name="PLC_IN_NC1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt nicht betätigt Kanal 1</Key>
+							<Key keep="false">Not-Halt nicht betätigt</Key>			
+							<Key keep="false">Not-Halt Kanal 1</Key>								
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>	
+				<Slot name="PLC_IN_NC2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Not-Halt nicht betätigt Kanal 2</Key>
+							<Key keep="false">Not-Halt Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">Kanal 1</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>											
+			</Slots>			
+		</Component>
+		<Component name="CabinetLamp" type="CabinetLamp">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Arbeitsraumbeleuchtung</Key>
+				</KeySet>						
+			</Keygroup>
+			<Slots>
+				<Slot name="PLC_OUT_ON">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="true">einschalten Ausgang</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>			
+			</Slots>			
+		</Component>		
+		<Component name="PneumaticSupply" type="PneumaticSupply">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Pneumatik</Key>
+				</KeySet>						
+			</Keygroup>				
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">Schutzbereich</Key>
+					<Key keep="true">Schutzkreis</Key>
+				</KeySet>						
+			</Keygroup>				
+			<Slots>
+				<Slot name="PLC_OUT_SwitchOn_Ch1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">einschalten Kanal 1</Key>
+							<Key keep="false">einschalten</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_OUT_SwitchOn_Ch2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">einschalten Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_PneumaticOk_Ch1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Druck Ok Kanal 1</Key>
+							<Key keep="false">Druck i.O. Kanal 1</Key>
+							<Key keep="false">Druck Ok</Key>
+							<Key keep="false">Druck i.O.</Key>
+							<Key keep="false">Ok Kanal 1</Key>
+							<Key keep="false">Ok</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_PneumaticOk_Ch2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">Druck Ok Kanal 2</Key>
+							<Key keep="false">Druck i.O. Kanal 2</Key>
+							<Key keep="false">Ok Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_NotSwitchedOn_Ch1">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">nicht eingeschaltet Kanal 1</Key>
+							<Key keep="false">nicht eingeschaltet</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_IN_NotSwitchedOn_Ch2">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">nicht eingeschaltet Kanal 2</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>			
+		<Component name="ReturnCurcuit" type="ReturnCurcuit">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Rückführkreis</Key>
+				</KeySet>						
+			</Keygroup>				
+			<Slots>				
+				<Slot name="PLC_IN_Signal"/>
+			  <Slot name="PLC_OUT_Signal">
+			  	<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">nicht</Key>
+						</KeySet>
+					</Keygroup>	
+			  </Slot>
+			</Slots>
+		</Component>		
+		<Component name="SafeArea" type="SafeArea">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Schutzbereich</Key>
+				</KeySet>						
+			</Keygroup>				
+			<Slots>				
+				<Slot name="PLC_IN_Signal">
+			  	<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">nicht eingeschaltet</Key>
+						</KeySet>
+					</Keygroup>	
+			  </Slot>
+			  <Slot name="PLC_OUT_Signal">
+			  	<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">einschalten</Key>
+						</KeySet>
+					</Keygroup>	
+			  </Slot>
+			</Slots>
+		</Component>		
+		
+		<Component name="Button" type="Button">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Freigabetaster</Key>
+				</KeySet>						
+			</Keygroup>
+			<Keygroup type="exclude">
+				<KeySet name="">
+					<Key keep="true">LED</Key>
+						</KeySet>
+					</Keygroup>				
+			<Slots>
+				<Slot name="PLC_IN_NO">
+					<Keygroup type="exclude">
+						<KeySet name="">
+							<Key keep="false">nicht</Key>
+						</KeySet>
+					</Keygroup>	
+				</Slot>
+				<Slot name="PLC_IN_NC">
+					<Keygroup type="required">
+						<KeySet name="">
+							<Key keep="false">nicht</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>
+		</Component>
+
+		<Component name="BeltControl" type="BeltControl">
+			<Keygroup type="required">
+				<KeySet name="">
+					<Key keep="true">Riemenbruchkontrolle</Key>
+					<Key keep="true">Bandrisskontrolle</Key>
+				</KeySet>						
+			</Keygroup>				
+			<Slots>
+				<Slot name="PLC_IN_BeltControlState" />
+			</Slots>
+		</Component>
+		<Component name="PartOrientation" type="SensorX">
+			<Slots>					
+				<Slot name="PLC_orientation_OK">
+					<Keygroup	 type="required">
+						<KeySet name="">
+							<Key keep="true">Werkstücklage i.O.</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+				<Slot name="PLC_orientation_nOK">
+					<Keygroup	 type="required" operator="AND">
+						<KeySet name="">
+							<Key keep="true">Werkstücklage n.i.O.</Key>
+						</KeySet>
+            			<KeySet name="">
+							<Key keep="false">n.</Key>
+						</KeySet>
+					</Keygroup>
+				</Slot>
+			</Slots>			
+		</Component>
+
+	</Components>
+
+<!-- Filter -->
+	<FilterList>
+		<Key>Messung Luftverbrauch</Key>
+		<Key>Sender</Key>
+		<Key>Laser-Spy-M</Key>
+		<Key>3-Wege Kugelhahn</Key>
+		<Key>Reserve</Key>
+		<Key>N.C.</Key>
+		<Key>Option</Key>
+		<Key>MSO</Key>
+		<Key>Digital I/O</Key>
+	  <Key>nicht belegt</Key>
+		<Key>Ventilinsel</Key>
+		<Key>Motorstarter zurücksetzen Ausgang</Key>
+	</FilterList>
+</AutoCreate>

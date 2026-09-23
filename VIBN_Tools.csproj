@@ -1,0 +1,214 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- The legacy VIBN application predates nullable flow analysis. Keep
+         annotations available without producing hundreds of false-positive
+         initialization warnings; new boundary projects remain nullable-strict. -->
+    <Nullable>annotations</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+	<Version>1.1.0</Version>
+	<!-- A machine with a serviced .NET 8 Desktop Runtime (for example 8.0.30)
+	     must run a build whose minimum framework version is 8.0.0. -->
+	<RollForward>LatestPatch</RollForward>
+	<BaseOutputPath>$(MSBuildProjectDirectory)\artifacts\build\</BaseOutputPath>
+	<DefaultItemExcludes>$(DefaultItemExcludes);Tests\**;ContainerGeneration\**;SharedWpf\**;VIBN_Tools.Core\**;VIBN_Tools.Infrastructure\**;VIBN_Tools.Tia.Client\**;VIBN_Tools.Tia.Contracts\**;VIBN_Tools.TiaBridge\**;VIBN_Tools.IbnRemote\**;VIBN_Tools.IbnRemote.Infrastructure\**;Grob Generation Interface\**;SDK\**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!-- F5 must work on a development PC without a separately matching global
+       .NET Desktop Runtime. NuGet restore supplies the x64 runtime pack and
+       Visual Studio starts this self-contained Debug apphost. Release publish
+       settings remain controlled by scripts/Publish-Portable.ps1. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <SelfContained>true</SelfContained>
+    <UseAppHost>true</UseAppHost>
+    <PublishSingleFile>false</PublishSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Content\LogicDefinitions\GrobStandard\Grob_AxisBeckhoff.xml" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <Content Include="NLog.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Content\LogicDefinitions\CustomerSpecific\BMW\" />
+    <Folder Include="Content\LogicDefinitions\CustomerSpecific\Ford\" />
+    <Folder Include="Content\LogicDefinitions\CustomerSpecific\Mercedes\" />
+  </ItemGroup>
+
+  <ItemGroup>
+	<!-- Keep the selected FEE SDK version visible at runtime. This is the same
+	     diagnostic metadata used by fdc85b1 and helps detect an accidental SDK
+	     switch without changing any vendor assembly. -->
+	<AssemblyMetadata Include="FeeSdkVersion" Value="$([System.IO.Path]::GetFileName('$(FeeScreenSimRoot)'))" />
+
+	<PackageReference Include="Grob.UX" Version="1.8.93" />
+	<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+	<PackageReference Include="NLog.Extensions.Logging" Version="6.1.0" />
+	<PackageReference Include="NPOI" Version="2.7.6" />
+	<!-- ClosedXML and NPOI must load the same binary-compatible Fonts build.
+	     Keep this direct pin so a vendor SDK cannot silently replace the
+	     transitive NuGet asset at runtime. -->
+	<PackageReference Include="SixLabors.Fonts" Version="1.0.1" />
+    <!-- Required at runtime by the FEE SDK; declare it explicitly so a
+         deployed desktop build does not depend on a machine-wide GAC entry. -->
+    <PackageReference Include="System.ComponentModel.Composition" Version="8.0.0" />
+    <PackageReference Include="System.Text.Json" Version="10.0.0" />
+	  <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="VIBN_Tools.Core\VIBN_Tools.Core.csproj" />
+    <ProjectReference Include="ContainerGeneration\VIBN_Tools.ContainerGeneration.csproj" />
+    <ProjectReference Include="SharedWpf\VIBN_Tools.SharedWpf.csproj" />
+    <ProjectReference Include="VIBN_Tools.Infrastructure\VIBN_Tools.Infrastructure.csproj" />
+    <ProjectReference Include="VIBN_Tools.Tia.Client\VIBN_Tools.Tia.Client.csproj" />
+  </ItemGroup>
+
+  <!-- The net48 TIA bridge is copied by a custom target instead of a normal
+       ProjectReference. Mark its sources as VS up-to-date inputs so F5 never
+       starts a stale bridge after an Openness change. -->
+  <ItemGroup>
+    <UpToDateCheckInput Include="VIBN_Tools.TiaBridge\**\*.cs"
+                        Exclude="VIBN_Tools.TiaBridge\bin\**\*;VIBN_Tools.TiaBridge\obj\**\*" />
+    <UpToDateCheckInput Include="VIBN_Tools.TiaBridge\VIBN_Tools.TiaBridge.csproj" />
+    <UpToDateCheckInput Include="VIBN_Tools.Tia.Contracts\**\*.cs"
+                        Exclude="VIBN_Tools.Tia.Contracts\bin\**\*;VIBN_Tools.Tia.Contracts\obj\**\*" />
+    <UpToDateCheckInput Include="VIBN_Tools.Tia.Contracts\VIBN_Tools.Tia.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+	  <Reference Include="DevExpress.Data.v26.1">
+		  <HintPath>$(FeeScreenSimBinPath)\DevExpress.Data.v26.1.dll</HintPath>
+		  <Private>true</Private>
+	  </Reference>
+    <Reference Include="FS.API">
+      <HintPath>$(FeeScreenSimBinPath)\FS.API.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.Components">
+      <HintPath>$(FeeScreenSimBinPath)\FS.Components.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.Content">
+      <HintPath>$(FeeScreenSimBinPath)\FS.Content.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.Input">
+      <HintPath>$(FeeScreenSimBinPath)\FS.Input.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.SDK">
+      <HintPath>$(FeeScreenSimBinPath)\FS.SDK.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.SDK.Mathematics">
+      <HintPath>$(FeeScreenSimBinPath)\FS.SDK.Mathematics.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.SDK.Network">
+      <HintPath>$(FeeScreenSimBinPath)\FS.SDK.Network.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.SDK.Packets">
+      <HintPath>$(FeeScreenSimBinPath)\FS.SDK.Packets.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.SDK.Util">
+      <HintPath>$(FeeScreenSimBinPath)\FS.SDK.Util.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.SDK.Wpf">
+      <HintPath>$(FeeScreenSimBinPath)\FS.SDK.Wpf.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="FS.Util">
+      <HintPath>$(FeeScreenSimBinPath)\FS.Util.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="ReadingUnitPlugin">
+      <HintPath>$(FeeReadingUnitPluginPath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- All shipped definitions are runtime data. The wildcard also picks
+         up newly added definitions without another project-file edit. -->
+    <None Update="Content\**\*.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="BuildAndCopyTiaBridge" AfterTargets="Build">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\VIBN_Tools.TiaBridge\VIBN_Tools.TiaBridge.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile" />
+    <ItemGroup>
+      <TiaBridgeOutput Include="$(MSBuildProjectDirectory)\VIBN_Tools.TiaBridge\bin\$(Configuration)\net48\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TiaBridgeOutput)" DestinationFiles="@(TiaBridgeOutput->'$(TargetDir)TiaBridge\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- Only the FEE assembly family is added to the runtime closure. Copying
+       every vendor DLL used to overwrite NuGet assets such as
+       SixLabors.Fonts and also shipped unrelated plugins. ReadingUnitPlugin
+       itself is already copied by its explicit Private reference above. -->
+  <Target Name="CopyFeeDependenciesToOutput" AfterTargets="Build">
+    <!-- Remove the directory created by older builds which copied the whole
+         vendor plugin tree. Incremental Visual Studio builds do not otherwise
+         delete files produced by a removed custom Copy target. -->
+    <RemoveDir Directories="$(TargetDir)Plugins"
+               Condition="Exists('$(TargetDir)Plugins')" />
+    <ItemGroup>
+      <FeeRuntimeAssembly Include="$(FeeScreenSimBinPath)\FS.*.dll" />
+		<FeeRuntimeAssembly Include="$(FeeScreenSimBinPath)\DevExpress.*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FeeRuntimeAssembly)"
+          DestinationFolder="$(TargetDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyTiaBridgeToPublish" AfterTargets="Publish">
+    <MSBuild Projects="$(MSBuildProjectDirectory)\VIBN_Tools.TiaBridge\VIBN_Tools.TiaBridge.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile" />
+    <ItemGroup>
+      <TiaBridgePublishOutput Include="$(MSBuildProjectDirectory)\VIBN_Tools.TiaBridge\bin\$(Configuration)\net48\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(TiaBridgePublishOutput)"
+          DestinationFiles="@(TiaBridgePublishOutput->'$(PublishDir)TiaBridge\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyFeeDependenciesToPublish" AfterTargets="Publish">
+    <ReadLinesFromFile File="$(FeeRuntimeAssemblyManifest)"
+                       Condition="'$(FeeRuntimeAssemblyManifest)' != '' and Exists('$(FeeRuntimeAssemblyManifest)')">
+      <Output TaskParameter="Lines" ItemName="FeePublishAssembly" />
+    </ReadLinesFromFile>
+    <ItemGroup Condition="'@(FeePublishAssembly)' == ''">
+      <!-- Release scripts provide the dependency closure calculated from the
+           project's direct references. The fallback keeps direct IDE publish
+           functional, but the supported installer path always uses the lean
+           closure. -->
+      <FeePublishAssembly Include="$(FeeScreenSimBinPath)\FS.*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FeePublishAssembly)"
+          DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

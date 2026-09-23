@@ -1,0 +1,279 @@
+﻿using System.Collections.ObjectModel;
+using System.Xml.Linq;
+using FS.SDK;
+using FS.SDK.Scene.Objects;
+using VIBN_Tools.ContainerToFee.General;
+using VIBN_Tools.ContainerToFee.GrobStandard;
+using VIBN_Tools.GlobalClasses;
+using VIBN_Tools.GlobalClasses.FeeObjects;
+using static VIBN_Tools.GlobalClasses.Interfaces;
+
+
+
+namespace VIBN_Tools.ContainerToFee
+{
+    public class ContainerToFeeService
+    {
+
+        private static readonly Dictionary<Type, IContainerFactory> _factories;
+        private static readonly CabinetContainerManager _cabinetContainerManager;
+
+        static ContainerToFeeService()
+        {
+            _cabinetContainerManager = new CabinetContainerManager();
+
+            _factories = new Dictionary<Type, IContainerFactory>
+            {
+                {typeof(GrobBeltControl_Container), new LogicContainerFactory() },
+                {typeof(GrobClamping_Container), new LogicContainerFactory() },
+                {typeof(GrobConveyor_Container), new LogicSimObjectContainerFactory() },
+                {typeof(GrobCylinder_Container), new LogicSimObjectContainerFactory() },
+                {typeof(GrobGripperBasic_Container), new LogicSimObjectContainerFactory() },
+                {typeof(GrobGripperVacuum_Container), new LogicSimObjectContainerFactory() },
+                {typeof(GrobLiftUnit_Container), new LogicSimObjectContainerFactory() },
+                {typeof(GrobPneumaticSupply_Container), new LogicContainerFactory() },
+                {typeof(GrobSafetyDoor_Container), new LogicContainerFactory() },
+                {typeof(GrobSensor_Container), new LogicSimObjectContainerFactory() },
+                {typeof(GrobStop_Container), new LogicSimObjectContainerFactory() },
+
+                {typeof(Button_Container), new SimObjectContainerFactory() },
+                {typeof(Stacklight_Container), new SimObjectContainerFactory() },
+                {typeof(SimpleMove_Container), new SimObjectContainerFactory() },
+                {typeof(SimpleNot_Container), new SimObjectContainerFactory() },
+
+                {typeof(CabinetSwitch_Container), new CabinetElementContainerFactory(_cabinetContainerManager) },
+                {typeof(CabinetFuse_Container), new CabinetElementContainerFactory(_cabinetContainerManager) },
+                {typeof(CabinetEStop_Container), new CabinetElementContainerFactory(_cabinetContainerManager) },
+                {typeof(CabinetLamp_Container), new CabinetElementContainerFactory(_cabinetContainerManager) },
+            };
+        }
+
+
+
+
+        public static async Task CreateAllContainersAsync(
+            IEnumerable<ContainerBaseClass> containers,
+            FeeInterface targetInterface,
+            FeeAbstractObject parentObject,
+            Action<int, int, string>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            var allContainers = containers.ToList();
+            var completed = 0;
+            // Split all containers into cabinet containers (no parallel generation) and other containers (parallel generation)
+            var cabinetContainers = allContainers
+                .OfType<ICabinetElementOwner>()
+                .Cast<ContainerBaseClass>()
+                .ToList();
+
+            var otherContainers = allContainers
+                .Except(cabinetContainers)
+                .ToList();
+
+            await Parallel.ForEachAsync(
+                otherContainers,
+                new ParallelOptions { CancellationToken = cancellationToken },
+                async (container, ct) =>
+            {
+                ct.ThrowIfCancellationRequested();
+                if (_factories.TryGetValue(container.GetType(), out var factory))
+                {
+                    await factory.CreateContainerAsync(container, targetInterface, parentObject);
+                    ct.ThrowIfCancellationRequested();
+                    var current = Interlocked.Increment(ref completed);
+                    progress?.Invoke(current, allContainers.Count, container.ComponentName ?? container.GetType().Name);
+                }
+            });
+
+
+            foreach (var container in cabinetContainers)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_factories.TryGetValue(container.GetType(), out var factory))
+                {
+                    await factory.CreateContainerAsync(container, targetInterface, parentObject);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var current = Interlocked.Increment(ref completed);
+                    progress?.Invoke(current, allContainers.Count, container.ComponentName ?? container.GetType().Name);
+                }
+            }
+
+            // non parallel stable version
+            //foreach (var container in containers)
+            //{
+            //    if (_factories.TryGetValue(container.GetType(), out var factory))
+            //    {
+            //        await factory.CreateContainerAsync(container, targetInterface, parentObject);
+            //    }
+            //}
+        }
+
+
+
+
+
+        public static (List<ContainerBaseClass>, List<FeeInterfaceSignal>) ReadInContainerXmlData(string fileName)
+            => ReadInContainerXmlData(XDocument.Load(fileName));
+
+        public static (List<ContainerBaseClass>, List<FeeInterfaceSignal>) ReadInContainerXmlData(XDocument containerXml)
+        {
+            ArgumentNullException.ThrowIfNull(containerXml);
+            var listContainerData = new List<ContainerBaseClass>();
+            var listUnknownSignals = new List<FeeInterfaceSignal>();
+            var containers = containerXml.Descendants("Container").ToList();
+
+            foreach (var el in containers)
+            {
+                string componentName = el.Element("Component")?.Value;
+                string type = el.Element("Type")?.Value;
+
+                if (TryCreateContainer(el, type, componentName, out var container))
+                {
+                    listContainerData.Add(container);
+                }
+                else
+                {
+                    // Unknown types -> Convert Entries to FeeInterfaceSignals
+                    foreach (var entry in el.Descendants("Entry"))
+                    {
+                        var signal = new FeeInterfaceSignal
+                        {
+                            Tag = entry.Element("Signal")?.Value,
+                            Path = entry.Element("Address")?.Value?.Contains("GVL_IO") == true
+                                ? entry.Element("Address")?.Value
+                                : string.Empty,
+                            Address = entry.Element("Address")?.Value?.Contains("GVL_IO") == false
+                                ? entry.Element("Address")?.Value
+                                : string.Empty,
+                            Comment = entry.Element("ID")?.Value,
+                            IOTypeString = entry.Element("DataType")?.Value
+                        };
+                        signal.SetIoMode();
+                        listUnknownSignals.Add(signal);
+                    }
+                }
+            }
+
+            return (listContainerData, listUnknownSignals);
+
+        }
+
+
+
+        private static bool TryCreateContainer(XElement xmlData, string type, string componentName, out ContainerBaseClass container)
+        {
+            container = type switch
+            {
+                "BeltControl" => new GrobBeltControl_Container(),
+                "Button" => new Button_Container(),
+                "Clamping" => new GrobClamping_Container(),
+                "Conveyor" => new GrobConveyor_Container(),
+                "Cylinder" or "FeedSafetyDoor" => new GrobCylinder_Container(),
+                "GripperBasic" => new GrobGripperBasic_Container(),
+                "GripperVacuum" => new GrobGripperVacuum_Container(),
+                "LiftUnit" => new GrobLiftUnit_Container(),
+                "PneumaticSupply" => new GrobPneumaticSupply_Container()  ,
+                "ReturnCircuit" or "SafeArea" => new SimpleNot_Container(),
+                "SafetyDoor" => new GrobSafetyDoor_Container(),
+                "Sensor" => new GrobSensor_Container(),
+                "SensorX" => new PartOrientation_Container(),
+                "Stacklight" => new Stacklight_Container(),
+                "Stop" => new GrobStop_Container(),
+
+                "CabinetLamp" => new CabinetLamp_Container(),
+                "EStop" => new CabinetEStop_Container(),
+                "Fuse" => new CabinetFuse_Container(),
+                "Switch" => new CabinetSwitch_Container(),
+                _ => null
+            };
+
+            if (container != null)
+            {
+                container.StoreContainerInformation(xmlData, componentName);
+                return true;
+            }
+
+            return false;
+        }
+
+
+        public static void LinkAddonContainers(IEnumerable<ContainerBaseClass> containers)
+        {
+            var grippers = containers.OfType<GrobGripperBasic_Container>().ToDictionary(x => x.ComponentName);
+
+            foreach (var container in containers)
+            {
+                if (container is not IAddonContainer addon)
+                    continue;
+
+                if (!grippers.TryGetValue(container.ComponentName, out var parent))
+                {
+                    throw new InvalidOperationException(
+                        $"Für Addon '{container.ComponentName}' wurde kein GripperBasic-Container gefunden.");
+                }
+
+                addon.ParentContainer = parent;
+                parent.Addons.Add(addon);
+            }
+
+        }
+
+
+        public async static Task<ObservableCollection<FeeAbstractObject>> GetSimObjectsFromSimultionAsync()
+        {
+            var objectTypes = new[] { nameof(MotionJoint), nameof(Surface), nameof(SafetySensor), nameof(Sensor), nameof(Floor), nameof(PickAndPlace), nameof(SegmentedLamp) };
+            var batches = await Task.WhenAll(objectTypes.Select(async type =>
+            {
+                var guids = await Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(type);
+                var guidArray = guids.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                if (guidArray.Length == 0)
+                    return Array.Empty<FeeAbstractObject>();
+                var namesTask = Services.ApiInstance.Object.GetPropertiesAsync(
+                    guidArray,
+                    nameof(SceneObject.Name));
+                var typesTask = Services.ApiInstance.Object.GetPropertiesAsync(
+                    guidArray,
+                    nameof(SceneObject.Type));
+                await Task.WhenAll(namesTask, typesTask);
+                var names = (await namesTask).Select(Services.ApiInstance.XmlHelper.ConvertToString);
+                var runtimeTypes = await typesTask;
+                return guidArray
+                    .Zip(names, (guid, name) => new { guid, name })
+                    .Zip(runtimeTypes, (item, runtimeType) =>
+                        FeeObjectFactory.Create(runtimeType, item.name, item.guid))
+                    .Where(item => item is not null)
+                    .ToArray()!;
+            }));
+
+            return new ObservableCollection<FeeAbstractObject>(batches.SelectMany(batch => batch));
+        }
+
+
+
+    }
+
+
+
+
+
+    public class ContainerSnapshot
+    {
+        public int SelectionStepIndex { get; set; }
+        public ISimObjectFindOrSelect Container { get; set; }
+        public SimObjectTarget Target { get; set; }
+        public List<FeeAbstractObject> AssignedSimObjects { get; set; }
+        public bool IsCreationRequested { get; set; }
+
+    }
+
+    public class SimObjectSelectionStep
+    {
+        public ISimObjectFindOrSelect Container { get; set; }
+
+        public SimObjectTarget Target { get; set; }
+    }
+
+
+
+
+}

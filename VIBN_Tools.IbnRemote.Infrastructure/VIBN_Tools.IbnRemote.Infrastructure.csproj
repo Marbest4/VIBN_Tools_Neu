@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);IBN_REMOTE_MINIMAL</DefineConstants>
+    <AssemblyName>VIBN_Tools.IbnRemote.Infrastructure</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VIBN_Tools.Core\VIBN_Tools.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Compile the proven read/RDP adapters from their single source of truth.
+       No board-write, FEE, TIA, copy or administration source is included. -->
+  <ItemGroup>
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\BusinessmapSubtaskJsonParser.cs" Link="ViCo\BusinessmapSubtaskJsonParser.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\DesktopWorkstationServices.cs" Link="ViCo\DesktopWorkstationServices.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\KanbanizeRefreshService.cs" Link="ViCo\KanbanizeRefreshService.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\LegacyWorkstationCatalog.cs" Link="ViCo\LegacyWorkstationCatalog.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\RemoteDesktopProfileBuilder.cs" Link="ViCo\RemoteDesktopProfileBuilder.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\SecureUserCredentialConfigurationService.cs" Link="ViCo\SecureUserCredentialConfigurationService.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\UserEnvironmentCredentialConfigurationService.cs" Link="ViCo\UserEnvironmentCredentialConfigurationService.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\ViCoPathsOptions.cs" Link="ViCo\ViCoPathsOptions.cs" />
+    <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\WorkstationBoardCache.cs" Link="ViCo\WorkstationBoardCache.cs" />
+  </ItemGroup>
+</Project>
