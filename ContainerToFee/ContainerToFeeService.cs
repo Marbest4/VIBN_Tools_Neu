@@ -17,6 +17,7 @@ namespace VIBN_Tools.ContainerToFee
 
         private static readonly Dictionary<Type, IContainerFactory> _factories;
         private static readonly CabinetContainerManager _cabinetContainerManager;
+        private static readonly SemaphoreSlim GenerationGate = new(1, 1);
 
         static ContainerToFeeService()
         {
@@ -59,53 +60,31 @@ namespace VIBN_Tools.ContainerToFee
             CancellationToken cancellationToken = default)
         {
             var allContainers = containers.ToList();
-            var completed = 0;
-            // Split all containers into cabinet containers (no parallel generation) and other containers (parallel generation)
-            var cabinetContainers = allContainers
-                .OfType<ICabinetElementOwner>()
-                .Cast<ContainerBaseClass>()
-                .ToList();
-
-            var otherContainers = allContainers
-                .Except(cabinetContainers)
-                .ToList();
-
-            await Parallel.ForEachAsync(
-                otherContainers,
-                new ParallelOptions { CancellationToken = cancellationToken },
-                async (container, ct) =>
+            await GenerationGate.WaitAsync(cancellationToken);
+            try
             {
-                ct.ThrowIfCancellationRequested();
-                if (_factories.TryGetValue(container.GetType(), out var factory))
+                var completed = 0;
+                // FEE scene mutations share one SDK connection and are not
+                // thread-safe. Parallel writes could deadlock indefinitely,
+                // especially on a second generation run. Keep the established
+                // factories, but execute them deterministically one by one.
+                foreach (var container in allContainers)
                 {
-                    await factory.CreateContainerAsync(container, targetInterface, parentObject);
-                    ct.ThrowIfCancellationRequested();
-                    var current = Interlocked.Increment(ref completed);
-                    progress?.Invoke(current, allContainers.Count, container.ComponentName ?? container.GetType().Name);
-                }
-            });
-
-
-            foreach (var container in cabinetContainers)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (_factories.TryGetValue(container.GetType(), out var factory))
-                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!_factories.TryGetValue(container.GetType(), out var factory))
+                        continue;
+                    var name = container.ComponentName ?? container.GetType().Name;
+                    progress?.Invoke(completed + 1, allContainers.Count, $"Wird erstellt: {name}");
                     await factory.CreateContainerAsync(container, targetInterface, parentObject);
                     cancellationToken.ThrowIfCancellationRequested();
-                    var current = Interlocked.Increment(ref completed);
-                    progress?.Invoke(current, allContainers.Count, container.ComponentName ?? container.GetType().Name);
+                    completed++;
+                    progress?.Invoke(completed, allContainers.Count, name);
                 }
             }
-
-            // non parallel stable version
-            //foreach (var container in containers)
-            //{
-            //    if (_factories.TryGetValue(container.GetType(), out var factory))
-            //    {
-            //        await factory.CreateContainerAsync(container, targetInterface, parentObject);
-            //    }
-            //}
+            finally
+            {
+                GenerationGate.Release();
+            }
         }
 
 

@@ -541,6 +541,10 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             { nameof(Surface), (name,guid) => new FeeSurface { Name = name, GuidString = guid } },
             { nameof(WritingUnitUdt), (name,guid) => new FeeWritingUnit { Name = name, GuidString = guid } },
             { nameof(KinematicFrame), (name,guid) => new FeeKinematicFrame { Name = name, GuidString = guid } },
+            { "BoolNot", (name,guid) => new FeeSimpleNot { Name = name, GuidString = guid } },
+            { "MoveBit", (name,guid) => new FeeSimpleMove { Name = name, GuidString = guid } },
+            { "Cabinet", (name,guid) => new FeeCabinet { Name = name, GuidString = guid } },
+            { "CabinetElement", (name,guid) => new FeeCabinetElement { Name = name, GuidString = guid } },
         };
 
         public static FeeAbstractObject Create(string type, string name, string guid)

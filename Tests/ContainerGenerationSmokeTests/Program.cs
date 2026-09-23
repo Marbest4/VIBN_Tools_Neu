@@ -57,6 +57,7 @@ internal static class Program
         ValidatePlcInputFanInParsing();
         ValidateContainerFileComparison();
         await ValidateFee2ContainerProvenanceRoundTripAsync();
+        await ValidateFee2ContainerVisualTypeCoverageAsync();
         ValidateFee2ContainerLiveReconstruction();
         ValidateTopLevelBasicFrameSelection();
         ValidateFee2SpecialDevicesProvenanceRoundTrip();
@@ -613,14 +614,18 @@ internal static class Program
 
             var sharedGuid = Guid.NewGuid().ToString("D");
             var duplicateGuid = Guid.NewGuid().ToString("D");
+            var addedGuid = Guid.NewGuid().ToString("D");
+            var interfaceGuid = Guid.NewGuid().ToString("D");
             var signals = new[]
             {
-                new VisualFeeSignal(sharedGuid, Guid.NewGuid().ToString("D"), "PLC", "Shared", "%I0.0", "", "Bool", "Input"),
-                new VisualFeeSignal(duplicateGuid, Guid.NewGuid().ToString("D"), "PLC 2", "Shared", "%I0.1", "", "Bool", "Input"),
+                new VisualFeeSignal(sharedGuid, interfaceGuid, "PLC", "Shared", "%I0.0", "", "Bool", "Input"),
+                new VisualFeeSignal(duplicateGuid, interfaceGuid, "PLC", "Shared", "%I0.1", "", "Bool", "Input"),
+                new VisualFeeSignal(addedGuid, interfaceGuid, "PLC", "Added", "%I0.2", "", "Bool", "Input"),
             };
             typeof(ContainerToFeeVisualPlanService)
                 .GetField("_feeSignals", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(service, signals);
+            service.SetExistingInterface(new VisualFeeInterface(interfaceGuid, "PLC", "Test", signals.Length));
             var signalNodes = loaded.Plan.Nodes
                 .Where(item => item.Kind == VisualNodeKind.Signal)
                 .ToArray();
@@ -642,6 +647,23 @@ internal static class Program
                     $"SecondDuplicateName={duplicate.HasDuplicateName}, Nodes={signalNodes.Length}, " +
                     $"NodeIds={string.Join(",", signalNodes.Select(item => item.Id))}, " +
                     $"Assignments={loaded.Plan.SignalAssignments.Count}.");
+            }
+
+            var container = loaded.Plan.Nodes.Single(item => item.Kind == VisualNodeKind.Container);
+            var addedResult = service.AddSignals(container.Id, [addedGuid]);
+            if (!addedResult.Success || loaded.Plan.AddedSignals.Count != 1 ||
+                !service.Validate().Issues.Any(issue => issue.Code == "ADDED_SIGNAL_SLOT_REQUIRED"))
+            {
+                throw new InvalidOperationException(
+                    "A drag/drop signal was not added as a visible, slot-required plan entry.");
+            }
+            var addedNode = loaded.Plan.FindNode(loaded.Plan.AddedSignals.Single().NodeId)!;
+            if (!service.SetSlotOverride(addedNode.Id, "PLC_IN_PartPresent") ||
+                service.Validate().Issues.Any(issue =>
+                    issue.Code == "ADDED_SIGNAL_SLOT_REQUIRED" && issue.NodeId == addedNode.Id))
+            {
+                throw new InvalidOperationException(
+                    "The added signal did not become valid after selecting an allowed PLC_IN slot.");
             }
 
             var warning = FeeTagPropertyWriteResult.Unconfirmed(new InvalidOperationException("test"));
@@ -1002,10 +1024,92 @@ internal static class Program
                     "Container → provenance → Container lost the selected container or PLC_IN fan-in.");
             }
 
+            var combined = await new Fee2ContainerService().CreateCombinedExportAsync([
+                new Fee2ContainerRoot(Guid.NewGuid(), "Root A", projection.Snapshot, 2, 0, 2, 0),
+                new Fee2ContainerRoot(Guid.NewGuid(), "Root B", projection.Snapshot, 2, 0, 2, 0),
+            ]);
+            if (combined.Snapshot.ContainerCount != 2 ||
+                combined.Snapshot.SignalBindings.Count != 4 ||
+                combined.Snapshot.SignalBindings.Max(binding => binding.ContainerIndex) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Multi-root FEE2Container export did not merge only the selected root snapshots correctly.");
+            }
+
             var damagedTags = encoded.Tags.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
             damagedTags[FeeContainerProvenanceCodec.HashKey] = new string('0', 64);
             if (FeeContainerProvenanceCodec.TryRead(damagedTags, out _, out _))
                 throw new InvalidOperationException("Damaged provenance checksum was accepted.");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task ValidateFee2ContainerVisualTypeCoverageAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-fee-types-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var sourcePath = Path.Combine(directory, "all-visual-types.xml");
+        try
+        {
+            var supportedTypes = FeeContainerLiveReconstructor.SupportedContainerTypes;
+            var source = new XDocument(
+                new XElement("ContainerFile",
+                    supportedTypes.Select((type, index) =>
+                        new XElement("Container",
+                            new XAttribute("id", $"type-{index}"),
+                            new XElement("Component", $"Component_{type}"),
+                            new XElement("Type", type),
+                            new XElement("DataList")))));
+            source.Save(sourcePath);
+
+            var planService = new ContainerToFeeVisualPlanService();
+            var loaded = await planService.LoadXmlAsync(sourcePath);
+            if (!loaded.Success || loaded.Plan is null)
+                throw new InvalidOperationException(
+                    $"The complete Container2FEE Visual type catalog could not be parsed: {loaded.Message}");
+            var selectedIds = loaded.Plan.Nodes
+                .Where(node => node.Kind == VisualNodeKind.Container)
+                .Select(node => node.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            if (selectedIds.Count != supportedTypes.Count ||
+                loaded.Issues.Any(issue => issue.Code == "CONTAINER_TYPE_UNKNOWN"))
+            {
+                throw new InvalidOperationException(
+                    "Container2FEE Visual and FEE2Container expose different supported type sets.");
+            }
+
+            var encoded = FeeContainerProvenanceCodec.Create(
+                source,
+                selectedIds,
+                sourceFingerprint: "all-visual-types");
+            if (!FeeContainerProvenanceCodec.TryRead(encoded.Tags, out var decoded, out var error) ||
+                decoded is null)
+            {
+                throw new InvalidOperationException(
+                    $"The all-type FEE2Container provenance could not be decoded: {error}");
+            }
+
+            var roundTrippedTypes = decoded.ContainerDocument.Descendants("Container")
+                .Select(container => container.Element("Type")?.Value ?? string.Empty)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (decoded.ContainerCount != supportedTypes.Count ||
+                !roundTrippedTypes.SetEquals(supportedTypes))
+            {
+                throw new InvalidOperationException(
+                    "FEE2Container did not retain every type generated by Container2FEE Visual.");
+            }
+
+            var (runtimeContainers, unknownSignals) =
+                ContainerToFeeService.ReadInContainerXmlData(decoded.ContainerDocument);
+            if (runtimeContainers.Count != supportedTypes.Count || unknownSignals.Count != 0)
+            {
+                throw new InvalidOperationException(
+                    "The shared Container2FEE runtime parser does not cover the complete visual type catalog.");
+            }
         }
         finally
         {

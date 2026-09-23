@@ -374,6 +374,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
             generationSelections: null,
             signalCreationSelections: null,
             signalAssignments: null,
+            addedSignals: null,
             slotOverrides: null,
             existingInterfaceSelection: null,
             new ReadOnlyCollection<VisualIssue>(issues));

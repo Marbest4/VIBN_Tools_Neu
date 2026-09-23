@@ -373,6 +373,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged();
             if (!_isApplyingPlan)
                 _planService.SetExistingInterface(value?.Model);
+            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             OnPropertyChanged(nameof(CanLinkSignalsOnly));
             OnPropertyChanged(nameof(LinkSignalsOnlyUnavailableReason));
             InvalidateCommands();
@@ -759,6 +760,25 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             ? selectedItems
             : request?.Source is null ? [] : [request.Source];
 
+        if (request?.Target is ContainerToFeeVisualTreeNodeVM signalGroup &&
+            signalGroup.Kind == VisualNodeKind.Group &&
+            signalGroup.Id.EndsWith(":signals", StringComparison.Ordinal) &&
+            sources.All(item => item is ContainerToFeeVisualFeeSignalVM))
+        {
+            var result = _planService.AddSignals(
+                signalGroup.ContainerId ?? string.Empty,
+                sources.Cast<ContainerToFeeVisualFeeSignalVM>().Select(item => item.GuidString));
+            PublishIssues(result.Issues);
+            if (!result.Success)
+            {
+                Reject(result.Message);
+                return;
+            }
+            StatusText = result.Message;
+            _log.Information(LogArea, result.Message);
+            return;
+        }
+
         if (request?.Target is ContainerToFeeVisualTreeNodeVM signalTarget &&
             signalTarget.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
             sources.All(item => item is ContainerToFeeVisualFeeSignalVM))
@@ -850,7 +870,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         if (sources.All(item => item is ContainerToFeeVisualFeeSignalVM) &&
             request.Target is ContainerToFeeVisualTreeNodeVM signalTarget)
         {
-            return signalTarget.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal;
+            return signalTarget.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal ||
+                   signalTarget.Kind == VisualNodeKind.Group &&
+                   signalTarget.Id.EndsWith(":signals", StringComparison.Ordinal);
         }
 
         var target = request.Target switch
@@ -1070,9 +1092,31 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 .ToArray();
         }
 
+        var childModels = node.Children
+            .Concat(plan.AddedSignals
+                .Where(added => string.Equals(added.SignalGroupId, node.Id, StringComparison.Ordinal))
+                .Select(added => plan.FindNode(added.NodeId))
+                .Where(child => child is not null)
+                .Cast<VisualNode>())
+            .ToList();
+        if (node.Kind == VisualNodeKind.SimObjectTarget)
+        {
+            childModels.AddRange(plan.Assignments
+                .Where(assignment => string.Equals(assignment.TargetId, node.Id, StringComparison.Ordinal))
+                .Select(assignment => new VisualNode(
+                    $"{node.Id}:assigned:{StableId.Encode(assignment.FeeObjectId)}",
+                    node.Id,
+                    node.ContainerId,
+                    VisualNodeKind.SimObject,
+                    assignment.FeeObjectName,
+                    assignment.FeeObjectTypeName,
+                    null,
+                    isTechnical: false)));
+        }
+
         return new(
             node,
-            node.Children.Select(child => BuildTree(child, plan, issues)),
+            childModels.Select(child => BuildTree(child, plan, issues)),
             plan.IsGenerationSelected(node.Id),
             node.Kind == VisualNodeKind.Container && ContainerMetadataCatalog.TryGet(node.TypeName, out _),
             plan.GetEffectiveSlot(node),
@@ -1126,6 +1170,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                     ? ContainerToFeeVisualNodeState.Planned
                     : ContainerToFeeVisualNodeState.Missing;
         }
+
+        if (node.Kind == VisualNodeKind.SimObject)
+            return ContainerToFeeVisualNodeState.Verified;
 
         if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
             plan.SignalAssignments.Any(assignment => assignment.SignalNodeId == node.Id))
@@ -1182,16 +1229,30 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 : $"Verbundenes FEE-Signal: {assignment.FeeSignalTag} · {assignment.FeeInterfaceName}";
         }
 
+        if (node.Kind == VisualNodeKind.SimObject)
+            return $"Vorhandenes FEE-SimObject: {node.Name}";
+
         return string.Empty;
     }
 
     private void ApplyDiscoveredSignalStates(IReadOnlyList<VisualFeeSignal> signals)
     {
+        var selectedGuid = SelectedExistingInterface?.GuidString;
+        signals = string.IsNullOrWhiteSpace(selectedGuid)
+            ? []
+            : signals.Where(signal => string.Equals(
+                signal.InterfaceGuidString,
+                selectedGuid,
+                StringComparison.OrdinalIgnoreCase)).ToArray();
+        var selectedSignalGuids = signals
+            .Select(signal => signal.GuidString)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants())
                      .Where(node => node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
         {
             if (_planService.CurrentPlan?.SignalAssignments.Any(assignment =>
-                    assignment.SignalNodeId == node.Id) == true)
+                    assignment.SignalNodeId == node.Id &&
+                    selectedSignalGuids.Contains(assignment.FeeSignalGuid)) == true)
             {
                 node.ApplyExecutionState(
                     node.Kind == VisualNodeKind.UnknownSignal
@@ -1355,6 +1416,12 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         if (item is not ContainerToFeeVisualFeeSignalVM signal)
             return false;
+        if (SelectedExistingInterface?.Model is not { } selectedInterface ||
+            !string.Equals(
+                signal.Model.InterfaceGuidString,
+                selectedInterface.GuidString,
+                StringComparison.OrdinalIgnoreCase))
+            return false;
         if (string.IsNullOrWhiteSpace(FeeSignalFilter))
             return true;
         return signal.Tag.Contains(FeeSignalFilter, StringComparison.OrdinalIgnoreCase) ||
@@ -1367,8 +1434,15 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         var source = signals ?? AvailableFeeSignals.Select(item => item.Model).ToArray();
         var plan = _planService.CurrentPlan;
+        var selectedGuid = SelectedExistingInterface?.GuidString;
+        var scopedSignals = string.IsNullOrWhiteSpace(selectedGuid)
+            ? Array.Empty<VisualFeeSignal>()
+            : source.Where(signal => string.Equals(
+                signal.InterfaceGuidString,
+                selectedGuid,
+                StringComparison.OrdinalIgnoreCase)).ToArray();
         AvailableFeeSignals.ReplaceWith(source.Select(signal =>
-            new ContainerToFeeVisualFeeSignalVM(signal, source, plan)));
+            new ContainerToFeeVisualFeeSignalVM(signal, scopedSignals, plan)));
         FeeSignalsView.Refresh();
     }
 

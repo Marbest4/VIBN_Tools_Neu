@@ -379,8 +379,6 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Verfügbare FEE-SimObjects" />
@@ -389,14 +387,7 @@
                                  ToolTip="Nach Name oder Typ filtern" />
                         <CheckBox Grid.Row="2" Margin="0,0,0,6" Content="Nur kompatible Objekte"
                                   IsChecked="{Binding ShowOnlyCompatibleFeeObjects}" />
-                        <TextBlock Grid.Row="3" Margin="0,2,0,3" FontSize="11" FontWeight="SemiBold"
-                                   Text="Bevorzugtes Interface (optional)" />
-                        <ComboBox Grid.Row="4" MinHeight="28" Margin="0,0,0,7"
-                                  ItemsSource="{Binding AvailableFeeInterfaces}"
-                                  SelectedItem="{Binding SelectedExistingInterface, Mode=TwoWay}"
-                                  DisplayMemberPath="DisplayName"
-                                  ToolTip="Keins ist zulässig. Fehlende Signale werden im Grob Generation Interface erzeugt." />
-                        <ListBox Grid.Row="5" ItemsSource="{Binding FeeObjectsView}"
+                        <ListBox Grid.Row="3" ItemsSource="{Binding FeeObjectsView}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -433,15 +424,21 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="2*" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Gefundene FEE-Signale" />
-                        <TextBox Grid.Row="1" MinHeight="29" Margin="0,0,0,6"
-                                 Text="{Binding FeeSignalFilter, UpdateSourceTrigger=PropertyChanged}"
-                                 ToolTip="Nach Tag, Adresse/Pfad, Interface oder Datentyp filtern" />
-                        <ListBox Grid.Row="2" ItemsSource="{Binding FeeSignalsView}"
+                        <ComboBox Grid.Row="1" MinHeight="28" Margin="0,0,0,6"
+                                  ItemsSource="{Binding AvailableFeeInterfaces}"
+                                  SelectedItem="{Binding SelectedExistingInterface, Mode=TwoWay}"
+                                  DisplayMemberPath="DisplayName"
+                                  ToolTip="Nur Signale dieses Interfaces werden angezeigt und für bestehende Verknüpfungen verwendet." />
+                        <TextBox Grid.Row="2" MinHeight="29" Margin="0,0,0,6"
+                                  Text="{Binding FeeSignalFilter, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="Nach Tag, Adresse/Pfad, Interface oder Datentyp filtern" />
+                        <ListBox Grid.Row="3" ItemsSource="{Binding FeeSignalsView}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -463,9 +460,9 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
+                        <TextBlock Grid.Row="4" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
                                    Text="Validierung" />
-                        <ListBox Grid.Row="4" ItemsSource="{Binding Issues}"
+                        <ListBox Grid.Row="5" ItemsSource="{Binding Issues}"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">
                             <ListBox.ItemTemplate>

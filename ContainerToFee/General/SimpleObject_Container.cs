@@ -35,6 +35,7 @@ namespace VIBN_Tools.ContainerToFee.General
                 SimpleLogic_MoveBit = new FeeSimpleMove();
                 await SimpleLogic_MoveBit.CreateAsync();
                 await SimpleLogic_MoveBit.SendAndWaitAsync();
+                await ContainerObjectProvenance.WriteNewObjectAsync(SimpleLogic_MoveBit, this);
             }
         }
 
@@ -93,6 +94,7 @@ namespace VIBN_Tools.ContainerToFee.General
                 SimpleLogic_BoolNot = new FeeSimpleNot();
                 await SimpleLogic_BoolNot.CreateAsync();
                 await SimpleLogic_BoolNot.SendAndWaitAsync();
+                await ContainerObjectProvenance.WriteNewObjectAsync(SimpleLogic_BoolNot, this);
             }
         }
 

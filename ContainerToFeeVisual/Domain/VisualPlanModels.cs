@@ -264,6 +264,24 @@ public sealed record VisualSignalAssignment(
     string FeeInterfaceName);
 
 /// <summary>
+/// A signal explicitly added to one container by drag/drop. It is stored in
+/// the sidecar and projected into the effective ContainerFile at execution
+/// time; the imported source XML is never modified implicitly.
+/// </summary>
+public sealed record VisualAddedSignal(
+    string NodeId,
+    string ContainerId,
+    string SignalGroupId,
+    string FeeSignalGuid,
+    string FeeSignalTag,
+    string FeeInterfaceGuid,
+    string FeeInterfaceName,
+    string Address,
+    string Path,
+    string DataType,
+    string Usage);
+
+/// <summary>
 /// User-selected replacement for a slot from the imported ContainerFile. The
 /// source XML remains untouched; execution and provenance use the effective
 /// slot from this override.
@@ -303,8 +321,11 @@ public sealed class VisualPlan
     private readonly List<VisualGenerationSelection> _generationSelections;
     private readonly List<VisualSignalCreationSelection> _signalCreationSelections;
     private readonly List<VisualSignalAssignment> _signalAssignments;
+    private readonly List<VisualAddedSignal> _addedSignals;
     private readonly List<VisualSlotOverride> _slotOverrides;
     private readonly List<VisualEdge> _edges;
+    private readonly List<VisualNode> _nodes;
+    private readonly HashSet<string> _sourceNodeIds;
 
     internal VisualPlan(
         string sourceXmlPath,
@@ -319,6 +340,7 @@ public sealed class VisualPlan
         IReadOnlyList<VisualGenerationSelection>? generationSelections,
         IReadOnlyList<VisualSignalCreationSelection>? signalCreationSelections,
         IReadOnlyList<VisualSignalAssignment>? signalAssignments,
+        IReadOnlyList<VisualAddedSignal>? addedSignals,
         IReadOnlyList<VisualSlotOverride>? slotOverrides,
         VisualExistingInterfaceSelection? existingInterfaceSelection,
         IReadOnlyList<VisualIssue> issues)
@@ -326,7 +348,8 @@ public sealed class VisualPlan
         SourceXmlPath = sourceXmlPath;
         SidecarPath = sidecarPath;
         SourceFingerprint = sourceFingerprint;
-        Nodes = nodes;
+        _nodes = [.. nodes];
+        _sourceNodeIds = nodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
         Roots = roots;
         _edges = [.. edges];
         Targets = targets;
@@ -335,7 +358,9 @@ public sealed class VisualPlan
         _generationSelections = generationSelections is null ? [] : [.. generationSelections];
         _signalCreationSelections = signalCreationSelections is null ? [] : [.. signalCreationSelections];
         _signalAssignments = signalAssignments is null ? [] : [.. signalAssignments];
+        _addedSignals = [];
         _slotOverrides = slotOverrides is null ? [] : [.. slotOverrides];
+        ReplaceAddedSignals(addedSignals ?? []);
         ExistingInterfaceSelection = existingInterfaceSelection;
         Issues = issues;
     }
@@ -346,7 +371,7 @@ public sealed class VisualPlan
 
     public string SourceFingerprint { get; }
 
-    public IReadOnlyList<VisualNode> Nodes { get; }
+    public IReadOnlyList<VisualNode> Nodes => _nodes;
 
     public IReadOnlyList<VisualNode> Roots { get; }
 
@@ -365,6 +390,8 @@ public sealed class VisualPlan
 
     public IReadOnlyList<VisualSignalAssignment> SignalAssignments => _signalAssignments;
 
+    public IReadOnlyList<VisualAddedSignal> AddedSignals => _addedSignals;
+
     public IReadOnlyList<VisualSlotOverride> SlotOverrides => _slotOverrides;
 
     public VisualExistingInterfaceSelection? ExistingInterfaceSelection { get; private set; }
@@ -373,6 +400,9 @@ public sealed class VisualPlan
 
     public VisualNode? FindNode(string id) =>
         Nodes.FirstOrDefault(node => string.Equals(node.Id, id, StringComparison.Ordinal));
+
+    public bool IsAddedSignal(string nodeId) =>
+        _addedSignals.Any(item => string.Equals(item.NodeId, nodeId, StringComparison.Ordinal));
 
     public VisualSimObjectTarget? FindTarget(string id) =>
         Targets.FirstOrDefault(target => string.Equals(target.Id, id, StringComparison.Ordinal));
@@ -431,6 +461,27 @@ public sealed class VisualPlan
         var replacement = assignments.ToArray();
         _signalAssignments.Clear();
         _signalAssignments.AddRange(replacement);
+    }
+
+    internal void ReplaceAddedSignals(IEnumerable<VisualAddedSignal> signals)
+    {
+        var replacement = signals
+            .Where(item => !_sourceNodeIds.Contains(item.NodeId))
+            .DistinctBy(item => item.NodeId, StringComparer.Ordinal)
+            .ToArray();
+        _addedSignals.Clear();
+        _addedSignals.AddRange(replacement);
+        _nodes.RemoveAll(node => !_sourceNodeIds.Contains(node.Id));
+        _nodes.AddRange(replacement.Select(item => new VisualNode(
+            item.NodeId,
+            item.SignalGroupId,
+            item.ContainerId,
+            VisualNodeKind.Signal,
+            item.FeeSignalTag,
+            item.DataType,
+            string.Empty,
+            isTechnical: false,
+            sourceLocation: string.IsNullOrWhiteSpace(item.Path) ? item.Address : item.Path)));
     }
 
     internal void ReplaceSlotOverrides(IEnumerable<VisualSlotOverride> overrides)

@@ -134,7 +134,8 @@ internal static class RuntimeVisualPlanBinder
                                    node.ContainerId,
                                    containerNodes[containerIndex].Id,
                                    StringComparison.Ordinal) &&
-                               node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
+                               node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                               !plan.IsAddedSignal(node.Id))
                 .ToArray();
             if (entries.Length != signalNodes.Length)
                 continue;
@@ -143,6 +144,29 @@ internal static class RuntimeVisualPlanBinder
                 var slotElement = entries[entryIndex].Element("Slot");
                 if (slotElement is not null)
                     slotElement.Value = plan.GetEffectiveSlot(signalNodes[entryIndex]);
+            }
+
+            var dataList = supportedContainers[containerIndex].Descendants("DataList").FirstOrDefault();
+            if (dataList is null)
+            {
+                dataList = new XElement("DataList");
+                supportedContainers[containerIndex].Add(dataList);
+            }
+            foreach (var added in plan.AddedSignals.Where(item => string.Equals(
+                         item.ContainerId,
+                         containerNodes[containerIndex].Id,
+                         StringComparison.Ordinal)))
+            {
+                var addedNode = plan.FindNode(added.NodeId);
+                if (addedNode is null)
+                    continue;
+                dataList.Add(new XElement("Entry",
+                    new XElement("ID", "Manuell in Container2FEE Visual ergänzt"),
+                    new XElement("Address", string.IsNullOrWhiteSpace(added.Path) ? added.Address : added.Path),
+                    new XElement("DataType", added.DataType),
+                    new XElement("Signal", added.FeeSignalTag),
+                    new XElement("Slot", plan.GetEffectiveSlot(addedNode)),
+                    new XElement("Note", $"Bestehendes Signal aus Interface '{added.FeeInterfaceName}'")));
             }
         }
 

@@ -39,23 +39,27 @@
                     IsEnabled="{Binding CanExport}"
                     ToolTip="{Binding ExportUnavailableReason}"
                     ToolTipService.ShowOnDisabled="True" />
+            <Button Margin="8,0,0,0" MinWidth="100" MinHeight="34"
+                    Content="Abbrechen" Command="{Binding CancelCommand}" />
             <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
         </StackPanel>
 
         <DataGrid Grid.Row="2" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedRoot}"
-                  AutoGenerateColumns="False" IsReadOnly="True"
+                  AutoGenerateColumns="False" IsReadOnly="False"
+                  CanUserAddRows="False" CanUserDeleteRows="False"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="FEE-Root" Binding="{Binding Name}" Width="2*" />
-                <DataGridTextColumn Header="GUID" Binding="{Binding Guid}" Width="2*" />
-                <DataGridTextColumn Header="Quelle" Binding="{Binding SourceKind}" Width="2*" />
-                <DataGridTextColumn Header="Container" Binding="{Binding ContainerCount}" Width="*" />
-                <DataGridTextColumn Header="Signale" Binding="{Binding SignalCount}" Width="*" />
-                <DataGridTextColumn Header="Aktuell gelesen" Binding="{Binding UpdatedSignalCount}" Width="*" />
-                <DataGridTextColumn Header="Fehlend" Binding="{Binding MissingSignalCount}" Width="*" />
-                <DataGridTextColumn Header="Slotrouten" Binding="{Binding UpdatedSlotCount}" Width="*" />
-                <DataGridTextColumn Header="Slot ungeklärt" Binding="{Binding UnresolvedSlotCount}" Width="*" />
-                <DataGridTextColumn Header="Quellfingerprint" Binding="{Binding Provenance.SourceFingerprint, TargetNullValue=-}" Width="2*" />
+                <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
+                <DataGridTextColumn Header="FEE-Root" Binding="{Binding Name}" Width="2*" IsReadOnly="True" />
+                <DataGridTextColumn Header="GUID" Binding="{Binding Guid}" Width="2*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Quelle" Binding="{Binding SourceKind}" Width="2*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Container" Binding="{Binding ContainerCount}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Signale" Binding="{Binding SignalCount}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Aktuell gelesen" Binding="{Binding UpdatedSignalCount}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Fehlend" Binding="{Binding MissingSignalCount}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Slotrouten" Binding="{Binding UpdatedSlotCount}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Slot ungeklärt" Binding="{Binding UnresolvedSlotCount}" Width="*" IsReadOnly="True" />
+                <DataGridTextColumn Header="Quellfingerprint" Binding="{Binding Provenance.SourceFingerprint, TargetNullValue=-}" Width="2*" IsReadOnly="True" />
             </DataGrid.Columns>
         </DataGrid>
 
@@ -101,7 +105,7 @@
         </ItemsControl>
 
         <StackPanel Grid.Row="5" Margin="0,10,0,0">
-            <ProgressBar Height="7" IsIndeterminate="True">
+            <ProgressBar Height="7" Minimum="0" Maximum="100" Value="{Binding ProgressValue, Mode=OneWay}">
                 <ProgressBar.Style>
                     <Style TargetType="ProgressBar">
                         <Setter Property="Visibility" Value="Collapsed" />

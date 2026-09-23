@@ -129,10 +129,23 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                         "Unbekannte Signale",
                         signal)))
                 .ToArray();
+            var reusableInterfaces = plan.ExistingInterfaceSelection is null
+                ? Array.Empty<FeeInterface>()
+                : runtimeInterfaces.Values.Where(item => string.Equals(
+                    item.Guid.ToString("D"),
+                    plan.ExistingInterfaceSelection.InterfaceGuid,
+                    StringComparison.OrdinalIgnoreCase)).ToArray();
+            var reusableSignalGuids = reusableInterfaces
+                .SelectMany(item => item.Signals ?? [])
+                .Select(signal => signal.Guid.ToString("D"))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var selectedSignalAssignments = plan.SignalAssignments
+                .Where(assignment => reusableSignalGuids.Contains(assignment.FeeSignalGuid))
+                .ToArray();
             var signalPlan = SignalResolutionPlanner.Build(
                 signalRequests,
-                runtimeInterfaces.Values,
-                plan.SignalAssignments);
+                reusableInterfaces,
+                selectedSignalAssignments);
             if (!signalPlan.IsValid)
             {
                 return new VisualExecutionResult(
@@ -318,23 +331,26 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                     sortedContainers,
                     generationInterface,
                     basicFrame,
-                    (completed, total, name) => progress?.Report(new VisualGenerationProgress(
-                        total == 0 ? 90 : 50 + completed * 40 / total,
-                        $"Container {completed} von {total} erstellt: {name}")),
+                    (completed, total, name) =>
+                    {
+                        var isStarting = name.StartsWith("Wird erstellt: ", StringComparison.Ordinal);
+                        progress?.Report(new VisualGenerationProgress(
+                            total == 0 ? 90 : 50 + (isStarting ? completed - 1 : completed) * 40 / total,
+                            isStarting
+                                ? $"Container {completed} von {total} wird erstellt: {name["Wird erstellt: ".Length..]}"
+                                : $"Container {completed} von {total} erstellt: {name}"));
+                    },
                     cancellationToken);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             if (binding.UnknownSignals.Count > 0)
             {
-                await Parallel.ForEachAsync(
-                    binding.UnknownSignals,
-                    cancellationToken,
-                    async (signal, token) =>
-                    {
-                        token.ThrowIfCancellationRequested();
-                        await signal.CreateSignalAsync(generationInterface);
-                    });
+                foreach (var signal in binding.UnknownSignals)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await signal.CreateSignalAsync(generationInterface);
+                }
             }
 
             logger.Information(

@@ -42,6 +42,14 @@ public sealed record FeeContainerReconstructionResult(
 /// </summary>
 public static class FeeContainerLiveReconstructor
 {
+    /// <summary>
+    /// Complete XML type set understood by the same catalog that drives
+    /// Container2FEE Visual. FEE2Container uses this as its round-trip
+    /// contract, including signal-only types retained by root provenance.
+    /// </summary>
+    public static IReadOnlyList<string> SupportedContainerTypes =>
+        ContainerMetadataCatalog.SupportedXmlTypes;
+
     public static FeeContainerReconstructionResult Reconstruct(
         Guid rootGuid,
         string rootName,

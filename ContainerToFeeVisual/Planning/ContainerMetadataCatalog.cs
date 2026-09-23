@@ -39,6 +39,10 @@ internal static class ContainerMetadataCatalog
             ["Switch"] = Describe<CabinetSwitch_Container>(technicalHelpers: ["Cabinet Switches", "CabinetElement"]),
         };
 
+    public static IReadOnlyList<string> SupportedXmlTypes { get; } = Descriptors.Keys
+        .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
     public static bool TryGet(string xmlType, out ContainerDescriptor descriptor) =>
         Descriptors.TryGetValue(xmlType, out descriptor!);
 
