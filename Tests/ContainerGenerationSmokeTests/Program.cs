@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Xml.Linq;
 using SixLabors.Fonts;
 using VIBN_Tools.ContainerGeneration.BusinessLogic;
@@ -8,6 +9,7 @@ using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.RequirementsXml;
 using VIBN_Tools.ContainerGeneration.Utils;
+using VIBN_Tools.Application.VM;
 using VIBN_Tools.ContainerToFee;
 using VIBN_Tools.ContainerToFee.GrobStandard;
 using VIBN_Tools.ContainerToFeeVisual;
@@ -50,6 +52,8 @@ internal static class Program
         ValidateWorkspaceBlockingMarker();
         ValidateSlotMultiplicityPolicy();
         await ValidateContainerToFeeModelContractsAsync();
+        await ValidateVisualMotionJointReuseAsync();
+        await ValidateVisualFeeSignalStatusAsync();
         ValidatePlcInputFanInParsing();
         ValidateContainerFileComparison();
         await ValidateFee2ContainerProvenanceRoundTripAsync();
@@ -492,6 +496,166 @@ internal static class Program
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (!legacyTypes.SetEquals(["Sensor", "Stop"]))
             throw new InvalidOperationException("Legacy Sensor/Floor objects were not exposed as reviewable containers.");
+
+        var knownLogicTypes = FeeContainerLiveReconstructor.Reconstruct(
+            rootGuid,
+            "Known logics",
+            [
+                new(Guid.NewGuid(), "Belt", "LogicObject", "Grob_BeltControl"),
+                new(Guid.NewGuid(), "Clamp", "LogicObject", "Grob_Clamping"),
+                new(Guid.NewGuid(), "Conveyor", "LogicObject", "Grob_Conveyor"),
+                new(Guid.NewGuid(), "Cylinder", "LogicObject", "Grob_Cylinder"),
+                new(Guid.NewGuid(), "Gripper", "LogicObject", "Grob_GripperBasic"),
+                new(Guid.NewGuid(), "Vacuum", "LogicObject", "Grob_GripperVacuum"),
+                new(Guid.NewGuid(), "Lift", "LogicObject", "Grob_LiftUnit"),
+                new(Guid.NewGuid(), "Air", "LogicObject", "Grob_PneumaticSupply"),
+                new(Guid.NewGuid(), "Door", "LogicObject", "Grob_SafetyDoor"),
+                new(Guid.NewGuid(), "Sensor", "LogicObject", "Grob_Sensor"),
+                new(Guid.NewGuid(), "Stop", "LogicObject", "Grob_Stop"),
+            ],
+            [],
+            []);
+        var reconstructedLogicTypes = knownLogicTypes.Snapshot.ContainerDocument
+            .Descendants("Type")
+            .Select(item => item.Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expectedLogicTypes = new HashSet<string>(
+            ["BeltControl", "Clamping", "Conveyor", "Cylinder", "GripperBasic", "GripperVacuum",
+             "LiftUnit", "PneumaticSupply", "SafetyDoor", "Sensor", "Stop"],
+            StringComparer.OrdinalIgnoreCase);
+        if (!reconstructedLogicTypes.SetEquals(expectedLogicTypes))
+        {
+            throw new InvalidOperationException(
+                "FEE2Container did not reconstruct every distinct catalogued Grob logic type.");
+        }
+    }
+
+    private static async Task ValidateVisualMotionJointReuseAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-motion-reuse-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "motion.container.xml");
+        try
+        {
+            File.WriteAllText(path, """
+                <ContainerFile>
+                  <Container id="motion">
+                    <Component>Axis_1</Component><Type>Cylinder</Type><DataList>
+                      <Entry><ID>A</ID><Address>%Q0.0</Address><DataType>Bool</DataType><Signal>Move</Signal><Slot>PLC_OUT_ToWorkPos</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var loaded = await service.LoadXmlAsync(path);
+            if (!loaded.Success || loaded.Plan is null)
+                throw new InvalidOperationException("MotionJoint reuse plan could not be loaded.");
+
+            var visualObjectConstructor = typeof(VisualFeeObject).GetConstructors(
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                .Single();
+            VisualFeeObject CreateJoint() => (VisualFeeObject)visualObjectConstructor.Invoke(
+                [
+                    $"fee:{Guid.NewGuid():D}",
+                    Guid.NewGuid().ToString("D"),
+                    "Axis_1",
+                    typeof(FeeJoint).FullName!,
+                    "MotionJoint",
+                    new[] { nameof(FeeJoint), typeof(FeeJoint).FullName! },
+                ]);
+            var objects = new[] { CreateJoint(), CreateJoint() };
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, objects);
+
+            var added = service.AutoAssignMatches();
+            var target = loaded.Plan.Targets.Single(item => item.AllowMultiSelect);
+            if (added != 2 || loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 2)
+            {
+                throw new InvalidOperationException(
+                    "Existing same-name MotionJoints were not reused for a multi-select visual target.");
+            }
+            if (!service.RemoveAssignment(target.Id, objects[0].Id).Success ||
+                loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Removing one object from a multi-select target removed more than that assignment.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task ValidateVisualFeeSignalStatusAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-signal-status-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "signals.container.xml");
+        try
+        {
+            File.WriteAllText(path, """
+                <ContainerFile>
+                  <Container id="sensor">
+                    <Component>Sensor_1</Component><Type>Sensor</Type><DataList>
+                      <Entry><ID>A</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>DetectedA</Signal><Slot>PLC_IN_PartPresent_Ch1</Slot></Entry>
+                      <Entry><ID>B</ID><Address>%I0.1</Address><DataType>Bool</DataType><Signal>DetectedB</Signal><Slot>PLC_IN_PartPresent_Ch1</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var loaded = await service.LoadXmlAsync(path);
+            if (!loaded.Success || loaded.Plan is null)
+                throw new InvalidOperationException("Signal status plan could not be loaded.");
+
+            var sharedGuid = Guid.NewGuid().ToString("D");
+            var duplicateGuid = Guid.NewGuid().ToString("D");
+            var signals = new[]
+            {
+                new VisualFeeSignal(sharedGuid, Guid.NewGuid().ToString("D"), "PLC", "Shared", "%I0.0", "", "Bool", "Input"),
+                new VisualFeeSignal(duplicateGuid, Guid.NewGuid().ToString("D"), "PLC 2", "Shared", "%I0.1", "", "Bool", "Input"),
+            };
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSignals", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, signals);
+            var signalNodes = loaded.Plan.Nodes
+                .Where(item => item.Kind == VisualNodeKind.Signal)
+                .ToArray();
+            foreach (var node in signalNodes)
+            {
+                if (!service.TryAssignSignal(node.Id, sharedGuid).Success)
+                    throw new InvalidOperationException("Test signal could not be assigned.");
+            }
+
+            var assigned = new ContainerToFeeVisualFeeSignalVM(signals[0], signals, loaded.Plan);
+            var duplicate = new ContainerToFeeVisualFeeSignalVM(signals[1], signals, loaded.Plan);
+            if (!assigned.IsAssigned || !assigned.HasDuplicateAssignment || !assigned.HasDuplicateName ||
+                assigned.StateBackground != "#FFFFCDD2" || !duplicate.HasDuplicateName)
+            {
+                throw new InvalidOperationException(
+                    "FEE signal assignment/duplicate state is not presented with the required error status. " +
+                    $"Assigned={assigned.IsAssigned}, DuplicateAssignment={assigned.HasDuplicateAssignment}, " +
+                    $"DuplicateName={assigned.HasDuplicateName}, Background={assigned.StateBackground}, " +
+                    $"SecondDuplicateName={duplicate.HasDuplicateName}, Nodes={signalNodes.Length}, " +
+                    $"NodeIds={string.Join(",", signalNodes.Select(item => item.Id))}, " +
+                    $"Assignments={loaded.Plan.SignalAssignments.Count}.");
+            }
+
+            var warning = FeeTagPropertyWriteResult.Unconfirmed(new InvalidOperationException("test"));
+            if (warning.Confirmed || !warning.Warning.Contains("fortgesetzt", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "An unconfirmed TagComponent write no longer explicitly permits generation to continue.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static void ValidateTopLevelBasicFrameSelection()

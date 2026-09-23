@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
+using System.Xml.Linq;
 using Microsoft.Win32;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.GlobalClasses;
@@ -40,6 +41,10 @@ public sealed class Fee2ContainerPageVM : MvvmBase
 
     public ObservableCollection<string> Issues { get; } = new();
 
+    public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; } = new();
+
+    public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; } = new();
+
     public ICommand RefreshCommand { get; }
 
     public ICommand ExportCommand { get; }
@@ -57,6 +62,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanExport));
             OnPropertyChanged(nameof(SelectionSummary));
+            RefreshSelectionDetails();
             CommandManager.InvalidateRequerySuggested();
         }
     }
@@ -226,4 +232,59 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         ? "nicht vorhanden"
         : value[..Math.Min(12, value.Length)];
 
+    private void RefreshSelectionDetails()
+    {
+        FoundContainers.Clear();
+        FoundSignals.Clear();
+        var document = SelectedRoot?.Provenance?.ContainerDocument;
+        if (document is null)
+            return;
+
+        foreach (var container in document.Descendants("Container"))
+        {
+            var component = container.Element("Component")?.Value ?? string.Empty;
+            var type = container.Element("Type")?.Value ?? string.Empty;
+            var entries = container.Descendants("Entry").ToArray();
+            FoundContainers.Add(new Fee2ContainerFoundContainerVM(
+                container.Attribute("id")?.Value ?? string.Empty,
+                component,
+                type,
+                entries.Count(entry => !string.IsNullOrWhiteSpace(entry.Element("Signal")?.Value))));
+            foreach (var entry in entries)
+            {
+                var signal = entry.Element("Signal")?.Value ?? string.Empty;
+                var slot = entry.Element("Slot")?.Value ?? string.Empty;
+                var note = entry.Element("Note")?.Value ?? string.Empty;
+                FoundSignals.Add(new Fee2ContainerFoundSignalVM(
+                    component,
+                    type,
+                    signal,
+                    slot,
+                    entry.Element("Address")?.Value ?? string.Empty,
+                    entry.Element("DataType")?.Value ?? string.Empty,
+                    !string.IsNullOrWhiteSpace(signal) && !string.IsNullOrWhiteSpace(slot),
+                    note));
+            }
+        }
+    }
+
+}
+
+public sealed record Fee2ContainerFoundContainerVM(
+    string Id,
+    string Component,
+    string Type,
+    int AssignedSignalCount);
+
+public sealed record Fee2ContainerFoundSignalVM(
+    string Container,
+    string ContainerType,
+    string Signal,
+    string Slot,
+    string Address,
+    string DataType,
+    bool IsAssigned,
+    string Note)
+{
+    public string AssignmentState => IsAssigned ? "Zugeordnet" : "Keine rücklesbare Zuordnung";
 }

@@ -354,7 +354,9 @@ public static class FeeContainerLiveReconstructor
         if (normalized.Contains("LAMP", StringComparison.Ordinal))
             return "CabinetLamp";
         if (normalized.Contains("GROB2POSITIONSWITCH", StringComparison.Ordinal) ||
-            normalized.Contains("POSITIONSWITCH2", StringComparison.Ordinal))
+            normalized.Contains("POSITIONSWITCH2", StringComparison.Ordinal) ||
+            normalized.Contains("2POSITIONSWITCH", StringComparison.Ordinal) ||
+            normalized.Contains("TWOPOSITIONSWITCH", StringComparison.Ordinal))
             return "Switch";
         return null;
     }

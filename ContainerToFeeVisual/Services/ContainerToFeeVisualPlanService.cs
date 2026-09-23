@@ -178,6 +178,7 @@ public sealed class ContainerToFeeVisualPlanService
         _runtimeObjects = result.RuntimeObjects;
         _feeContainerObjects = result.ContainerObjects;
         _hasDiscoveredFeeObjects = true;
+        RemoveStaleObjectAssignments();
         return _feeObjects;
     }
 
@@ -189,6 +190,7 @@ public sealed class ContainerToFeeVisualPlanService
         _runtimeInterfaces = result.RuntimeInterfaces;
         _feeSignals = result.Signals;
         _hasDiscoveredFeeInterfaces = true;
+        RemoveStaleSignalAssignments();
         return _feeInterfaces;
     }
 
@@ -253,10 +255,6 @@ public sealed class ContainerToFeeVisualPlanService
             var containerName = plan.FindNode(target.ContainerId)?.Name ?? string.Empty;
             var matches = _feeObjects
                 .Where(target.CanAssign)
-                // MotionJoints often own imported CAD hierarchies. They must
-                // remain an explicit user choice even when name/type match.
-                .Where(item => !string.Equals(item.FeeType, "MotionJoint", StringComparison.OrdinalIgnoreCase) &&
-                               !item.TypeName.EndsWith("FeeJoint", StringComparison.OrdinalIgnoreCase))
                 .Where(item => !assignedObjectIds.Contains(item.Id))
                 .Where(item => string.Equals(item.Name, containerName, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
@@ -281,6 +279,53 @@ public sealed class ContainerToFeeVisualPlanService
         RaisePlanChanged();
         _logger.Information($"{added} FEE-SimObject-Zuordnung(en) automatisch erkannt.");
         return added;
+    }
+
+    /// <summary>
+    /// Removes sidecar assignments whose scene object was deleted.  Keeping a
+    /// stale GUID made validation and runtime binding fail even though the
+    /// selected container is able to recreate the missing object.
+    /// </summary>
+    private void RemoveStaleObjectAssignments()
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !_hasDiscoveredFeeObjects)
+            return;
+
+        var availableIds = _feeObjects.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var retained = plan.Assignments
+            .Where(assignment => availableIds.Contains(assignment.FeeObjectId))
+            .ToArray();
+        var removed = plan.Assignments.Count - retained.Length;
+        if (removed == 0)
+            return;
+
+        plan.ReplaceAssignments(retained);
+        _logger.Warning(
+            $"{removed} gespeicherte FEE-SimObject-Zuordnung(en) verweisen auf gelöschte Objekte und wurden verworfen. Fehlende Objekte können neu erzeugt werden.");
+        RaisePlanChanged();
+    }
+
+    private void RemoveStaleSignalAssignments()
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !_hasDiscoveredFeeInterfaces)
+            return;
+
+        var availableGuids = _feeSignals
+            .Select(item => item.GuidString)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retained = plan.SignalAssignments
+            .Where(assignment => availableGuids.Contains(assignment.FeeSignalGuid))
+            .ToArray();
+        var removed = plan.SignalAssignments.Count - retained.Length;
+        if (removed == 0)
+            return;
+
+        plan.ReplaceSignalAssignments(retained);
+        _logger.Warning(
+            $"{removed} gespeicherte FEE-Signalzuordnung(en) verweisen auf gelöschte Variablen und wurden verworfen. Die Signale können neu aufgelöst oder erzeugt werden.");
+        RaisePlanChanged();
     }
 
     public VisualAssignmentResult TryAssign(string targetId, string feeObjectId)

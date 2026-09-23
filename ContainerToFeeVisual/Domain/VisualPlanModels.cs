@@ -399,39 +399,45 @@ public sealed class VisualPlan
 
     internal void ReplaceAssignments(IEnumerable<VisualAssignment> assignments)
     {
+        var replacement = assignments.ToArray();
         _assignments.Clear();
-        _assignments.AddRange(assignments);
+        _assignments.AddRange(replacement);
         RebuildAssignmentEdges();
     }
 
     internal void ReplaceCreationRequests(IEnumerable<VisualCreationRequest> requests)
     {
+        var replacement = requests.Where(request => !request.IsRequested).ToArray();
         _creationRequests.Clear();
-        _creationRequests.AddRange(requests.Where(request => !request.IsRequested));
+        _creationRequests.AddRange(replacement);
     }
 
     internal void ReplaceGenerationSelections(IEnumerable<VisualGenerationSelection> selections)
     {
+        var replacement = selections.Where(selection => !selection.IsSelected).ToArray();
         _generationSelections.Clear();
-        _generationSelections.AddRange(selections.Where(selection => !selection.IsSelected));
+        _generationSelections.AddRange(replacement);
     }
 
     internal void ReplaceSignalCreationSelections(IEnumerable<VisualSignalCreationSelection> selections)
     {
+        var replacement = selections.Where(selection => !selection.CreateSignals).ToArray();
         _signalCreationSelections.Clear();
-        _signalCreationSelections.AddRange(selections.Where(selection => !selection.CreateSignals));
+        _signalCreationSelections.AddRange(replacement);
     }
 
     internal void ReplaceSignalAssignments(IEnumerable<VisualSignalAssignment> assignments)
     {
+        var replacement = assignments.ToArray();
         _signalAssignments.Clear();
-        _signalAssignments.AddRange(assignments);
+        _signalAssignments.AddRange(replacement);
     }
 
     internal void ReplaceSlotOverrides(IEnumerable<VisualSlotOverride> overrides)
     {
+        var replacement = overrides.ToArray();
         _slotOverrides.Clear();
-        _slotOverrides.AddRange(overrides);
+        _slotOverrides.AddRange(replacement);
     }
 
     internal void SetExistingInterfaceSelection(VisualExistingInterfaceSelection? selection) =>

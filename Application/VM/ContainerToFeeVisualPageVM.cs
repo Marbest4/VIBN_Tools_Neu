@@ -140,7 +140,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public ObservableCollection<ContainerToFeeVisualFeeInterfaceVM> AvailableFeeInterfaces { get; } = new();
 
-    public ObservableCollection<VisualFeeSignal> AvailableFeeSignals { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualFeeSignalVM> AvailableFeeSignals { get; } = new();
 
     public ObservableCollection<VisualIssue> Issues { get; } = new();
 
@@ -533,7 +533,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             IReadOnlyList<VisualFeeInterface> interfaces = await interfacesTask;
             RefreshFeeObjectProjection(objects);
             RefreshFeeInterfaceProjection(interfaces);
-            AvailableFeeSignals.ReplaceWith(_planService.DiscoveredFeeSignals);
+            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             // Auto-assignment raises PlanChanged and rebuilds the tree. Apply
             // live discovery colours only afterwards so complete-container
             // verification is not lost again in that rebuild.
@@ -755,49 +755,88 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private void HandleDrop(ContainerToFeeVisualDropRequest? request)
     {
-        if (request?.Source is VisualFeeSignal signal &&
-            request.Target is ContainerToFeeVisualTreeNodeVM signalTarget &&
-            signalTarget.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
+        IReadOnlyList<object> sources = request?.Source is IReadOnlyList<object> selectedItems
+            ? selectedItems
+            : request?.Source is null ? [] : [request.Source];
+
+        if (request?.Target is ContainerToFeeVisualTreeNodeVM signalTarget &&
+            signalTarget.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+            sources.All(item => item is ContainerToFeeVisualFeeSignalVM))
         {
-            var signalResult = _planService.TryAssignSignal(signalTarget.Id, signal.GuidString);
-            PublishIssues(signalResult.Issues);
-            if (!signalResult.Success)
+            var signalSources = sources.Cast<ContainerToFeeVisualFeeSignalVM>().ToArray();
+            var signalTargets = ResolveSignalDropTargets(signalTarget, signalSources.Length);
+            if (signalTargets.Count < signalSources.Length)
             {
-                Reject(signalResult.Message);
+                Reject($"Für {signalSources.Length} ausgewählte FEE-Signale sind nur {signalTargets.Count} freie Container-Signale mit Slot '{signalTarget.Slot}' vorhanden.");
                 return;
             }
-            signalTarget.ApplyExecutionState(ContainerToFeeVisualNodeState.Verified);
-            StatusText = signalResult.Message;
-            _log.Information(LogArea, signalResult.Message);
+
+            for (var index = 0; index < signalSources.Length; index++)
+            {
+                var signalResult = _planService.TryAssignSignal(
+                    signalTargets[index].Id,
+                    signalSources[index].GuidString);
+                PublishIssues(signalResult.Issues);
+                if (!signalResult.Success)
+                {
+                    Reject(signalResult.Message);
+                    return;
+                }
+            }
+
+            StatusText = signalSources.Length == 1
+                ? $"FEE-Signal '{signalSources[0].Tag}' wurde Slot '{signalTarget.Slot}' zugeordnet."
+                : $"{signalSources.Length} FEE-Signale wurden freien Einträgen mit Slot '{signalTarget.Slot}' zugeordnet.";
+            _log.Information(LogArea, StatusText);
             return;
         }
 
-        if (request?.Target is not ContainerToFeeVisualTargetVM target)
-            return;
-
-        string? feeObjectId = request.Source switch
+        var target = request?.Target switch
         {
-            ContainerToFeeVisualFeeObjectVM feeObject => feeObject.Id,
-            ContainerToFeeVisualAssignmentVM assignment => assignment.FeeObjectId,
+            ContainerToFeeVisualTargetVM targetVm => targetVm,
+            ContainerToFeeVisualTreeNodeVM treeNode when treeNode.Kind == VisualNodeKind.SimObjectTarget =>
+                CreateTargetVm(treeNode.Id),
             _ => null,
         };
+        if (target is null)
+            return;
 
-        if (feeObjectId is null)
+        var feeObjectIds = sources.Select(item => item switch
+            {
+                ContainerToFeeVisualFeeObjectVM feeObject => feeObject.Id,
+                ContainerToFeeVisualAssignmentVM assignment => assignment.FeeObjectId,
+                _ => null,
+            })
+            .Where(item => item is not null)
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (feeObjectIds.Length != sources.Count)
         {
             Reject("Das gezogene Element ist kein zuweisbares FEE-SimObject.");
             return;
         }
-
-        VisualAssignmentResult result = _planService.TryAssign(target.Id, feeObjectId);
-        PublishIssues(result.Issues);
-        if (!result.Success)
+        if (!target.Model.AllowMultiSelect && feeObjectIds.Length > 1)
         {
-            Reject(result.Message);
+            Reject($"'{target.DisplayName}' erlaubt nur eine SimObject-Zuordnung.");
             return;
         }
 
-        StatusText = result.Message;
-        _log.Information(LogArea, result.Message);
+        foreach (var feeObjectId in feeObjectIds)
+        {
+            VisualAssignmentResult result = _planService.TryAssign(target.Id, feeObjectId);
+            PublishIssues(result.Issues);
+            if (!result.Success)
+            {
+                Reject(result.Message);
+                return;
+            }
+        }
+
+        StatusText = feeObjectIds.Length == 1
+            ? $"FEE-SimObject wurde '{target.DisplayName}' zugeordnet."
+            : $"{feeObjectIds.Length} FEE-SimObjects wurden gemeinsam '{target.DisplayName}' zugeordnet.";
+        _log.Information(LogArea, StatusText);
     }
 
     private bool CanHandleDrop(ContainerToFeeVisualDropRequest? request)
@@ -805,23 +844,66 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         if (IsBusy || request is null)
             return false;
 
-        if (request.Source is VisualFeeSignal &&
+        IReadOnlyList<object> sources = request.Source is IReadOnlyList<object> selectedItems
+            ? selectedItems
+            : new[] { request.Source };
+        if (sources.All(item => item is ContainerToFeeVisualFeeSignalVM) &&
             request.Target is ContainerToFeeVisualTreeNodeVM signalTarget)
         {
             return signalTarget.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal;
         }
 
-        if (request.Target is not ContainerToFeeVisualTargetVM target)
+        var target = request.Target switch
+        {
+            ContainerToFeeVisualTargetVM targetVm => targetVm,
+            ContainerToFeeVisualTreeNodeVM treeNode when treeNode.Kind == VisualNodeKind.SimObjectTarget =>
+                CreateTargetVm(treeNode.Id),
+            _ => null,
+        };
+        if (target is null || (!target.Model.AllowMultiSelect && sources.Count > 1))
             return false;
 
-        return request.Source switch
-        {
-            ContainerToFeeVisualFeeObjectVM feeObject => target.Model.CanAssign(feeObject.Model),
-            ContainerToFeeVisualAssignmentVM assignment =>
-                string.Equals(target.AllowedTypeName, assignment.FeeObjectTypeName, StringComparison.Ordinal) ||
-                string.Equals(target.AllowedTypeName, assignment.FeeType, StringComparison.Ordinal),
-            _ => false,
-        };
+        return sources.All(source => source switch
+            {
+                ContainerToFeeVisualFeeObjectVM feeObject => target.Model.CanAssign(feeObject.Model),
+                ContainerToFeeVisualAssignmentVM assignment =>
+                    string.Equals(target.AllowedTypeName, assignment.FeeObjectTypeName, StringComparison.Ordinal) ||
+                    string.Equals(target.AllowedTypeName, assignment.FeeType, StringComparison.Ordinal),
+                _ => false,
+            });
+    }
+
+    private ContainerToFeeVisualTargetVM? CreateTargetVm(string targetId)
+    {
+        var plan = _planService.CurrentPlan;
+        var target = plan?.FindTarget(targetId);
+        return plan is null || target is null
+            ? null
+            : new ContainerToFeeVisualTargetVM(
+                target,
+                plan.Assignments.Where(item => item.TargetId == target.Id),
+                plan.IsCreationRequested(target.ContainerId),
+                Issues.Where(issue => issue.NodeId == target.Id));
+    }
+
+    private IReadOnlyList<ContainerToFeeVisualTreeNodeVM> ResolveSignalDropTargets(
+        ContainerToFeeVisualTreeNodeVM initialTarget,
+        int count)
+    {
+        if (count <= 1)
+            return [initialTarget];
+        var assignedIds = _planService.CurrentPlan?.SignalAssignments
+            .Select(item => item.SignalNodeId)
+            .ToHashSet(StringComparer.Ordinal) ?? [];
+        return TreeRoots.SelectMany(root => root.SelfAndDescendants())
+            .Where(node => node.Id == initialTarget.Id ||
+                           (node.ContainerId == initialTarget.ContainerId &&
+                            node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                            string.Equals(node.Slot, initialTarget.Slot, StringComparison.Ordinal) &&
+                            !assignedIds.Contains(node.Id)))
+            .OrderByDescending(node => node.Id == initialTarget.Id)
+            .Take(count)
+            .ToArray();
     }
 
     private void RemoveAssignment(ContainerToFeeVisualAssignmentVM? assignment)
@@ -911,6 +993,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         string? selectedNodeId = SelectedTreeNode?.Id;
         string? selectedTargetId = SelectedTarget?.Id;
+        var expansionState = TreeRoots
+            .SelectMany(root => root.SelfAndDescendants())
+            .ToDictionary(node => node.Id, node => node.IsExpanded, StringComparer.Ordinal);
         if (!string.Equals(SourceXmlPath, plan.SourceXmlPath, StringComparison.OrdinalIgnoreCase))
             _verifiedContainerIds.Clear();
         _isApplyingPlan = true;
@@ -920,9 +1005,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             SourceXmlPath = plan.SourceXmlPath;
             var validation = _planService.Validate();
             TreeRoots.ReplaceWith(plan.Roots.Select(node => BuildTree(node, plan, validation.Issues)));
+            foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants()))
+            {
+                if (expansionState.TryGetValue(node.Id, out var wasExpanded))
+                    node.IsExpanded = wasExpanded;
+            }
             RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
             RefreshFeeInterfaceProjection(_planService.DiscoveredFeeInterfaces);
-            AvailableFeeSignals.ReplaceWith(_planService.DiscoveredFeeSignals);
+            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
             ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
             ApplyVerifiedContainerStates(_verifiedContainerIds);
@@ -1263,7 +1353,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private bool FilterFeeSignal(object item)
     {
-        if (item is not VisualFeeSignal signal)
+        if (item is not ContainerToFeeVisualFeeSignalVM signal)
             return false;
         if (string.IsNullOrWhiteSpace(FeeSignalFilter))
             return true;
@@ -1271,6 +1361,15 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                signal.Location.Contains(FeeSignalFilter, StringComparison.OrdinalIgnoreCase) ||
                signal.InterfaceName.Contains(FeeSignalFilter, StringComparison.OrdinalIgnoreCase) ||
                signal.DataType.Contains(FeeSignalFilter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void RefreshFeeSignalProjection(IReadOnlyList<VisualFeeSignal>? signals = null)
+    {
+        var source = signals ?? AvailableFeeSignals.Select(item => item.Model).ToArray();
+        var plan = _planService.CurrentPlan;
+        AvailableFeeSignals.ReplaceWith(source.Select(signal =>
+            new ContainerToFeeVisualFeeSignalVM(signal, source, plan)));
+        FeeSignalsView.Refresh();
     }
 
     private void RefreshFeeObjectProjection(IReadOnlyList<VisualFeeObject>? objects = null)
@@ -1582,7 +1681,9 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         bool selfMatches = string.IsNullOrWhiteSpace(filter) ||
                            Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                            TypeName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                           Slot.Contains(filter, StringComparison.OrdinalIgnoreCase);
+                           Slot.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                           SourceLocation.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                           LinkedObjectDescription.Contains(filter, StringComparison.OrdinalIgnoreCase);
         IsVisible = selfMatches || childMatches;
         if (!string.IsNullOrWhiteSpace(filter) && childMatches)
             IsExpanded = true;
@@ -1711,6 +1812,73 @@ public sealed class ContainerToFeeVisualFeeObjectVM
             node.ContainerId == target.ContainerId && node.Kind == VisualNodeKind.Logic);
         var logicOrContainer = logic?.Name ?? container?.TypeName ?? "—";
         return $"Ziel: {target.DisplayName} | Container: {container?.Name ?? "—"} | Logik/Typ: {logicOrContainer}";
+    }
+}
+
+/// <summary>Presentation state for a discovered FEE signal and its plan usage.</summary>
+public sealed class ContainerToFeeVisualFeeSignalVM
+{
+    public ContainerToFeeVisualFeeSignalVM(
+        VisualFeeSignal model,
+        IReadOnlyCollection<VisualFeeSignal> allSignals,
+        VisualPlan? plan)
+    {
+        Model = model;
+        var assignments = plan?.SignalAssignments
+            .Where(item => string.Equals(
+                item.FeeSignalGuid,
+                model.GuidString,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray() ?? [];
+        AssignedTargets = assignments
+            .Select(item => DescribeSignalAssignment(plan, item))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        HasDuplicateName = !string.IsNullOrWhiteSpace(model.Tag) && allSignals
+            .Where(item => string.Equals(item.Tag, model.Tag, StringComparison.OrdinalIgnoreCase))
+            .Select(item => item.GuidString)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count() > 1;
+        HasDuplicateAssignment = assignments
+            .Select(item => item.SignalNodeId)
+            .Distinct(StringComparer.Ordinal)
+            .Count() > 1;
+    }
+
+    public VisualFeeSignal Model { get; }
+    public string GuidString => Model.GuidString;
+    public string InterfaceName => Model.InterfaceName;
+    public string Tag => Model.Tag;
+    public string Location => Model.Location;
+    public string DataType => Model.DataType;
+    public string Usage => Model.Usage;
+    public IReadOnlyList<string> AssignedTargets { get; }
+    public bool IsAssigned => AssignedTargets.Count > 0;
+    public bool HasDuplicateName { get; }
+    public bool HasDuplicateAssignment { get; }
+    public bool HasError => HasDuplicateName || HasDuplicateAssignment;
+    public string AssignmentText => HasError
+        ? string.Join(" · ", new[]
+        {
+            HasDuplicateName ? "Fehler: Signalname ist im FEE mehrfach vorhanden" : null,
+            HasDuplicateAssignment ? "Fehler: Signal ist mehreren Container-Einträgen zugeordnet" : null,
+        }.Where(item => item is not null))
+        : IsAssigned
+            ? $"Zugewiesen: {string.Join("; ", AssignedTargets)}"
+            : "Noch nicht zugewiesen";
+    public string StateBackground => HasError
+        ? "#FFFFCDD2"
+        : IsAssigned ? "#FFC6EFCE" : "#FFF3F5F7";
+    public string ToolTipText =>
+        $"Signal-GUID: {GuidString}{Environment.NewLine}{AssignmentText}";
+
+    private static string DescribeSignalAssignment(VisualPlan? plan, VisualSignalAssignment assignment)
+    {
+        var node = plan?.FindNode(assignment.SignalNodeId);
+        if (node is null)
+            return assignment.SignalNodeId;
+        var container = node.ContainerId is null ? null : plan?.FindNode(node.ContainerId);
+        return $"{container?.Name ?? "—"} / {node.Name} [{plan?.GetEffectiveSlot(node) ?? node.Slot}]";
     }
 }
 

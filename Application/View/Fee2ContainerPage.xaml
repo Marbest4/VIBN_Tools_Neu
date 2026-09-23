@@ -14,7 +14,8 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="2*" />
+            <RowDefinition Height="3*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -58,7 +59,40 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <ItemsControl Grid.Row="3" Margin="0,8,0,0" ItemsSource="{Binding Issues}">
+        <Grid Grid.Row="3" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="3*" />
+            </Grid.ColumnDefinitions>
+            <GroupBox Header="Erkannte Container">
+                <DataGrid ItemsSource="{Binding FoundContainers}" AutoGenerateColumns="False"
+                          IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="2*" />
+                        <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="*" />
+                        <DataGridTextColumn Header="Zugeordnete Signale" Binding="{Binding AssignedSignalCount}" Width="Auto" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
+            <GroupBox Grid.Column="2" Header="Erkannte Signalzuordnungen">
+                <DataGrid ItemsSource="{Binding FoundSignals}" AutoGenerateColumns="False"
+                          IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Container" Binding="{Binding Container}" Width="2*" />
+                        <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="2*" />
+                        <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="2*" />
+                        <DataGridTextColumn Header="Adresse/Pfad" Binding="{Binding Address}" Width="*" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding AssignmentState}" Width="2*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+        </Grid>
+
+        <ItemsControl Grid.Row="4" Margin="0,8,0,0" ItemsSource="{Binding Issues}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <TextBlock Foreground="DarkRed" TextWrapping="Wrap" Text="{Binding}" />
@@ -66,7 +100,7 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <StackPanel Grid.Row="4" Margin="0,10,0,0">
+        <StackPanel Grid.Row="5" Margin="0,10,0,0">
             <ProgressBar Height="7" IsIndeterminate="True">
                 <ProgressBar.Style>
                     <Style TargetType="ProgressBar">

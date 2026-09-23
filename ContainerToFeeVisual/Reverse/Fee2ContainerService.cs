@@ -250,10 +250,30 @@ public sealed class Fee2ContainerService
                 var type = xml.Attribute("Type")?.Value ?? xml.Name.LocalName;
                 var name = xml.Attribute("Name")?.Value ?? string.Empty;
                 var logicGuidText = ReadXmlValue(xml, "PersistedLogicGuid");
+                if (string.IsNullOrWhiteSpace(logicGuidText) && IsLogicObject(type))
+                {
+                    logicGuidText = await ReadOptionalObjectPropertyAsync(
+                        guid,
+                        "PersistedLogicGuid");
+                }
                 var logicName = Guid.TryParse(logicGuidText, out var logicGuid) &&
                                 logicNames.TryGetValue(logicGuid, out var resolvedLogicName)
                     ? resolvedLogicName
                     : null;
+                var cabinetDefinition = ReadXmlValue(xml, "Definition", "ElementType");
+                var label = ReadXmlValue(xml, "Label");
+                if (IsCabinetElement(type))
+                {
+                    // Several FEE/SDK versions do not serialize these dynamic
+                    // Cabinet properties into GetSceneObjectsAsXmlAsync. Query
+                    // them explicitly so Switch/Fuse/EStop/Lamp are not lost.
+                    if (string.IsNullOrWhiteSpace(cabinetDefinition))
+                        cabinetDefinition = await ReadOptionalObjectPropertyAsync(guid, "Definition");
+                    if (string.IsNullOrWhiteSpace(cabinetDefinition))
+                        cabinetDefinition = await ReadOptionalObjectPropertyAsync(guid, "ElementType");
+                    if (string.IsNullOrWhiteSpace(label))
+                        label = await ReadOptionalObjectPropertyAsync(guid, "Label");
+                }
                 var marks = (xml.Element("MarkComponent")?.Element("Mark")?.Value ?? string.Empty)
                     .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 var provenance = ContainerObjectProvenance.Read(
@@ -264,8 +284,8 @@ public sealed class Fee2ContainerService
                     name,
                     type,
                     logicName,
-                    ReadXmlValue(xml, "Definition", "ElementType"),
-                    ReadXmlValue(xml, "Label"),
+                    cabinetDefinition,
+                    label,
                     provenance.ContainerId,
                     provenance.ContainerType));
             }
@@ -363,6 +383,33 @@ public sealed class Fee2ContainerService
         }
         return null;
     }
+
+    private static async Task<string?> ReadOptionalObjectPropertyAsync(Guid guid, string propertyName)
+    {
+        try
+        {
+            var value = await Services.ApiInstance!.Object.GetPropertyAsync(guid, propertyName);
+            var converted = Services.ApiInstance.XmlHelper.ConvertToString(value);
+            return string.IsNullOrWhiteSpace(converted) ? null : converted.Trim();
+        }
+        catch
+        {
+            // Dynamic properties are version/type specific. Their absence is
+            // a normal discriminator, not a reason to abort the whole root.
+            return null;
+        }
+    }
+
+    private static bool IsCabinetElement(string? type) =>
+        NormalizeToken(type).EndsWith("CABINETELEMENT", StringComparison.Ordinal);
+
+    private static bool IsLogicObject(string? type) =>
+        NormalizeToken(type).Contains("LOGIC", StringComparison.Ordinal);
+
+    private static string NormalizeToken(string? value) => new((value ?? string.Empty)
+        .Where(char.IsLetterOrDigit)
+        .Select(char.ToUpperInvariant)
+        .ToArray());
 
     private static async Task<VariableAssignmentRead> ReadAssignmentsAsync(
         IEnumerable<Guid> variableGuids,

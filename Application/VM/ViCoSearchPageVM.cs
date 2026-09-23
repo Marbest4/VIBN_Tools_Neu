@@ -427,8 +427,12 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             return;
         _initialized = true;
         await LoadAutoRefreshSettingsAsync();
-        await RefreshCachedDataAsync();
-        ScheduleNextAutoRefresh();
+        // The compact legacy cache does not always contain the current card
+        // deadline.  Perform the same online refresh used by the toolbar once
+        // during startup so dates are complete before the first view is shown.
+        // The helper already falls back to the existing cache when Kanbanize
+        // is not configured or temporarily unavailable.
+        await RefreshFromBestAvailableSourceAsync();
         _ = RunPeriodicRefreshAsync(_lifetimeCancellation.Token);
     }
 
