@@ -1,5 +1,6 @@
 using FS.SDK;
 using FS.SDK.Scene.Objects;
+using System.Xml.Linq;
 using VIBN_Tools.ContainerToFee;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
@@ -37,6 +38,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.FeeType, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        await ReadCurrentSlotsAsync(uniqueRuntimeObjects, cancellationToken);
 
         var byId = new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
         var objects = new List<VisualFeeObject>(uniqueRuntimeObjects.Length);
@@ -78,6 +80,66 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
 
     internal static string CreateFeeObjectId(string guidString) =>
         $"fee:{guidString.Trim().ToLowerInvariant()}";
+
+    private async Task ReadCurrentSlotsAsync(
+        IReadOnlyList<FeeAbstractObject> objects,
+        CancellationToken cancellationToken)
+    {
+        var failed = 0;
+        foreach (var chunk in objects.Chunk(200))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string[] xmlTexts;
+            try
+            {
+                var guidTexts = chunk.Select(item => item.GuidString).ToArray();
+                xmlTexts = (await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(guidTexts)).ToArray();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                failed += chunk.Length;
+                logger.Warning(
+                    $"Der aktuelle Slotbestand eines FEE-SimObject-Blocks konnte nicht gelesen werden: {exception.Message}");
+                continue;
+            }
+            for (var index = 0; index < Math.Min(chunk.Length, xmlTexts.Length); index++)
+            {
+                try
+                {
+                    chunk[index].Slots = ParseSlotAssignments(XElement.Parse(xmlTexts[index]));
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    failed++;
+                }
+            }
+            failed += Math.Abs(chunk.Length - xmlTexts.Length);
+        }
+        if (failed > 0)
+            logger.Warning($"Für {failed} FEE-SimObject(s) konnte der aktuelle Slotbestand nicht gelesen werden.");
+    }
+
+    internal static Dictionary<string, Guid> ParseSlotAssignments(XElement xml)
+    {
+        var slots = xml.Element("Slots") ?? xml.Element("IOSlots") ??
+                    xml.Descendants("Slots").FirstOrDefault() ??
+                    xml.Descendants("IOSlots").FirstOrDefault();
+        if (slots is null)
+            return new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        return slots.Descendants("Assignment")
+            .Select(item => new
+            {
+                Name = item.Element("SlotName")?.Value?.Trim() ?? string.Empty,
+                Guid = Guid.TryParse(item.Element("AssignedGuid")?.Value, out var guid) ? guid : Guid.Empty,
+            })
+            .Where(item => item.Name.Length > 0 && item.Guid != Guid.Empty)
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Guid, StringComparer.OrdinalIgnoreCase);
+    }
 
     private static IReadOnlyCollection<string> GetAssignableTypeNames(Type runtimeType)
     {

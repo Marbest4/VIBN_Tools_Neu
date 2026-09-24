@@ -18,6 +18,7 @@ public sealed class ContainerToFeeVisualPlanService
     private readonly FeeSimObjectDiscovery _discovery;
     private readonly FeeInterfaceDiscovery _interfaceDiscovery;
     private readonly FeeSignalLinkDiscovery _signalLinkDiscovery;
+    private readonly FeeSimObjectLinkDiscovery _simObjectLinkDiscovery;
     private readonly LegacyContainerToFeeExecutionAdapter _executor;
     private readonly ExistingSimObjectLinkAdapter _linkExecutor;
     private readonly ExistingSignalLinkAdapter _signalLinkExecutor;
@@ -30,11 +31,13 @@ public sealed class ContainerToFeeVisualPlanService
     private IReadOnlyList<VisualFeeInterface> _feeInterfaces = [];
     private IReadOnlyList<VisualFeeSignal> _feeSignals = [];
     private IReadOnlyList<VisualFeeSignalLink> _feeSignalLinks = [];
+    private IReadOnlyList<VisualFeeObjectLink> _feeSimObjectLinks = [];
     private IReadOnlyDictionary<string, FeeInterface> _runtimeInterfaces =
         new Dictionary<string, FeeInterface>(StringComparer.OrdinalIgnoreCase);
     private bool _hasDiscoveredFeeObjects;
     private bool _hasDiscoveredFeeInterfaces;
     private bool _hasDiscoveredFeeSignalLinks;
+    private bool _hasDiscoveredFeeSimObjectLinks;
 
     public ContainerToFeeVisualPlanService()
         : this(new VisualPlanLogger())
@@ -49,6 +52,7 @@ public sealed class ContainerToFeeVisualPlanService
         _discovery = new FeeSimObjectDiscovery(logger);
         _interfaceDiscovery = new FeeInterfaceDiscovery(logger);
         _signalLinkDiscovery = new FeeSignalLinkDiscovery(logger);
+        _simObjectLinkDiscovery = new FeeSimObjectLinkDiscovery(logger);
         _executor = new LegacyContainerToFeeExecutionAdapter(logger);
         _linkExecutor = new ExistingSimObjectLinkAdapter(logger);
         _signalLinkExecutor = new ExistingSignalLinkAdapter(logger);
@@ -68,6 +72,7 @@ public sealed class ContainerToFeeVisualPlanService
     public IReadOnlyList<VisualFeeInterface> DiscoveredFeeInterfaces => _feeInterfaces;
     public IReadOnlyList<VisualFeeSignal> DiscoveredFeeSignals => _feeSignals;
     public IReadOnlyList<VisualFeeSignalLink> DiscoveredFeeSignalLinks => _feeSignalLinks;
+    public IReadOnlyList<VisualFeeObjectLink> DiscoveredFeeSimObjectLinks => _feeSimObjectLinks;
 
     public async Task<VisualPlanLoadResult> LoadXmlAsync(
         string xmlPath,
@@ -185,8 +190,32 @@ public sealed class ContainerToFeeVisualPlanService
         _runtimeObjects = result.RuntimeObjects;
         _feeContainerObjects = result.ContainerObjects;
         _hasDiscoveredFeeObjects = true;
+        _feeSimObjectLinks = [];
+        _hasDiscoveredFeeSimObjectLinks = false;
         RemoveStaleObjectAssignments();
         return _feeObjects;
+    }
+
+    public async Task<IReadOnlyList<VisualFeeObjectLink>> DiscoverFeeSimObjectLinksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !_hasDiscoveredFeeObjects)
+        {
+            _feeSimObjectLinks = [];
+            _hasDiscoveredFeeSimObjectLinks = false;
+            return _feeSimObjectLinks;
+        }
+
+        var assignedIds = plan.Assignments.Select(item => item.FeeObjectId)
+            .ToHashSet(StringComparer.Ordinal);
+        var relevantObjects = _runtimeObjects.Where(item => assignedIds.Contains(item.Key))
+            .Select(item => item.Value)
+            .ToArray();
+        var result = await _simObjectLinkDiscovery.DiscoverAsync(relevantObjects, cancellationToken);
+        _feeSimObjectLinks = result.Links;
+        _hasDiscoveredFeeSimObjectLinks = true;
+        return _feeSimObjectLinks;
     }
 
     public async Task<IReadOnlyList<VisualFeeInterface>> DiscoverFeeInterfacesAsync(
@@ -311,8 +340,8 @@ public sealed class ContainerToFeeVisualPlanService
             .ToArray();
         if (assignments.Length == 0)
             return new(VisualSimObjectConnectionKind.NotRead, "Noch kein vorhandenes FEE-SimObject zugeordnet.");
-        if (!_hasDiscoveredFeeObjects)
-            return new(VisualSimObjectConnectionKind.NotRead, "FEE-SimObjects wurden noch nicht aktualisiert.");
+        if (!_hasDiscoveredFeeSimObjectLinks)
+            return new(VisualSimObjectConnectionKind.NotRead, "FEE-SimObject-Verknüpfungen wurden noch nicht aktualisiert.");
         if (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
             return new(VisualSimObjectConnectionKind.LinkMissing, "Containerdefinition ist nicht auflösbar.");
         if (string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName))
@@ -342,7 +371,7 @@ public sealed class ContainerToFeeVisualPlanService
         foreach (var assignment in assignments)
         {
             if (!_runtimeObjects.TryGetValue(assignment.FeeObjectId, out var runtimeObject) ||
-                !IsObjectLinked(runtimeObject, logicGuid))
+                !IsObjectLinked(runtimeObject.Guid, logicGuid))
             {
                 unlinked.Add(assignment.FeeObjectName);
             }
@@ -356,13 +385,15 @@ public sealed class ContainerToFeeVisualPlanService
                 $"FEE-SimObject gefunden; Verknüpfung zur Logik fehlt oder ist nicht rücklesbar: {string.Join(", ", unlinked)}");
     }
 
-    private static bool IsObjectLinked(FeeAbstractObject runtimeObject, Guid expectedLogicGuid)
+    private bool IsObjectLinked(Guid runtimeObjectGuid, Guid expectedLogicGuid)
     {
-        if (runtimeObject.Slots?.Values.Contains(expectedLogicGuid) == true)
-            return true;
-        return Services.FeeObjects?.AllFeeObjects?.Any(item =>
-                   item.Guid == expectedLogicGuid &&
-                   item.Slots?.Values.Contains(runtimeObject.Guid) == true) == true;
+        var objectGuid = runtimeObjectGuid.ToString("D");
+        var logicGuid = expectedLogicGuid.ToString("D");
+        return _feeSimObjectLinks.Any(link =>
+            (string.Equals(link.ObjectGuidString, objectGuid, StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(link.LinkedObjectGuidString, logicGuid, StringComparison.OrdinalIgnoreCase)) ||
+            (string.Equals(link.ObjectGuidString, logicGuid, StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(link.LinkedObjectGuidString, objectGuid, StringComparison.OrdinalIgnoreCase)));
     }
 
     public IReadOnlyList<string> FindVerifiedSignalNodeIds(string feeSignalGuid)
@@ -1426,10 +1457,12 @@ public sealed class ContainerToFeeVisualPlanService
         _feeInterfaces = [];
         _feeSignals = [];
         _feeSignalLinks = [];
+        _feeSimObjectLinks = [];
         _runtimeInterfaces = new Dictionary<string, FeeInterface>(StringComparer.OrdinalIgnoreCase);
         _hasDiscoveredFeeObjects = false;
         _hasDiscoveredFeeInterfaces = false;
         _hasDiscoveredFeeSignalLinks = false;
+        _hasDiscoveredFeeSimObjectLinks = false;
         RaisePlanChanged();
     }
 

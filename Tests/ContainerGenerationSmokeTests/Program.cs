@@ -657,8 +657,28 @@ internal static class Program
                 throw new InvalidOperationException(
                     "Existing same-name MotionJoints were not reused for a multi-select visual target.");
             }
+            var objectLinks = objects.Select(item => new VisualFeeObjectLink(
+                    item.GuidString,
+                    "InTarget",
+                    logicGuid.ToString("D"),
+                    "SIM_TargetPosition"))
+                .ToArray();
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, objectLinks);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_hasDiscoveredFeeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, true);
             if (!service.GetSimObjectConnectionState(target.Id).IsVerified)
                 throw new InvalidOperationException("A linked existing MotionJoint was not verified as green in the visual plan.");
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, Array.Empty<VisualFeeObjectLink>());
+            if (service.GetSimObjectConnectionState(target.Id).IsVerified)
+            {
+                throw new InvalidOperationException(
+                    "An existing but unlinked MotionJoint was incorrectly verified as green in the visual plan.");
+            }
             if (!service.RemoveAssignment(target.Id, objects[0].Id).Success ||
                 loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 1)
             {

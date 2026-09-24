@@ -228,6 +228,13 @@ public sealed record VisualFeeSignalLink(
     string SlotName,
     bool IsIndirect);
 
+/// <summary>One currently readable slot-to-slot connection between two FEE scene objects.</summary>
+public sealed record VisualFeeObjectLink(
+    string ObjectGuidString,
+    string SlotName,
+    string LinkedObjectGuidString,
+    string LinkedSlotName);
+
 public enum VisualSignalConnectionKind
 {
     NotRead,

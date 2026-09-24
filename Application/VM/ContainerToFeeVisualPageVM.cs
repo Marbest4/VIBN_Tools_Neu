@@ -551,35 +551,16 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         await RunBusyAsync("FEE-SimObjects werden gelesen …", async cancellationToken =>
         {
-            var objectsTask = _planService.DiscoverFeeObjectsAsync(cancellationToken);
-            var interfacesTask = _planService.DiscoverFeeInterfacesAsync(cancellationToken);
-            await Task.WhenAll(objectsTask, interfacesTask);
-            IReadOnlyList<VisualFeeObject> objects = await objectsTask;
-            IReadOnlyList<VisualFeeInterface> interfaces = await interfacesTask;
-            RefreshFeeObjectProjection(objects);
-            RefreshFeeInterfaceProjection(interfaces);
-            // Auto-assignment raises PlanChanged and rebuilds the tree. Apply
-            // live discovery colours only afterwards so complete-container
-            // verification is not lost again in that rebuild.
-            int automaticAssignments = _planService.AutoAssignMatches();
-            var signalLinks = await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
-            ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
-            ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
-            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
-            var verifiedContainers = await _planService
-                .DiscoverVerifiedContainerIdsAsync(cancellationToken);
-            _verifiedContainerIds.Clear();
-            _verifiedContainerIds.UnionWith(verifiedContainers);
-            ApplyVerifiedContainerStates(verifiedContainers);
+            FeeRefreshSnapshot snapshot = await RefreshFeeStateAsync(cancellationToken);
             FeeObjectsView.Refresh();
-            FeeRefreshHint = objects.Count == 0 || _planService.DiscoveredFeeSignals.Count == 0
+            FeeRefreshHint = snapshot.ObjectCount == 0 || snapshot.SignalCount == 0
                 ? "FEE lieferte keine SimObjects oder Signale. Model Validation ausführen, damit der Projektzustand vollständig eingelesen wird, danach hier erneut 'FEE aktualisieren' wählen."
                 : "FEE-Daten wurden direkt über die API aktualisiert. Falls kürzlich geänderte SimObjects oder Signale fehlen: Model Validation ausführen und danach erneut aktualisieren.";
-            StatusText = automaticAssignments > 0
-                ? $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeContainerObjects.Count} Logik-/Cabinet-Objekte, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
-                  $"{signalLinks.Count} Signal-Slot-Verknüpfungen gelesen; {automaticAssignments} automatisch zugeordnet; {verifiedContainers.Count} Container vollständig verifiziert."
-                : $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeContainerObjects.Count} Logik-/Cabinet-Objekte, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
-                  $"{signalLinks.Count} Signal-Slot-Verknüpfungen gelesen; {verifiedContainers.Count} Container vollständig verifiziert.";
+            StatusText = snapshot.AutomaticAssignmentCount > 0
+                ? $"{snapshot.ObjectCount} FEE-SimObjects, {snapshot.ContainerObjectCount} Logik-/Cabinet-Objekte, {snapshot.SignalCount} Signale und {snapshot.InterfaceCount} Interfaces geladen; " +
+                  $"{snapshot.SignalLinkCount} Signal- und {snapshot.SimObjectLinkCount} SimObject-Slot-Verknüpfungen gelesen; {snapshot.AutomaticAssignmentCount} automatisch zugeordnet; {snapshot.VerifiedContainerCount} Container mit Provenienz abgeglichen."
+                : $"{snapshot.ObjectCount} FEE-SimObjects, {snapshot.ContainerObjectCount} Logik-/Cabinet-Objekte, {snapshot.SignalCount} Signale und {snapshot.InterfaceCount} Interfaces geladen; " +
+                  $"{snapshot.SignalLinkCount} Signal- und {snapshot.SimObjectLinkCount} SimObject-Slot-Verknüpfungen gelesen; {snapshot.VerifiedContainerCount} Container mit Provenienz abgeglichen.";
             _log.Information(LogArea, StatusText);
             InvalidateCommands();
         });
@@ -663,7 +644,24 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             StatusText = result.Message;
             if (result.Success)
             {
-                MarkSelectedTreeNodesVerified();
+                GenerationProgressText = "FEE-Verknüpfungen werden rückgelesen …";
+                try
+                {
+                    await RefreshFeeStateAsync(cancellationToken);
+                    FeeObjectsView.Refresh();
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    _log.Warning(
+                        LogArea,
+                        $"Generierung abgeschlossen, die FEE-Verknüpfungen konnten anschließend nicht verifiziert werden: {exception.Message}");
+                    StatusText = result.Message +
+                                 " Die Anzeige bleibt bis zum nächsten erfolgreichen 'FEE aktualisieren' unverifiziert.";
+                }
                 GenerationProgress = 100;
                 GenerationProgressText = "FEE-Generierung abgeschlossen.";
                 _log.Information(LogArea, result.Message);
@@ -698,7 +696,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 PublishIssues(result.Issues);
                 StatusText = result.Message;
                 if (result.Success)
+                {
+                    await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
+                    ApplyDiscoveredSimObjectStates();
                     _log.Information(LogArea, result.Message);
+                }
                 else
                     _log.Warning(LogArea, result.Message);
         });
@@ -1001,6 +1003,46 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         });
     }
 
+    private async Task<FeeRefreshSnapshot> RefreshFeeStateAsync(CancellationToken cancellationToken)
+    {
+        var objectsTask = _planService.DiscoverFeeObjectsAsync(cancellationToken);
+        var interfacesTask = _planService.DiscoverFeeInterfacesAsync(cancellationToken);
+        await Task.WhenAll(objectsTask, interfacesTask);
+        IReadOnlyList<VisualFeeObject> objects = await objectsTask;
+        IReadOnlyList<VisualFeeInterface> interfaces = await interfacesTask;
+        RefreshFeeObjectProjection(objects);
+        RefreshFeeInterfaceProjection(interfaces);
+
+        // Auto-assignment raises PlanChanged and rebuilds the tree. Apply all
+        // live discovery states afterwards, otherwise that rebuild can mask a
+        // missing SimObject-slot link with a stale green container state.
+        int automaticAssignments = _planService.AutoAssignMatches();
+        var signalLinksTask = _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
+        var simObjectLinksTask = _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
+        await Task.WhenAll(signalLinksTask, simObjectLinksTask);
+        IReadOnlyList<VisualFeeSignalLink> signalLinks = await signalLinksTask;
+        IReadOnlyList<VisualFeeObjectLink> simObjectLinks = await simObjectLinksTask;
+        ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
+        ApplyDiscoveredSimObjectStates();
+        ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+        RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
+        IReadOnlySet<string> verifiedContainers = await _planService
+            .DiscoverVerifiedContainerIdsAsync(cancellationToken);
+        _verifiedContainerIds.Clear();
+        _verifiedContainerIds.UnionWith(verifiedContainers);
+        ApplyVerifiedContainerStates(verifiedContainers);
+
+        return new FeeRefreshSnapshot(
+            objects.Count,
+            _planService.DiscoveredFeeContainerObjects.Count,
+            _planService.DiscoveredFeeSignals.Count,
+            interfaces.Count,
+            signalLinks.Count,
+            simObjectLinks.Count,
+            automaticAssignments,
+            verifiedContainers.Count);
+    }
+
     private ContainerToFeeVisualTargetVM? CreateTargetVm(string targetId)
     {
         var plan = _planService.CurrentPlan;
@@ -1233,6 +1275,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
             RefreshFeeInterfaceProjection(_planService.DiscoveredFeeInterfaces);
             ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
+            ApplyDiscoveredSimObjectStates();
             ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
             RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             ApplyVerifiedContainerStates(_verifiedContainerIds);
@@ -1372,8 +1415,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                     : ContainerToFeeVisualNodeState.Missing;
         }
 
-        if (node.Kind == VisualNodeKind.SimObject)
-            return ContainerToFeeVisualNodeState.Verified;
+        if (node.Kind == VisualNodeKind.SimObject && node.ParentId is not null)
+            return _planService.GetSimObjectConnectionState(node.ParentId).IsVerified
+                ? ContainerToFeeVisualNodeState.Verified
+                : ContainerToFeeVisualNodeState.FoundUnlinked;
 
         if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
             plan.SignalAssignments.Any(assignment => assignment.SignalNodeId == node.Id))
@@ -1443,7 +1488,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
 
         if (node.Kind == VisualNodeKind.SimObject)
-            return $"Vorhandenes FEE-SimObject: {node.Name}";
+            return node.ParentId is null
+                ? $"Vorhandenes FEE-SimObject: {node.Name}"
+                : $"Vorhandenes FEE-SimObject: {node.Name}. " +
+                  _planService.GetSimObjectConnectionState(node.ParentId).Description;
 
         return string.Empty;
     }
@@ -1533,19 +1581,26 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         RefreshAggregateTreeStates();
     }
 
-    private void MarkSelectedTreeNodesVerified()
+    private void ApplyDiscoveredSimObjectStates()
     {
         var plan = _planService.CurrentPlan;
         if (plan is null)
             return;
-        var selected = plan.Nodes
-            .Where(node => node.Kind == VisualNodeKind.Container && plan.IsGenerationSelected(node.Id))
-            .Select(node => node.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants())
-                     .Where(node => node.ContainerId is not null && selected.Contains(node.ContainerId)))
-            node.ApplyExecutionState(ContainerToFeeVisualNodeState.Verified);
-        _verifiedContainerIds.UnionWith(selected);
+        foreach (var targetNode in TreeRoots.SelectMany(root => root.SelfAndDescendants())
+                     .Where(node => node.Kind == VisualNodeKind.SimObjectTarget))
+        {
+            var hasAssignment = plan.Assignments.Any(item =>
+                string.Equals(item.TargetId, targetNode.Id, StringComparison.Ordinal));
+            if (!hasAssignment)
+                continue;
+            var connection = _planService.GetSimObjectConnectionState(targetNode.Id);
+            var state = connection.IsVerified
+                ? ContainerToFeeVisualNodeState.Verified
+                : ContainerToFeeVisualNodeState.FoundUnlinked;
+            targetNode.ApplyExecutionState(state, connection.Description);
+            foreach (var child in targetNode.Children.Where(item => item.Kind == VisualNodeKind.SimObject))
+                child.ApplyExecutionState(state, connection.Description);
+        }
         RefreshAggregateTreeStates();
     }
 
@@ -1553,7 +1608,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants())
                      .Where(node => node.ContainerId is not null &&
-                                    verifiedContainerIds.Contains(node.ContainerId)))
+                                    verifiedContainerIds.Contains(node.ContainerId) &&
+                                    node.Kind is VisualNodeKind.BasicFrame or VisualNodeKind.Interface))
             node.ApplyExecutionState(ContainerToFeeVisualNodeState.Verified);
         RefreshAggregateTreeStates();
     }
@@ -1799,7 +1855,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         ContainerToFeeVisualTreeNodeVM node)
     {
         var childStates = node.Children.Select(RefreshAggregateState).ToArray();
-        if (node.Kind is not (VisualNodeKind.Container or VisualNodeKind.Group or VisualNodeKind.Root) ||
+        if (node.Kind is not (VisualNodeKind.Container or VisualNodeKind.Group or VisualNodeKind.Root or VisualNodeKind.SimObjectTarget) ||
             childStates.Length == 0)
         {
             return node.EffectiveState;
@@ -1817,13 +1873,21 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             }
         }
 
-        var aggregate = childStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.Missing)
+        var effectiveChildStates = node.Kind == VisualNodeKind.SimObjectTarget
+            ? childStates.Append(node.EffectiveState).ToArray()
+            : childStates;
+        var relevantStates = effectiveChildStates
+            .Where(state => state.Kind != ContainerToFeeVisualNodeStateKind.None)
+            .ToArray();
+        var aggregate = relevantStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.Missing)
             ? ContainerToFeeVisualNodeState.Missing
-            : childStates.Any(state => state.Kind is ContainerToFeeVisualNodeStateKind.Planned or ContainerToFeeVisualNodeStateKind.None)
-                ? ContainerToFeeVisualNodeState.Planned
-                : childStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked)
-                    ? ContainerToFeeVisualNodeState.FoundUnlinked
-                : ContainerToFeeVisualNodeState.Verified;
+            : relevantStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked)
+                ? ContainerToFeeVisualNodeState.FoundUnlinked
+                : relevantStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.Planned)
+                    ? ContainerToFeeVisualNodeState.Planned
+                    : relevantStates.Length == 0
+                        ? ContainerToFeeVisualNodeState.None
+                        : ContainerToFeeVisualNodeState.Verified;
         node.ApplyExecutionState(aggregate);
         return node.EffectiveState;
     }
@@ -1832,6 +1896,16 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         Services.Connection ?? new FeeConnectionService();
 
 }
+
+internal sealed record FeeRefreshSnapshot(
+    int ObjectCount,
+    int ContainerObjectCount,
+    int SignalCount,
+    int InterfaceCount,
+    int SignalLinkCount,
+    int SimObjectLinkCount,
+    int AutomaticAssignmentCount,
+    int VerifiedContainerCount);
 
 public enum ContainerToFeeVisualNodeStateKind
 {

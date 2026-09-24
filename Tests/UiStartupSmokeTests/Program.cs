@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.ComponentModel;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -182,6 +183,7 @@ internal static class Program
 
             var visualPlanService = VerifyContainerToFeeVisualPlan();
             var visualContainerViewModel = new ContainerToFeeVisualPageVM(visualPlanService);
+            VerifyVisualSimObjectColorAggregation();
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
                 .First(node => node.Kind == VisualNodeKind.Container);
@@ -763,6 +765,122 @@ internal static class Program
                 Directory.Delete(directory, recursive: true);
         }
     }
+
+    private static void VerifyVisualSimObjectColorAggregation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-visual-colors-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var xmlPath = Path.Combine(directory, "Container.xml");
+        try
+        {
+            File.WriteAllText(xmlPath, """
+                <ContainerFile>
+                  <Container id="motion">
+                    <Component>Axis_1</Component><Type>Cylinder</Type><DataList>
+                      <Entry><ID>A</ID><Address>%Q0.0</Address><DataType>Bool</DataType><Signal>Move</Signal><Slot>PLC_OUT_ToWorkPos</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var load = service.LoadXmlAsync(xmlPath).GetAwaiter().GetResult();
+            if (!load.Success || load.Plan is null)
+                throw new InvalidOperationException("Visual colour aggregation plan could not be loaded.");
+
+            var logicGuid = Guid.NewGuid();
+            var jointGuid = Guid.NewGuid();
+            var visualObjectConstructor = typeof(VisualFeeObject).GetConstructors(
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                .Single();
+            var visualJoint = (VisualFeeObject)visualObjectConstructor.Invoke(
+            [
+                $"fee:{jointGuid:D}",
+                jointGuid.ToString("D"),
+                "Axis_1",
+                typeof(FeeJoint).FullName!,
+                "MotionJoint",
+                new[] { nameof(FeeJoint), typeof(FeeJoint).FullName! },
+            ]);
+            SetPrivateField(service, "_feeObjects", new[] { visualJoint });
+            SetPrivateField(service, "_hasDiscoveredFeeObjects", true);
+            SetPrivateField(
+                service,
+                "_feeContainerObjects",
+                new[]
+                {
+                    new VisualFeeContainerObject(
+                        logicGuid.ToString("D"),
+                        "Axis_1",
+                        VisualFeeContainerObjectKind.Logic,
+                        "Grob_Cylinder")
+                });
+            SetPrivateField(
+                service,
+                "_runtimeObjects",
+                new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal)
+                {
+                    [visualJoint.Id] = new FeeJoint { Guid = jointGuid, Name = "Axis_1" }
+                });
+            if (service.AutoAssignMatches() != 1)
+                throw new InvalidOperationException("Visual colour test could not auto-assign its MotionJoint.");
+            SetPrivateField(
+                service,
+                "_feeSimObjectLinks",
+                new[]
+                {
+                    new VisualFeeObjectLink(
+                        jointGuid.ToString("D"),
+                        "InTarget",
+                        logicGuid.ToString("D"),
+                        "SIM_TargetPosition")
+                });
+            SetPrivateField(service, "_hasDiscoveredFeeSimObjectLinks", true);
+
+            var viewModel = new ContainerToFeeVisualPageVM(service);
+            var nodes = viewModel.TreeRoots.SelectMany(root => root.SelfAndDescendants()).ToArray();
+            var simObject = nodes.Single(node => node.Kind == VisualNodeKind.SimObject);
+            var target = nodes.Single(node => node.Kind == VisualNodeKind.SimObjectTarget);
+            var group = nodes.Single(node => node.Kind == VisualNodeKind.Group && node.Name == "SimObjects");
+            var container = nodes.Single(node => node.Kind == VisualNodeKind.Container);
+            if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
+                target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
+                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified)
+            {
+                throw new InvalidOperationException(
+                    "A confirmed SimObject link did not propagate green from object to target and group.");
+            }
+
+            foreach (var node in nodes)
+                node.ApplyExecutionState(ContainerToFeeVisualNodeState.Verified);
+            InvokePrivate(viewModel, "RefreshAggregateTreeStates");
+            if (container.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified)
+                throw new InvalidOperationException("An all-green visual subtree did not produce a green container.");
+
+            SetPrivateField(service, "_feeSimObjectLinks", Array.Empty<VisualFeeObjectLink>());
+            InvokePrivate(viewModel, "ApplyDiscoveredSimObjectStates");
+            if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked ||
+                target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked ||
+                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked ||
+                container.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked)
+            {
+                throw new InvalidOperationException(
+                    "A missing SimObject link did not propagate purple to object, target, group and container.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void SetPrivateField(object target, string fieldName, object value) =>
+        target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(target, value);
+
+    private static void InvokePrivate(object target, string methodName) =>
+        target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(target, null);
 
     private static void VerifyCabinetAndUnknownPresence(string directory)
     {
