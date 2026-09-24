@@ -9,6 +9,26 @@ public partial class App : System.Windows.Application
     {
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         base.OnStartup(e);
+        if (e.Args.Any(argument => string.Equals(argument, "--configure-stdin", StringComparison.Ordinal)))
+        {
+            try
+            {
+                IbnRemoteDeploymentConfiguration.ConfigureFromStandardInput();
+                Shutdown(0);
+            }
+            catch (Exception exception)
+            {
+                IbnRemoteFileLog.Instance.Error(
+                    "Konfiguration",
+                    "Die Publish-Konfiguration konnte nicht geschützt gespeichert werden.",
+                    exception);
+                Shutdown(-2);
+            }
+            return;
+        }
+
+        MainWindow = new MainWindow();
+        MainWindow.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)

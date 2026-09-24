@@ -118,6 +118,10 @@
                         <p:TiaPortalPage />
                     </TabItem>
 
+                    <TabItem Header="Rockwell" ux:Icon.Kind="Cad">
+                        <p:RockwellPage />
+                    </TabItem>
+
                     <TabItem Header="CAD Wizard"
                              ux:Icon.Kind="Cad"
                              Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">

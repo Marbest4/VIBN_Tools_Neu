@@ -831,14 +831,24 @@ internal static class Program
         viewModel.FoundSignals.Add(secondSignal);
 
         viewModel.SelectedFoundContainer = firstContainer;
-        if (!firstSignal.IsRelatedToSelection || secondSignal.IsRelatedToSelection)
+        if (!firstSignal.IsRelatedToSelection || secondSignal.IsRelatedToSelection ||
+            !ReferenceEquals(viewModel.SignalRevealTarget, firstSignal))
             throw new InvalidOperationException("Container selection did not highlight exactly its FEE2Container signals.");
 
         viewModel.SelectedFoundSignal = secondSignal;
         if (!secondContainer.IsRelatedToSelection || firstContainer.IsRelatedToSelection ||
-            viewModel.SelectedFoundContainer is not null)
+            viewModel.SelectedFoundContainer is not null ||
+            !ReferenceEquals(viewModel.ContainerRevealTarget, secondContainer))
         {
             throw new InvalidOperationException("Signal selection did not highlight exactly its FEE2Container container.");
+        }
+
+        viewModel.ContainerSearchText = "sensor";
+        viewModel.SignalSearchText = "%I0.1";
+        if (viewModel.FoundContainersView.Cast<object>().Count() != 1 ||
+            viewModel.FoundSignalsView.Cast<object>().Count() != 1)
+        {
+            throw new InvalidOperationException("FEE2Container list search does not filter all visible fields.");
         }
     }
 

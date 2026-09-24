@@ -4,6 +4,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
+             xmlns:behaviors="clr-namespace:VIBN_Tools.Application.Behaviors"
              mc:Ignorable="d"
              d:DesignHeight="700" d:DesignWidth="1200">
     <UserControl.DataContext>
@@ -49,17 +50,17 @@
                   CanUserAddRows="False" CanUserDeleteRows="False"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True">
             <DataGrid.Columns>
-                <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
-                <DataGridTextColumn Header="FEE-Root" Binding="{Binding Name}" Width="2*" IsReadOnly="True" />
-                <DataGridTextColumn Header="GUID" Binding="{Binding Guid}" Width="2*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Quelle" Binding="{Binding SourceKind}" Width="2*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Container" Binding="{Binding ContainerCount}" Width="*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Signale" Binding="{Binding SignalCount}" Width="*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Aktuell gelesen" Binding="{Binding UpdatedSignalCount}" Width="*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Fehlend" Binding="{Binding MissingSignalCount}" Width="*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Slotrouten" Binding="{Binding UpdatedSlotCount}" Width="*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Slot ungeklärt" Binding="{Binding UnresolvedSlotCount}" Width="*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Quellfingerprint" Binding="{Binding Provenance.SourceFingerprint, TargetNullValue=-}" Width="2*" IsReadOnly="True" />
+                <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Export" ToolTip="Legt fest, ob dieser oberste BasicFrame in das ContainerFile übernommen wird." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
+                <DataGridTextColumn Binding="{Binding Name}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="FEE-Root" ToolTip="Name des obersten BasicFrames, der den auszulesenden FEE-Teilbaum begrenzt." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding Guid}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="GUID" ToolTip="Eindeutige FEE-Objektkennung des Hauptknotens." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding SourceKind}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quelle" ToolTip="Zeigt, ob der Inhalt aus Provenienz oder durch Live-Rekonstruktion des FEE-Modells stammt." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding ContainerCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Container" ToolTip="Anzahl der unter diesem Root sicher erkannten Container." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding SignalCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Signale" ToolTip="Anzahl der dem Root zugeordneten Signale im rekonstruierten ContainerFile." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding UpdatedSignalCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Aktuell gelesen" ToolTip="Signale, deren aktuelle Daten erfolgreich aus FEE gelesen wurden." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding MissingSignalCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Fehlend" ToolTip="Provenienz-Signale, die im aktuellen FEE-Projekt nicht mehr gefunden wurden." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding UpdatedSlotCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Slotrouten" ToolTip="Signalzuordnungen, deren aktueller FEE-Slot eindeutig ermittelt wurde." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding UnresolvedSlotCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Slot ungeklärt" ToolTip="Signalzuordnungen ohne eindeutig rekonstruierbaren Zielslot; vor Export prüfen." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding Provenance.SourceFingerprint, TargetNullValue=-}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quellfingerprint" ToolTip="Hash des ContainerFiles, aus dem dieser Root ursprünglich erzeugt wurde; '-' bedeutet keine Provenienz." /></DataGridTextColumn.Header></DataGridTextColumn>
             </DataGrid.Columns>
         </DataGrid>
 
@@ -90,7 +91,12 @@
                 <ColumnDefinition Width="3*" />
             </Grid.ColumnDefinitions>
             <GroupBox Header="Erkannte Container">
-                <DataGrid ItemsSource="{Binding FoundContainers}" SelectedItem="{Binding SelectedFoundContainer}"
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <TextBox Margin="4" Padding="6,3" Text="{Binding ContainerSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Container nach Komponente, Typ oder Anzahl der Signale durchsuchen." />
+                <DataGrid Grid.Row="1" ItemsSource="{Binding FoundContainersView}" SelectedItem="{Binding SelectedFoundContainer}"
+                          behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
@@ -110,10 +116,16 @@
                         </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
+                </Grid>
             </GroupBox>
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
             <GroupBox Grid.Column="2" Header="Erkannte Signalzuordnungen">
-                <DataGrid ItemsSource="{Binding FoundSignals}" SelectedItem="{Binding SelectedFoundSignal}"
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <TextBox Margin="4" Padding="6,3" Text="{Binding SignalSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Signalzuordnungen nach Container, Signal, Slot, Adresse, Datentyp, ID oder Status durchsuchen." />
+                <DataGrid Grid.Row="1" ItemsSource="{Binding FoundSignalsView}" SelectedItem="{Binding SelectedFoundSignal}"
+                          behaviors:DataGridRevealBehavior.RevealItem="{Binding SignalRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
@@ -136,11 +148,16 @@
                         </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
+                </Grid>
             </GroupBox>
 
             <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
             <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="Nicht containerrelevante FEE-Objekte – vollständig prüfen und bei Bedarf manuell zuordnen">
-                <DataGrid ItemsSource="{Binding NonContainerObjects}" AutoGenerateColumns="False"
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <TextBox Margin="4" Padding="6,3" Text="{Binding ObjectSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Nicht zugeordnete Objekte nach Name, FEE-Typ, Grund oder Zielcontainer durchsuchen." />
+                <DataGrid Grid.Row="1" ItemsSource="{Binding NonContainerObjectsView}" AutoGenerateColumns="False"
                           IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
@@ -167,6 +184,7 @@
                         </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
+                </Grid>
             </GroupBox>
         </Grid>
 

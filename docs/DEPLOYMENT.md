@@ -46,8 +46,14 @@ Setup-EXE mit installiertem Inno Setup 6:
 Separate IBN-Remote-Einzeldatei (kein FEE-SDK und kein Inno Setup erforderlich):
 
 ```powershell
-.\scripts\Publish-IbnRemote.ps1
+.\scripts\Publish-IbnRemote.ps1 -InWorkFilter 'GM7283'
 ```
+
+Das Skript fragt Kanbanize-API-Key und RDP-Passwort als verdeckte Eingaben ab. Es schreibt den Filter als Assembly-Metadatum in die erzeugte EXE und übergibt die Secrets ausschließlich über die umgeleitete Standardeingabe an einen Konfigurationslauf der EXE. Die Secrets landen nicht in der EXE, im Repository, in einer JSON-Datei oder in der Prozesskommandozeile, sondern im Windows Credential Manager des Benutzers, der das Publish ausführt.
+
+Das ist eine bewusste Sicherheitsgrenze: Eine EXE mit eingebettetem entschlüsselbarem Passwort wäre kein sicherer Secret-Speicher. Die veröffentlichte EXE ist deshalb für das Windows-Profil vorkonfiguriert, unter dem `Publish-IbnRemote.ps1` läuft. Wird sie auf einen anderen Rechner oder zu einem anderen Windows-Benutzer kopiert, muss das Publish-/Konfigurationsskript dort erneut unter diesem Zielkonto ausgeführt werden. `-SkipCredentialConfiguration` ist nur für einen Buildtest vorgesehen.
+
+Zur Laufzeit besitzt IBN Remote keine Oberfläche zum Ändern von Zugangsdaten oder Kanbanize-Daten. Es aktualisiert Kanbanize ausschließlich lesend, filtert nur die Projekttitel der Spalte `In Arbeit` und zeigt ausschließlich PC, Online, In Arbeit, Ende In Arbeit, Standort, Sonstiges und Software. RDP verwendet Benutzer und Passwort automatisch aus KONFIGURATION beziehungsweise Credential Manager.
 
 `Build-Installer.ps1` führt Restore und self-contained Publish genau einmal aus und ruft danach den Inno-Compiler auf. Dabei wird kein zwischenzeitliches ZIP mehr erzeugt. Inno Setup 6 ist ausschließlich der Verpacker für Dateien, Verknüpfungen und Deinstallation; die Anwendung wird bereits vorher durch `dotnet publish` gebaut. Für das portable ZIP ist Inno Setup nicht erforderlich.
 
@@ -66,3 +72,7 @@ Ergebnisse:
 4. SHA-256 veröffentlicht und geprüft.
 5. Installation auf sauberem Windows-x64-PC getestet.
 6. Start, Konfiguration, ViCo/Kanbanize, TIA-Bridge und Deinstallation getestet.
+
+## Produktversion
+
+`VibnToolsVersion` in `Directory.Build.props` ist die einzige Versionsquelle für `VIBN_Tools.exe`, `VIBN_Tools_IBN.exe` und den durch `Build-Installer.ps1` erzeugten Installer. Die Version wird bewusst in dem Release-Commit erhöht: Patch für kompatible Fehlerkorrekturen, Minor für neue Funktionen, Major für inkompatible Änderungen. Die Hauptoberfläche liest die Dateiversion der laufenden EXE und zeigt zusätzlich deren letzten Schreibzeitpunkt als Buildzeit an.

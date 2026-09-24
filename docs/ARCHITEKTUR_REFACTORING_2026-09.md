@@ -18,6 +18,7 @@ Ein eigenes Projekt pro sichtbarem Reiter ist nicht generell sinnvoll. Ein Reite
 | gemeinsame WPF-Helfer | eigenes Projekt `VIBN_Tools.SharedWpf` | von Hauptanwendung und IBN-Remote wiederverwendete PasswordBox-Bindung, Observable-Basis und Commands |
 | ViCo/Kanbanize | bestehende Trennung Core/Infrastructure/Application beibehalten | Fachregeln und Adapter sind bereits sauber getrennt |
 | TIA | Contracts, Client und separaten Bridgeprozess beibehalten | unterschiedliche Laufzeitgrenzen und kontrollierbarer Fehler-/Abbruchbereich |
+| Rockwell | eigenes Projekt `VIBN_Tools.Rockwell` | L5X/XML-Bearbeitung ist ohne WPF und ohne Hersteller-DLL testbar; UI und Dateidialoge bleiben im Hauptprojekt |
 | Container2FEE, ModelValidation, SpecialDevices | vorerst im Hauptprojekt | gemeinsame FEE-SDK-Objekte, `Services` und Containerklassen erzeugen noch eine starke Rückkopplung; ein Projekt pro Reiter würde diese Kopplung nur verdecken |
 
 Die gleichnamigen Ordner `ViCo` und `Kanbanize` in `VIBN_Tools.Core` und `VIBN_Tools.Infrastructure` sind daher keine doppelten Feature-Implementierungen. Core enthält Ports, unveränderliche Modelle und Regeln ohne Netzwerk-/Dateisystemzugriff; Infrastructure enthält die konkreten HTTP-, JSON-, Credential- und Cache-Adapter. Die UI-Orchestrierung verbleibt in `Application/VM`. Ein Zusammenlegen würde diese prüfbare Abhängigkeitsrichtung aufheben. Klassen werden innerhalb ihrer Schicht über fachlichen Namen und Namespace zugeordnet; zusätzliche Reiternamen in jedem Typnamen würden die Bezeichner verlängern, aber keine Mehrdeutigkeit beseitigen.
@@ -31,6 +32,7 @@ VIBN_Tools.exe
   ├─ VIBN_Tools.ContainerGeneration
   │    └─ VIBN_Tools.SharedWpf
   ├─ VIBN_Tools.SharedWpf
+  ├─ VIBN_Tools.Rockwell
   └─ VIBN_Tools.Tia.Client
        └─ VIBN_Tools.Tia.Contracts
 
@@ -39,6 +41,8 @@ VIBN_Tools.TiaBridge.exe (net48)
 ```
 
 Das Hauptprojekt kompiliert `ContainerGeneration/**` und `SharedWpf/**` nicht mehr über seine rekursive SDK-Wildcard. Beide Ordner besitzen eigene Projektdateien und werden ausschließlich per `ProjectReference` eingebunden. Dadurch werden versehentliche Doppelkompilierung und versteckte Paketabhängigkeiten verhindert. Die XSD-Ressourcen liegen jetzt beim Feature, das sie verwendet. Ihr Zugriff erfolgt über die definierende Assembly; die in Containerdateien ausgegebene Produktversion bleibt die Version der gestarteten Anwendung.
+
+`VIBN_Tools.Rockwell` folgt derselben Regel. `RockwellProjectEditor` kapselt Laden, Analyse, idempotente Änderungen und atomisches Speichern von L5X-Dateien. Die WPF-Schicht kennt nur den Editor und zeigt Status/Prüfhinweise an; sie enthält keine L5X-Parsinglogik.
 
 ## Wiederverwendete technische Bausteine
 

@@ -9,12 +9,12 @@
     <Nullable>annotations</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-	<Version>1.1.0</Version>
+	<Version>$(VibnToolsVersion)</Version>
 	<!-- A machine with a serviced .NET 8 Desktop Runtime (for example 8.0.30)
 	     must run a build whose minimum framework version is 8.0.0. -->
 	<RollForward>LatestPatch</RollForward>
 	<BaseOutputPath>$(MSBuildProjectDirectory)\artifacts\build\</BaseOutputPath>
-	<DefaultItemExcludes>$(DefaultItemExcludes);Tests\**;ContainerGeneration\**;SharedWpf\**;VIBN_Tools.Core\**;VIBN_Tools.Infrastructure\**;VIBN_Tools.Tia.Client\**;VIBN_Tools.Tia.Contracts\**;VIBN_Tools.TiaBridge\**;VIBN_Tools.IbnRemote\**;VIBN_Tools.IbnRemote.Infrastructure\**;Grob Generation Interface\**;SDK\**</DefaultItemExcludes>
+	<DefaultItemExcludes>$(DefaultItemExcludes);Tests\**;ContainerGeneration\**;SharedWpf\**;VIBN_Tools.Core\**;VIBN_Tools.Infrastructure\**;VIBN_Tools.Rockwell\**;VIBN_Tools.Tia.Client\**;VIBN_Tools.Tia.Contracts\**;VIBN_Tools.TiaBridge\**;VIBN_Tools.IbnRemote\**;VIBN_Tools.IbnRemote.Infrastructure\**;Grob Generation Interface\**;SDK\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- F5 must work on a development PC without a separately matching global
@@ -72,6 +72,7 @@
     <ProjectReference Include="ContainerGeneration\VIBN_Tools.ContainerGeneration.csproj" />
     <ProjectReference Include="SharedWpf\VIBN_Tools.SharedWpf.csproj" />
     <ProjectReference Include="VIBN_Tools.Infrastructure\VIBN_Tools.Infrastructure.csproj" />
+    <ProjectReference Include="VIBN_Tools.Rockwell\VIBN_Tools.Rockwell.csproj" />
     <ProjectReference Include="VIBN_Tools.Tia.Client\VIBN_Tools.Tia.Client.csproj" />
   </ItemGroup>
 

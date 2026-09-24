@@ -29,7 +29,12 @@ if ($null -eq $compiler) {
 
 Push-Location $repositoryRoot
 try {
-    & $compiler 'installer\VIBN_Tools.iss'
+    [xml]$buildProperties = Get-Content -LiteralPath 'Directory.Build.props'
+    $productVersion = [string]($buildProperties.Project.PropertyGroup.VibnToolsVersion | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($productVersion)) {
+        throw 'VibnToolsVersion fehlt in Directory.Build.props.'
+    }
+    & $compiler "/DMyAppVersion=$productVersion" 'installer\VIBN_Tools.iss'
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup ist mit Exitcode $LASTEXITCODE fehlgeschlagen." }
 }
 finally {

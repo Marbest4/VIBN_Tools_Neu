@@ -1,7 +1,11 @@
+#ifndef MyAppVersion
+  #define MyAppVersion "1.2.0"
+#endif
+
 [Setup]
 AppId={{6798D3CD-9220-4F7F-A95A-17BBCE971E32}
 AppName=VIBN Tools
-AppVersion=1.0.0
+AppVersion={#MyAppVersion}
 DefaultDirName={autopf}\VIBN Tools
 DefaultGroupName=VIBN Tools
 OutputDir=..\artifacts\installer

@@ -1,9 +1,8 @@
 <Window x:Class="VIBN_Tools.IbnRemote.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:shared="clr-namespace:VIBN_Tools.SharedWpf;assembly=VIBN_Tools.SharedWpf"
         Title="VIBN Tools – IBN Remote"
-        Width="680" Height="520" MinWidth="480" MinHeight="340"
+        Width="1120" Height="620" MinWidth="760" MinHeight="420"
         WindowStartupLocation="CenterScreen" UseLayoutRounding="True">
     <Grid Margin="10">
         <Grid.RowDefinitions>
@@ -16,20 +15,18 @@
 
         <DockPanel Grid.Row="0" Margin="0,0,0,8">
             <TextBlock DockPanel.Dock="Left" VerticalAlignment="Center"
-                       FontSize="20" FontWeight="SemiBold" Text="IBN Remote" />
+                       FontSize="20" FontWeight="SemiBold" Text="IBN Remote · Nur Lesen" />
             <Button DockPanel.Dock="Right" MinWidth="105" Height="32" Margin="8,0,0,0"
                     Content="Aktualisieren" Command="{Binding RefreshCommand}" />
             <TextBlock Margin="12,0" HorizontalAlignment="Right" VerticalAlignment="Center"
                        Foreground="#FF666666" Text="{Binding SourceStatus}" TextTrimming="CharacterEllipsis" />
         </DockPanel>
 
-        <TextBox Grid.Row="1" MinHeight="32" Margin="0,0,0,8" Padding="7,3"
-                 VerticalContentAlignment="Center"
-                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                 ToolTip="PC, Projekt, Software, Standort, Projekt-IP, Sonstiges oder Benutzer filtern" />
+        <Border Grid.Row="1" Margin="0,0,0,8" Padding="8,5" Background="#FFE9F2FB" CornerRadius="3">
+            <TextBlock Text="{Binding FilterDescription}" TextWrapping="Wrap"
+                       ToolTip="Der Filter wird beim Publish fest in die EXE-Metadaten geschrieben und ausschließlich auf Projektkarten mit Status 'In Arbeit' angewendet." />
+        </Border>
 
-        <!-- The operational default deliberately shows only the three values
-             an IBN user needs for workstation selection. -->
         <DataGrid Grid.Row="2"
                   ItemsSource="{Binding Results}"
                   SelectedItem="{Binding SelectedWorkstation}"
@@ -44,7 +41,7 @@
                   FrozenColumnCount="1"
                   HorizontalScrollBarVisibility="Auto">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="PC" Binding="{Binding PcName}" Width="135" />
+                <DataGridTextColumn Header="PC" Binding="{Binding PcName}" Width="125" />
                 <DataGridTemplateColumn Header="Online" Width="82">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
@@ -54,105 +51,26 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Projekte (Planung / in Arbeit)" Binding="{Binding Projects}" Width="*" MinWidth="230" />
+                <DataGridTextColumn Header="In Arbeit (Projekt)" Binding="{Binding WorkingProjects}" Width="2*" MinWidth="230" />
+                <DataGridTextColumn Header="Ende In Arbeit" Binding="{Binding WorkingEnd}" Width="130" />
+                <DataGridTextColumn Header="Standort" Binding="{Binding Location}" Width="140" />
+                <DataGridTextColumn Header="Sonstiges" Binding="{Binding Other}" Width="*" MinWidth="150" />
+                <DataGridTextColumn Header="Software" Binding="{Binding Software}" Width="*" MinWidth="170" />
             </DataGrid.Columns>
         </DataGrid>
 
-        <ScrollViewer Grid.Row="3" MaxHeight="270" Margin="0,8,0,0"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Auto">
-            <StackPanel MinWidth="440">
-                <GroupBox Header="Erweiterte Anzeige und Verbindung">
-                    <Border Margin="0,5,0,0" Padding="9" Background="#FFF3F5F7" CornerRadius="4">
-                        <StackPanel>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-                                <TextBlock Grid.Row="0" FontWeight="SemiBold" Text="Belegung" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedWorkstation.Occupancy}" />
-                                <TextBlock Grid.Row="1" Margin="0,3,0,0" FontWeight="SemiBold" Text="Software" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,3,0,0" Text="{Binding SelectedWorkstation.Software}" TextWrapping="Wrap" />
-                                <TextBlock Grid.Row="2" Margin="0,3,0,0" FontWeight="SemiBold" Text="Standort" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,3,0,0" Text="{Binding SelectedWorkstation.Location}" TextWrapping="Wrap" />
-                                <TextBlock Grid.Row="3" Margin="0,3,0,0" FontWeight="SemiBold" Text="Projekt-IP" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,3,0,0" Text="{Binding SelectedWorkstation.ProjectIp}" />
-                                <TextBlock Grid.Row="4" Margin="0,3,0,0" FontWeight="SemiBold" Text="Sonstiges" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,3,0,0" Text="{Binding SelectedWorkstation.Other}" TextWrapping="Wrap" />
-                                <TextBlock Grid.Row="5" Margin="0,3,0,0" FontWeight="SemiBold" Text="Benutzer" />
-                                <TextBlock Grid.Row="5" Grid.Column="1" Margin="0,3,0,0" Text="{Binding SelectedWorkstation.UserName}" />
-                                <TextBlock Grid.Row="6" Margin="0,3,0,0" FontWeight="SemiBold" Text="RDP-Sitzung" />
-                                <TextBlock Grid.Row="6" Grid.Column="1" Margin="0,3,0,0" Text="{Binding SelectedWorkstation.RemoteSession}" TextWrapping="Wrap" />
-                                <TextBlock Grid.Row="7" Margin="0,3,0,0" FontWeight="SemiBold" Text="Letzte Anmeldung" />
-                                <TextBlock Grid.Row="7" Grid.Column="1" Margin="0,3,0,0" Text="{Binding SelectedWorkstation.LastLogon}" TextWrapping="Wrap" />
-                            </Grid>
-
-                            <WrapPanel Margin="0,9,0,0">
-                                <TextBlock Margin="0,0,7,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="Monitore:" />
-                                <CheckBox Content="1" IsChecked="{Binding UseMonitor1}" />
-                                <CheckBox Margin="10,0,0,0" Content="2" IsChecked="{Binding UseMonitor2}" IsEnabled="{Binding HasMonitor2}" />
-                                <CheckBox Margin="10,0,0,0" Content="3" IsChecked="{Binding UseMonitor3}" IsEnabled="{Binding HasMonitor3}" />
-                                <CheckBox Margin="10,0,0,0" Content="4" IsChecked="{Binding UseMonitor4}" IsEnabled="{Binding HasMonitor4}" />
-                            </WrapPanel>
-                            <WrapPanel Margin="0,8,0,0">
-                                <Button MinWidth="125" MinHeight="31" Padding="7,3" Content="Remote (Auto)"
-                                        Command="{Binding ConnectAutomaticCommand}"
-                                        CommandParameter="{Binding SelectedWorkstation}"
-                                        IsEnabled="{Binding SelectedWorkstation.CanConnect}"
-                                        ToolTip="Verwendet das konfigurierte RDP-Passwort nur temporär im Windows-Anmeldemanager." />
-                                <Button MinWidth="125" MinHeight="31" Margin="7,0,0,0" Padding="7,3" Content="RDP mit Dialog"
-                                        Command="{Binding ConnectWithPromptCommand}"
-                                        CommandParameter="{Binding SelectedWorkstation}"
-                                        IsEnabled="{Binding SelectedWorkstation.CanConnect}" />
-                            </WrapPanel>
-                        </StackPanel>
-                    </Border>
-                </GroupBox>
-
-                <GroupBox Margin="0,7,0,0">
-                    <GroupBox.Header>
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontWeight="SemiBold" Text="Zugangsdaten" />
-                            <TextBlock Margin="8,0,0,0" Foreground="#FF666666" Text="{Binding CredentialSummary}" />
-                        </StackPanel>
-                    </GroupBox.Header>
-                    <Border Margin="0,5,0,0" Padding="9" Background="#FFF3F5F7" CornerRadius="4">
-                        <StackPanel>
-                            <TextBlock FontWeight="SemiBold" Text="Kanbanize API-Key" />
-                            <TextBlock Margin="0,2,0,3" Foreground="#FF666666" Text="{Binding KanbanizeApiKeyStatus}" />
-                            <PasswordBox MinHeight="31" Padding="7,3"
-                                         shared:PasswordBoxBindingBehavior.Password="{Binding KanbanizeApiKeyInput, Mode=TwoWay}"
-                                         ToolTip="Leer lassen, wenn der vorhandene Wert unverändert bleiben soll." />
-                            <Button Margin="0,5,0,0" HorizontalAlignment="Left" MinWidth="95" Content="API-Key löschen"
-                                    Command="{Binding DeleteKanbanizeApiKeyCommand}" />
-
-                            <TextBlock Margin="0,9,0,0" FontWeight="SemiBold" Text="Remote-Desktop-Passwort" />
-                            <TextBlock Margin="0,2,0,3" Foreground="#FF666666" Text="{Binding RemoteDesktopPasswordStatus}" />
-                            <PasswordBox MinHeight="31" Padding="7,3"
-                                         shared:PasswordBoxBindingBehavior.Password="{Binding RemoteDesktopPasswordInput, Mode=TwoWay}" />
-                            <WrapPanel Margin="0,6,0,0">
-                                <Button MinWidth="120" Content="Eingaben speichern" Command="{Binding SaveCredentialsCommand}" />
-                                <Button MinWidth="125" Margin="7,0,0,0" Content="Passwort löschen"
-                                        Command="{Binding DeleteRemoteDesktopPasswordCommand}" />
-                            </WrapPanel>
-                            <TextBlock Margin="0,7,0,0" Foreground="#FF666666"
-                                       Text="{Binding CredentialStatus}" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-                </GroupBox>
-            </StackPanel>
-        </ScrollViewer>
+        <WrapPanel Grid.Row="3" Margin="0,9,0,0">
+            <TextBlock Margin="0,0,7,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="Monitore:" />
+            <CheckBox Content="1" IsChecked="{Binding UseMonitor1}" />
+            <CheckBox Margin="10,0,0,0" Content="2" IsChecked="{Binding UseMonitor2}" IsEnabled="{Binding HasMonitor2}" />
+            <CheckBox Margin="10,0,0,0" Content="3" IsChecked="{Binding UseMonitor3}" IsEnabled="{Binding HasMonitor3}" />
+            <CheckBox Margin="10,0,16,0" Content="4" IsChecked="{Binding UseMonitor4}" IsEnabled="{Binding HasMonitor4}" />
+            <Button MinWidth="170" MinHeight="32" Content="Remote Desktop starten"
+                    Command="{Binding ConnectAutomaticCommand}"
+                    CommandParameter="{Binding SelectedWorkstation}"
+                    IsEnabled="{Binding SelectedWorkstation.CanConnect}"
+                    ToolTip="Verwendet automatisch den Benutzer der KONFIGURATION-Karte und das beim Publish geschützte RDP-Passwort." />
+        </WrapPanel>
 
         <Border Grid.Row="4" Margin="0,8,0,0" Padding="8,5" Background="#FFF3F5F7" CornerRadius="3">
             <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
+using System.Windows.Data;
 using System.Xml.Linq;
 using Microsoft.Win32;
 using VIBN_Tools.ContainerToFeeVisual;
@@ -23,6 +24,11 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private string _statusText = "FEE verbinden und Hauptknoten einlesen.";
     private Fee2ContainerFoundContainerVM? _selectedFoundContainer;
     private Fee2ContainerFoundSignalVM? _selectedFoundSignal;
+    private Fee2ContainerFoundContainerVM? _containerRevealTarget;
+    private Fee2ContainerFoundSignalVM? _signalRevealTarget;
+    private string _containerSearchText = string.Empty;
+    private string _signalSearchText = string.Empty;
+    private string _objectSearchText = string.Empty;
 
     public Fee2ContainerPageVM()
         : this(new Fee2ContainerService(), Services.Connection ?? new FeeConnectionService()) { }
@@ -43,6 +49,17 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         AddObjectAsContainerCommand = new RelayCommand<Fee2ContainerUnmappedObjectVM>(
             AddObjectAsContainer,
             item => item is { CanAdd: true } && !IsBusy);
+        FoundContainersView = CollectionViewSource.GetDefaultView(FoundContainers);
+        FoundSignalsView = CollectionViewSource.GetDefaultView(FoundSignals);
+        NonContainerObjectsView = CollectionViewSource.GetDefaultView(NonContainerObjects);
+        FoundContainersView.Filter = item => item is Fee2ContainerFoundContainerVM container &&
+            Matches(ContainerSearchText, container.Component, container.Type, container.OriginalSignalCount.ToString());
+        FoundSignalsView.Filter = item => item is Fee2ContainerFoundSignalVM signal &&
+            Matches(SignalSearchText, signal.Container, signal.ContainerType, signal.Signal, signal.Slot,
+                signal.Address, signal.DataType, signal.SignalId, signal.AssignmentState, signal.Note);
+        NonContainerObjectsView.Filter = item => item is Fee2ContainerUnmappedObjectVM feeObject &&
+            Matches(ObjectSearchText, feeObject.Name, feeObject.FeeType, feeObject.Reason,
+                feeObject.TargetComponent, feeObject.TargetContainerType);
         _connection.PropertyChanged += OnConnectionPropertyChanged;
     }
 
@@ -51,6 +68,9 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; } = new();
     public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; } = new();
     public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new();
+    public ICollectionView FoundContainersView { get; }
+    public ICollectionView FoundSignalsView { get; }
+    public ICollectionView NonContainerObjectsView { get; }
     public ICommand RefreshCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand CancelCommand { get; }
@@ -61,6 +81,65 @@ public sealed class Fee2ContainerPageVM : MvvmBase
 
     public IReadOnlyList<string> SupportedContainerTypes =>
         FeeContainerLiveReconstructor.SupportedContainerTypes;
+
+    public string ContainerSearchText
+    {
+        get => _containerSearchText;
+        set
+        {
+            if (_containerSearchText == value)
+                return;
+            _containerSearchText = value ?? string.Empty;
+            OnPropertyChanged();
+            FoundContainersView.Refresh();
+        }
+    }
+
+    public string SignalSearchText
+    {
+        get => _signalSearchText;
+        set
+        {
+            if (_signalSearchText == value)
+                return;
+            _signalSearchText = value ?? string.Empty;
+            OnPropertyChanged();
+            FoundSignalsView.Refresh();
+        }
+    }
+
+    public string ObjectSearchText
+    {
+        get => _objectSearchText;
+        set
+        {
+            if (_objectSearchText == value)
+                return;
+            _objectSearchText = value ?? string.Empty;
+            OnPropertyChanged();
+            NonContainerObjectsView.Refresh();
+        }
+    }
+
+    public Fee2ContainerFoundContainerVM? ContainerRevealTarget
+    {
+        get => _containerRevealTarget;
+        private set
+        {
+            _containerRevealTarget = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public Fee2ContainerFoundSignalVM? SignalRevealTarget
+    {
+        get => _signalRevealTarget;
+        private set
+        {
+            _signalRevealTarget = value;
+            OnPropertyChanged();
+        }
+    }
 
     public Fee2ContainerFoundContainerVM? SelectedFoundContainer
     {
@@ -86,6 +165,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     signal.ContainerId,
                     value.Id,
                     StringComparison.Ordinal);
+            SignalRevealTarget = FoundSignalsView.Cast<Fee2ContainerFoundSignalVM>()
+                .FirstOrDefault(signal => string.Equals(signal.ContainerId, value.Id, StringComparison.Ordinal));
         }
     }
 
@@ -113,6 +194,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     container.Id,
                     value.ContainerId,
                     StringComparison.Ordinal);
+            ContainerRevealTarget = FoundContainersView.Cast<Fee2ContainerFoundContainerVM>()
+                .FirstOrDefault(container => string.Equals(container.Id, value.ContainerId, StringComparison.Ordinal));
         }
     }
 
@@ -322,6 +405,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         NonContainerObjects.Clear();
         SelectedFoundContainer = null;
         SelectedFoundSignal = null;
+        ContainerRevealTarget = null;
+        SignalRevealTarget = null;
         if (SelectedRoot?.Editor is not { } editor)
             return;
         foreach (var container in editor.Containers)
@@ -331,6 +416,13 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         foreach (var item in editor.NonContainerObjects)
             NonContainerObjects.Add(item);
         SelectedFoundContainer = FoundContainers.FirstOrDefault(item => item.IsIncluded);
+    }
+
+    private static bool Matches(string query, params string?[] values)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return true;
+        return values.Any(value => value?.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase) == true);
     }
 
     private void RemoveContainer(Fee2ContainerFoundContainerVM? container)

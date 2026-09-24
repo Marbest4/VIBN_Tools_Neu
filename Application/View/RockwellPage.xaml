@@ -1,0 +1,59 @@
+<UserControl x:Class="VIBN_Tools.Application.View.RockwellPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
+             mc:Ignorable="d" d:DesignHeight="700" d:DesignWidth="1100">
+    <UserControl.DataContext><vm:RockwellPageVM /></UserControl.DataContext>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock FontSize="24" FontWeight="SemiBold" Text="Rockwell Studio 5000" />
+            <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
+                       Text="Bearbeitet L5X-Exporte gestuft und idempotent. Die Quelldatei bleibt unverändert; erst der Speichern-Schritt erzeugt eine neue Datei." />
+        </StackPanel>
+        <Grid Grid.Row="1" Margin="0,16,0,8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Button MinWidth="150" MinHeight="34" Content="L5X auswählen" Command="{Binding OpenCommand}" />
+            <TextBox Grid.Column="1" Margin="8,0,0,0" Padding="7,4" IsReadOnly="True" Text="{Binding SourcePath}" />
+        </Grid>
+        <Border Grid.Row="2" Margin="0,0,0,10" Padding="10" Background="#FFF3F5F7" CornerRadius="4">
+            <TextBlock Text="{Binding ProjectSummary}" TextWrapping="Wrap" />
+        </Border>
+        <Grid Grid.Row="3">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Änderungen vormerken" />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="1. Basic-Simulation ergänzen"
+                        Command="{Binding AddBasicsCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Ergänzt SIMULATION_MODES, SimulationMode und die benötigten Controller-Tags nur, wenn sie fehlen." />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="2. A001 Standard ergänzen"
+                        Command="{Binding AddStandardSimulationCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Erzeugt A001_Simulation aus B001_MapInputs und passt A000_Main an; vorhandene Routinen bleiben erhalten." />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="3. A001 Safety ergänzen"
+                        Command="{Binding AddSafetySimulationCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Erzeugt s_A001_Simulation in erkannten Safety-Programmen. Direkte Moduladressen werden als Prüfhinweis sicher auf NOP gesetzt." />
+                <Separator Margin="0,6" />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="Generierte L5X speichern"
+                        Command="{Binding SaveGeneratedCommand}" IsEnabled="{Binding CanEdit}" />
+                <Button MinHeight="38" Content="Generierte L5X öffnen"
+                        Command="{Binding OpenGeneratedCommand}" IsEnabled="{Binding CanOpenGenerated}" />
+            </StackPanel>
+            <GroupBox Grid.Column="2" Header="Änderungen und Prüfhinweise">
+                <ListBox ItemsSource="{Binding Messages}" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemTemplate><DataTemplate><TextBlock Margin="4" Text="{Binding}" TextWrapping="Wrap" /></DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
+            </GroupBox>
+        </Grid>
+        <Border Grid.Row="4" Margin="0,12,0,0" Padding="8,5" Background="#FFF3F5F7" CornerRadius="3">
+            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+        </Border>
+    </Grid>
+</UserControl>

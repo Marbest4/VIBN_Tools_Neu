@@ -35,6 +35,13 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
                 var endpoints = new List<RawLink>();
                 var assignments = await Services.ApiInstance.Interface
                     .GetAssignedSceneObjectsAsync(variableGuid);
+                if (assignments is null)
+                {
+                    logger.Warning(
+                        $"Die FEE-API hat für Signal {signal.Tag} ({signal.GuidString}) keine " +
+                        "Zuordnungsliste geliefert. Das Signal wird als unverknüpft behandelt.");
+                    return new SignalRead([], null);
+                }
                 foreach (var (objectGuid, slotNames) in assignments)
                 {
                     foreach (var slotName in slotNames ?? [])
@@ -45,6 +52,8 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
 
                         var linkedSlots = await Services.ApiInstance.Interface
                             .GetSlotSlotAssignmentAsync(objectGuid, "Input 01");
+                        if (linkedSlots is null)
+                            continue;
                         foreach (var (linkedGuidText, names) in linkedSlots)
                         {
                             if (!Guid.TryParse(linkedGuidText, out var linkedGuid))
@@ -100,7 +109,8 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
         try
         {
             var guidStrings = objectGuids.Select(guid => guid.ToString("D")).ToArray();
-            var values = (await Services.ApiInstance.Object.GetPropertiesAsync(guidStrings, "Type")).ToArray();
+            var propertyValues = await Services.ApiInstance.Object.GetPropertiesAsync(guidStrings, "Type");
+            var values = propertyValues?.ToArray() ?? [];
             cancellationToken.ThrowIfCancellationRequested();
             return objectGuids.Select((guid, index) => new
                 {

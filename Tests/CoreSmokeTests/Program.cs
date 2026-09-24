@@ -62,6 +62,10 @@ try
     await VerifyTypedTiaPipeProtocolAsync();
     Console.WriteLine("Running typed TIA pipe timeout diagnostic smoke test...");
     await VerifyTypedTiaPipeTimeoutDiagnosticAsync();
+    Console.WriteLine("Running Rockwell L5X editing smoke test...");
+    await RockwellSmokeTests.VerifyAsync(temporaryRoot);
+    Console.WriteLine("Running IBN Remote fixed in-work filter smoke test...");
+    IbnRemoteSelectionSmokeTests.Verify();
     Console.WriteLine("All ViCo core smoke tests passed.");
     return 0;
 }
