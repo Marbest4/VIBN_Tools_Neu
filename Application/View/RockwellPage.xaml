@@ -22,7 +22,8 @@
         <Grid Grid.Row="1" Margin="0,16,0,8">
             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <Button MinWidth="150" MinHeight="34" Content="L5X auswählen" Command="{Binding OpenCommand}" />
-            <TextBox Grid.Column="1" Margin="8,0,0,0" Padding="7,4" IsReadOnly="True" Text="{Binding SourcePath}" />
+            <TextBox Grid.Column="1" Margin="8,0,0,0" Padding="7,4" IsReadOnly="True"
+                     Text="{Binding SourcePath, Mode=OneWay}" />
         </Grid>
         <Border Grid.Row="2" Margin="0,0,0,10" Padding="10" Background="#FFF3F5F7" CornerRadius="4">
             <TextBlock Text="{Binding ProjectSummary}" TextWrapping="Wrap" />

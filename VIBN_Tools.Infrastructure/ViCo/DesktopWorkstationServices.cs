@@ -93,7 +93,8 @@ public sealed class WindowsRemoteDesktopService : IRemoteDesktopService
 
 /// <summary>
 /// Stores a credential only for the RDP startup window. The password comes
-/// from the injected per-user secret provider and is never compiled into the tool.
+/// from the injected provider; the provider decides whether it uses a secure
+/// per-user store or a deliberately embedded non-production test value.
 /// </summary>
 public sealed class WindowsTemporaryRemoteCredentialStore : IRemoteCredentialStore
 {

@@ -128,6 +128,11 @@ internal static class Program
             if (containerGenerationViewModel.CanCompareContainerFile)
                 throw new InvalidOperationException("ContainerFile comparison must require an active workspace.");
 
+            var rockwellPage = new RockwellPage();
+            if (rockwellPage.DataContext is not RockwellPageVM)
+                throw new InvalidOperationException("The Rockwell page has no Rockwell view model.");
+            ExerciseDeferredTemplates(rockwellPage);
+
             var specialDevicePage = new SpecialDevicePage();
             var specialDeviceViewModel = (SpecialDevicePageVM)specialDevicePage.DataContext;
             specialDeviceViewModel.SelectedManufacturer = DeviceCatalog.DeviceManufacturer.Keyence;
@@ -339,6 +344,7 @@ internal static class Program
                 searchPage,
                 new ViCoCopyPage(),
                 tiaPortalPage,
+                rockwellPage,
                 administrationPage,
                 kanbanizeCardPage,
                 specialDevicePage,

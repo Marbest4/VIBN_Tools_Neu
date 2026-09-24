@@ -69,7 +69,7 @@
                     Command="{Binding ConnectAutomaticCommand}"
                     CommandParameter="{Binding SelectedWorkstation}"
                     IsEnabled="{Binding SelectedWorkstation.CanConnect}"
-                    ToolTip="Verwendet automatisch den Benutzer der KONFIGURATION-Karte und das beim Publish geschützte RDP-Passwort." />
+                    ToolTip="Verwendet automatisch den Benutzer der KONFIGURATION-Karte und den in dieser Test-EXE eingebetteten RDP-Platzhalter." />
         </WrapPanel>
 
         <Border Grid.Row="4" Margin="0,8,0,0" Padding="8,5" Background="#FFF3F5F7" CornerRadius="3">

@@ -42,7 +42,7 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
     {
         _inWorkFilter = inWorkFilter?.Trim() ?? IbnRemoteDeploymentConfiguration.InWorkFilter;
         _credentialConfiguration = credentialConfiguration ??
-            new SecureUserCredentialConfigurationService();
+            new IbnRemoteEmbeddedCredentialConfigurationService();
         _remoteDesktop = new WindowsRemoteDesktopService(
             _options.WorkingDirectory,
             new WindowsTemporaryRemoteCredentialStore(_credentialConfiguration.GetRemoteDesktopPassword));

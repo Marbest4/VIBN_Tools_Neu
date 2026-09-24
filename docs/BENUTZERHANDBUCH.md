@@ -287,7 +287,7 @@ Diese Reiter arbeiten auf dem aktuell verbundenen FEE-Modell. Model Validation a
 
 ## Separate IBN-Remote-Ausgabe
 
-Für Inbetriebnehmer steht `VIBN_Tools_IBN.exe` bereit. Die kompakte Standardansicht enthält nur PC, Online und aktive Projekte; Statusdetails, Monitore und beide RDP-Buttons liegen in einer erweiterten Ansicht. API-Key und RDP-Passwort können in derselben kleinen Oberfläche geprüft, verdeckt gespeichert und gelöscht werden. FEE, TIA, Kanbanize-Schreibzugriffe und alle Generierungswerkzeuge sind nicht Teil dieses Pakets. Erstellung und Einrichtung: [IBN Remote](IBN_REMOTE.md).
+Für Inbetriebnehmer steht `VIBN_Tools_IBN.exe` bereit. Die read-only Ansicht enthält PC, Online, In-Arbeit-Projekt, dessen Enddatum, Standort, Sonstiges und Software sowie Monitorauswahl und automatischen RDP-Start. API-Key und RDP-Passwort sind in diesem Teststand als absichtlich ungültige, auslesbare Platzhalter eingebettet und nicht über die Oberfläche änderbar. FEE, TIA, Kanbanize-Schreibzugriffe und alle Generierungswerkzeuge sind nicht Teil dieses Pakets. Erstellung und Sicherheitsgrenze: [IBN Remote](IBN_REMOTE.md).
 
 ## Diagnose und Fehlerbehebung
 

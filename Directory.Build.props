@@ -4,7 +4,7 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <!-- Single source of truth for the two shipped executables and installer.
          Raise major/minor/patch here as part of the release commit. -->
-    <VibnToolsVersion>1.2.0</VibnToolsVersion>
+    <VibnToolsVersion>1.2.1</VibnToolsVersion>
     <!-- Pin the language independently from the installed SDK. This prevents
          new contextual keywords from changing an otherwise identical build. -->
     <LangVersion>12.0</LangVersion>
