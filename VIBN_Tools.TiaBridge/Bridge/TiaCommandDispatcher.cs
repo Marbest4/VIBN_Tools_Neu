@@ -86,6 +86,9 @@ public sealed class TiaCommandDispatcher
             case TiaCommands.ExportAxisInterfaceWorkbook:
                 return TiaDispatchResult.From(_session.ExportAxisInterfaceWorkbook(Read<TiaPathPayload>(request)));
 
+            case TiaCommands.CompileSelectedPlc:
+                return TiaDispatchResult.From(_session.CompileSelectedPlc());
+
             case TiaCommands.Save:
                 _session.Save();
                 return TiaDispatchResult.Empty();

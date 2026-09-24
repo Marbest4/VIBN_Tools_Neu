@@ -194,6 +194,12 @@
                         <p:AITrainingTestPage/>
                     </TabItem>
 
+                    <TabItem Header="Project Quality"
+                             ux:Icon.Kind="TaskListAssigned"
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ProjectQualityPage />
+                    </TabItem>
+
                     <TabItem Header="Administration"
                              ux:Icon.Kind="Settings"
                              Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">

@@ -29,6 +29,7 @@ Die Anwendung arbeitet defensiv: externe Aktionen werden erst nach einer bewusst
 | Model Control | Roboter, Achsen, Objekte und Simulation steuern | alle |
 | Interface Operation | Schnittstellen und Signale laden, verbinden und bearbeiten | alle |
 | AI-Test | Trainings-/Testbereich | Level9 |
+| Project Quality | Projektprofile, Quality Gate, Signalregister, Testszenarien und Adapter-/Compile-Nachweise | Level9 |
 
 Die Berechtigungen sind im Detail in der [Rollenverwaltung](ROLLENVERWALTUNG.md) beschrieben.
 
@@ -41,6 +42,7 @@ Mit **Navigation einklappen** im Kopfbereich wird die linke Navigation auf eine 
 3. Falls eine Karte benötigt wird, im Hauptreiter **Kanbanize Karten** zuerst die Vorschau ausführen und erst danach bewusst synchronisieren.
 4. Für TIA-nahe Schritte den Hauptreiter **TIA Portal** oder den TIA-Hardwarebereich auf der gemeinsamen Seite **SpecialDevices2FEE** verwenden.
 5. Änderungen, Fehler und externe Zugriffe am unteren Rand im Diagnoseprotokoll nachvollziehen.
+6. Vor Übergabe im Level9-Reiter **Project Quality** das Kundenprofil auswählen, Signalvergleich und Quality Gate ausführen sowie den JSON-/HTML-Bericht exportieren. Live-Grenzen stehen direkt im Reiter und im [Project-Quality-Handbuch](PROJECT_QUALITY_GATE.md).
 
 ## Project Settings
 

@@ -122,6 +122,16 @@ internal sealed class FakeTiaBridgeClient : ITiaBridgeClient
             FilePath = filePath,
         });
 
+    public TiaCompileResult CompileResult { get; set; } = new()
+    {
+        TargetName = "PLC_1",
+        TargetType = "PlcSoftware",
+        State = "Success",
+    };
+
+    public Task<TiaCompileResult> CompileSelectedPlcAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(CompileResult);
+
     public Task SaveAsync(CancellationToken cancellationToken = default)
     {
         Saved = true;

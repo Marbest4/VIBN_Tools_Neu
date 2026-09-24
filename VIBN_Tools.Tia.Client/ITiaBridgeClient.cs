@@ -63,5 +63,8 @@ public interface ITiaBridgeClient : IAsyncDisposable
         string filePath,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Compiles the selected PLC software and returns recursive diagnostics without saving the project.</summary>
+    Task<TiaCompileResult> CompileSelectedPlcAsync(CancellationToken cancellationToken = default);
+
     Task SaveAsync(CancellationToken cancellationToken = default);
 }

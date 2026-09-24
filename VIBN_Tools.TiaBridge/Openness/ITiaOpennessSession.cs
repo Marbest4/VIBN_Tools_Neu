@@ -40,5 +40,7 @@ public interface ITiaOpennessSession : IDisposable
 
     TiaAxisInterfaceExportResult ExportAxisInterfaceWorkbook(TiaPathPayload payload);
 
+    TiaCompileResult CompileSelectedPlc();
+
     void Save();
 }

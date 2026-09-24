@@ -345,6 +345,13 @@ internal static class Program
             if (!tiaPortalViewModel.IsLibraryOperationInfoVisible)
                 throw new InvalidOperationException("The TIA ViCo library explanation cannot be expanded.");
 
+            var projectQualityPage = new ProjectQualityPage();
+            if (projectQualityPage.DataContext is not ProjectQualityPageVM projectQualityViewModel ||
+                !projectQualityViewModel.Limitations.Contains("fachliche Freigabe", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The Project Quality page does not disclose its live-verification boundary.");
+            }
+
             var settingsPage = new SettingsPage();
             var settingsViewModel = (SettingsPageVM)settingsPage.DataContext;
             var interfaceOperationPage = new InterfaceOperationPage();
@@ -377,6 +384,7 @@ internal static class Program
                 aiTrainingPage,
                 settingsPage,
                 interfaceOperationPage,
+                projectQualityPage,
                 new DiagnosticsPanel()
             ];
 

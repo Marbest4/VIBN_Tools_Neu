@@ -12,6 +12,9 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] `Tests/Test-TiaHardwareTraversal.ps1` bestätigt Gerätegruppen, Local Session und exakt `E62–73/A62–67` sowie `E74–79/A68–79`.
 - [ ] `Tests/TiaLiveRead` liest aus dem geöffneten `Projekt1.ap20` genau eine PLC, drei Teilnehmer und sechs eindeutige adressführende Modulzeilen, ohne das Projekt zu speichern.
 - [ ] Anwendung startet ohne XamlParseException.
+- [ ] **Project Quality** lädt ohne Binding-Fehler; Profil speichern/neuladen, XML-Prüfung, Signalvergleich, Szenarioanzeige und JSON-/HTML-Export funktionieren.
+- [ ] Signalregister übernimmt Namens-/Adressänderungen mit Historie; Datentyp-, GUID- oder Mehrdeutigkeitskonflikte verändern die persistierte Datei nicht.
+- [ ] Container2FEE Visual schreibt nach Erfolg, Fehler und Abbruch ein Manifest; **Letzten Lauf reparieren** selektiert bei identischem Quellfingerabdruck nur offene Container.
 - [ ] Anwendung startet ohne FEE-Verbindungs-/Interface-Abfrage und ohne entsprechende Fehlermeldung; die gemeinsame `CoreApi`-Instanz wird vorbereitet, lädt aber keine Interfaces.
 
 ## Rollen und Navigation
@@ -78,6 +81,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] **Gesamtes TIA-Projekt speichern** ist von der Konfiguration getrennt und weist darauf hin, dass `Project.Save()` alle offenen Projektänderungen persistiert.
 - [ ] **ViCo-Bibliothek → Was wird gemacht?** beschreibt den manuellen Erstimport, kundenspezifische Bearbeitung, Export auf das Projektlaufwerk und den späteren Import einschließlich Überschreiben/Speichern.
 - [ ] TO-Export, TO-Import und Achsen-Schnittstelle sind als getrennte Buttons vorhanden; Hilfe und Log nennen Voraussetzungen, Dateiziele und Speicherwirkung.
+- [ ] **Ausgewählte PLC kompilieren** liefert reale Siemens-Compilerfehler/-warnungen samt Pfad und Laufzeit, speichert das Projekt nicht und hinterlegt nur bei tatsächlich ausgeführtem Compile einen Nachweis.
 - [ ] TIA-Projektübersicht und ViCo-Bibliothek sind auf einer gemeinsamen scrollbaren Seite bedienbar.
 - [ ] Die einzige Hardwareansicht unter SpecialDevices2FEE gruppiert gleiche Gerätenamen und zeigt Hardware-ID, GSDML, IP, Modultyp, Firmware, E-/A-Bereich und -Länge, Präfix, Logik und Status; #, Tiefe, Modul, Parent, Slot/Subslot, Pfad und Objektklasse sind ausgeblendet.
 - [ ] Die Logikauswahl bietet **Keine Logik**; eine entsprechend gesetzte Zeile gelangt auch mit aktivem Übernehmen-Haken nicht in die Warteschlange.
@@ -94,6 +98,12 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Special-Device-Hardwaretabelle übernimmt nur bewusst ausgewählte/validierte Zeilen.
 - [ ] Geräte erscheinen zuerst in der Warteschlange.
 - [ ] Fehlerhafte FEE-Erzeugung bleibt prüfbar in der Warteschlange.
+
+## Externe Simulationsadapter
+
+- [ ] FEE-Probe meldet nur bei bestätigter gemeinsamer SDK-Verbindung verfügbar; dies wird nicht mit einem ausgeführten Simulationstest verwechselt.
+- [ ] Emulate3D-/EKS-Bereitschaft meldet gefundene Installation/Projektpfad als Warnung **nicht live bestätigt**.
+- [ ] Vor Freigabe eines echten Herstelleradapters werden SDK-Version, Lizenz, Beispielprojekt, read-only Modellabfrage, Signalverknüpfung und Szenarioausführung separat live abgenommen.
 
 ## Bestehende VIBN-Funktionen
 

@@ -222,6 +222,36 @@
                 </Grid>
             </GroupBox>
 
+            <GroupBox Header="TIA Quality Gate" Margin="0,10,0,0">
+                <Grid Height="260" Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <DockPanel Margin="0,0,0,8">
+                        <Button DockPanel.Dock="Right" MinWidth="185"
+                                Content="Ausgewählte PLC kompilieren"
+                                Command="{Binding CompileQualityGateCommand}" />
+                        <TextBlock Margin="0,0,16,0" Text="{Binding CompileQualityGateInfo}"
+                                   TextWrapping="Wrap" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <ProgressBar Grid.Row="1" Height="8" Margin="0,0,0,8"
+                                 Minimum="0" Maximum="100" Value="{Binding OperationProgress, Mode=OneWay}" />
+                    <DataGrid Grid.Row="2" ItemsSource="{Binding CompileMessages}"
+                              AutoGenerateColumns="False" IsReadOnly="True"
+                              EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Pfad" Binding="{Binding Path}" Width="2*" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding State}" Width="120" />
+                            <DataGridTextColumn Header="Fehler" Binding="{Binding ErrorCount}" Width="65" />
+                            <DataGridTextColumn Header="Warnungen" Binding="{Binding WarningCount}" Width="85" />
+                            <DataGridTextColumn Header="Meldung" Binding="{Binding Description}" Width="3*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </GroupBox>
+
             <GroupBox Header="Programmbausteine und Datentypen" Margin="0,10,0,0">
                 <Grid Height="230" Margin="8">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>

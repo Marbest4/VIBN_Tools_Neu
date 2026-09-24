@@ -12,6 +12,7 @@ using VIBN_Tools.Core.Collections;
 using VIBN_Tools.Core.Diagnostics;
 using VIBN_Tools.SharedWpf.Commands;
 using VIBN_Tools.Settings;
+using VIBN_Tools.Quality;
 
 namespace VIBN_Tools.Application.VM;
 
@@ -50,6 +51,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private string _feeRefreshHint =
         "Nach Änderungen im FEE-Projekt zuerst 'FEE aktualisieren'. Fehlen danach erwartete Objekte, einmal Model Validation ausführen und anschließend erneut aktualisieren.";
     private readonly HashSet<string> _verifiedContainerIds = new(StringComparer.Ordinal);
+    private readonly GenerationManifestStore _manifestStore = new();
+    private readonly GenerationManifestBuilder _manifestBuilder = new();
+    private string _lastManifestSummary = "Noch kein Generierungsmanifest für diesen Plan erstellt.";
+    private string _lastManifestPath = string.Empty;
 
     public ContainerToFeeVisualPageVM()
         : this(new ContainerToFeeVisualPlanService(), ResolveConnection(), ApplicationLogService.Instance)
@@ -133,6 +138,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         ToggleTreeNodeGenerationCommand = new RelayCommand<ContainerToFeeVisualTreeNodeVM>(
             ToggleTreeNodeGeneration,
             node => node?.ContainerId is not null && !IsBusy);
+        ResumeLastGenerationCommand = new RelayCommand(
+            ResumeLastGeneration,
+            () => HasPlan && !IsBusy);
 
         _planService.PlanChanged += OnPlanChanged;
         _connection.PropertyChanged += OnConnectionPropertyChanged;
@@ -216,6 +224,20 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     public ICommand DeleteTreeNodeCommand { get; }
 
     public ICommand ToggleTreeNodeGenerationCommand { get; }
+
+    public ICommand ResumeLastGenerationCommand { get; }
+
+    public string LastManifestSummary
+    {
+        get => _lastManifestSummary;
+        private set { _lastManifestSummary = value; OnPropertyChanged(); }
+    }
+
+    public string LastManifestPath
+    {
+        get => _lastManifestPath;
+        private set { _lastManifestPath = value; OnPropertyChanged(); }
+    }
 
     public bool HasPlan => _planService.CurrentPlan is not null;
 
@@ -636,59 +658,143 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             acceptedErrors = errors;
         }
 
+        var startedUtc = DateTimeOffset.UtcNow;
+        var before = CaptureGenerationObservations();
         await RunBusyAsync("Container werden mit dem bestehenden Executor erzeugt …", async cancellationToken =>
         {
-            GenerationProgress = 0;
-            GenerationProgressText = "Generierung wird vorbereitet …";
-            var progress = new Progress<VisualGenerationProgress>(update =>
+            VisualExecutionResult? result = null;
+            try
             {
-                GenerationProgress = update.Percent;
-                GenerationProgressText = update.Message;
-            });
-            VisualExecutionResult result = await _planService.ExecuteAsync(
-                acceptedErrors,
-                progress,
-                cancellationToken);
-            _lastExecutionIssues = result.Issues
-                .Where(issue => issue.Severity == VisualIssueSeverity.Error)
-                .ToArray();
-            PublishIssues(result.Issues);
-            StatusText = result.Message;
-            if (result.Success)
-            {
-                GenerationProgressText = "FEE-Verknüpfungen werden rückgelesen …";
-                try
+                GenerationProgress = 0;
+                GenerationProgressText = "Generierung wird vorbereitet …";
+                var progress = new Progress<VisualGenerationProgress>(update =>
                 {
-                    await RefreshFeeStateAsync(cancellationToken);
-                    FeeObjectsView.Refresh();
-                }
-                catch (OperationCanceledException)
+                    GenerationProgress = update.Percent;
+                    GenerationProgressText = update.Message;
+                });
+                result = await _planService.ExecuteAsync(
+                    acceptedErrors,
+                    progress,
+                    cancellationToken);
+                _lastExecutionIssues = result.Issues
+                    .Where(issue => issue.Severity == VisualIssueSeverity.Error)
+                    .ToArray();
+                PublishIssues(result.Issues);
+                StatusText = result.Message;
+                if (result.Success)
                 {
-                    throw;
+                    GenerationProgressText = "FEE-Verknüpfungen werden rückgelesen …";
+                    try
+                    {
+                        await RefreshFeeStateAsync(cancellationToken);
+                        FeeObjectsView.Refresh();
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        _log.Warning(
+                            LogArea,
+                            $"Generierung abgeschlossen, die FEE-Verknüpfungen konnten anschließend nicht verifiziert werden: {exception.Message}");
+                        StatusText = result.Message +
+                                     " Die Anzeige bleibt bis zum nächsten erfolgreichen 'FEE aktualisieren' unverifiziert.";
+                    }
+                    GenerationProgress = 100;
+                    GenerationProgressText = "FEE-Generierung abgeschlossen.";
+                    _log.Information(LogArea, result.Message);
+                    MessageBox.Show(
+                        result.Message,
+                        "Container2FEE Visual",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
                 }
-                catch (Exception exception)
+                else
                 {
-                    _log.Warning(
-                        LogArea,
-                        $"Generierung abgeschlossen, die FEE-Verknüpfungen konnten anschließend nicht verifiziert werden: {exception.Message}");
-                    StatusText = result.Message +
-                                 " Die Anzeige bleibt bis zum nächsten erfolgreichen 'FEE aktualisieren' unverifiziert.";
+                    GenerationProgressText = "Generierung nicht vollständig abgeschlossen.";
+                    _log.Warning(LogArea, result.Message);
                 }
-                GenerationProgress = 100;
-                GenerationProgressText = "FEE-Generierung abgeschlossen.";
-                _log.Information(LogArea, result.Message);
-                MessageBox.Show(
-                    result.Message,
-                    "Container2FEE Visual",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                SaveGenerationManifest(startedUtc, before, result.Success, result.Message,
+                    result.Issues.Select(issue => $"[{issue.Code}] {issue.Message}"));
             }
-            else
+            catch (Exception exception)
             {
-                GenerationProgressText = "Generierung nicht vollständig abgeschlossen.";
-                _log.Warning(LogArea, result.Message);
+                SaveGenerationManifest(startedUtc, before, false,
+                    exception is OperationCanceledException ? "Generierung abgebrochen." : "Generierung mit Ausnahme beendet.",
+                    [exception.Message]);
+                throw;
             }
         });
+    }
+
+    private GenerationObjectObservation[] CaptureGenerationObservations() => TreeRoots
+        .SelectMany(root => root.SelfAndDescendants())
+        .Select(node => new GenerationObjectObservation(
+            node.ContainerId ?? (node.Kind == VisualNodeKind.Container ? node.Id : string.Empty),
+            node.Id,
+            node.Kind.ToString(),
+            node.Name,
+            node.EffectiveState.Kind.ToString(),
+            node.LinkedObjectDescription))
+        .ToArray();
+
+    private void SaveGenerationManifest(
+        DateTimeOffset startedUtc,
+        IReadOnlyList<GenerationObjectObservation> before,
+        bool success,
+        string summary,
+        IEnumerable<string> errors)
+    {
+        var plan = _planService.CurrentPlan;
+        if (plan is null)
+            return;
+        var manifest = _manifestBuilder.Build(
+            plan.SourceXmlPath,
+            plan.SourceFingerprint,
+            startedUtc,
+            success,
+            summary,
+            before,
+            CaptureGenerationObservations(),
+            errors);
+        LastManifestPath = _manifestStore.Save(manifest);
+        LastManifestSummary = $"Manifest: {manifest.Items.Count} Objekte; " +
+                              $"{manifest.UnresolvedContainerIds.Count} Container offen; " +
+                              $"{(manifest.Success ? "Lauf erfolgreich" : "Lauf unvollständig")}.";
+        var findings = manifest.Errors.Select(error => new QualityFinding(
+            LogArea, "GENERATION_MANIFEST_ERROR", QualityStatus.Failed, error)).ToArray();
+        QualityEvidenceStore.Instance.Upsert(new QualityEvidence(
+            LogArea,
+            LastManifestPath,
+            success && manifest.UnresolvedContainerIds.Count == 0 ? QualityStatus.Passed : QualityStatus.Failed,
+            LastManifestSummary,
+            DateTimeOffset.UtcNow,
+            findings));
+    }
+
+    private void ResumeLastGeneration()
+    {
+        var plan = _planService.CurrentPlan;
+        if (plan is null)
+            return;
+        var manifest = _manifestStore.LoadLatest(plan.SourceFingerprint);
+        if (manifest is null)
+        {
+            StatusText = "Für dieses ContainerFile wurde noch kein Generierungsmanifest gefunden.";
+            return;
+        }
+        var unresolved = manifest.UnresolvedContainerIds.ToHashSet(StringComparer.Ordinal);
+        if (unresolved.Count == 0)
+        {
+            StatusText = "Das letzte Manifest enthält keine offenen Container.";
+            return;
+        }
+        _planService.SetAllGenerationSelected(false);
+        foreach (var containerId in unresolved)
+            _planService.SetGenerationSelected(containerId, true);
+        LastManifestSummary = $"{unresolved.Count} offene Container aus Manifest {manifest.Id[..8]} zur Reparatur ausgewählt.";
+        StatusText = LastManifestSummary;
     }
 
     private async Task LinkOnlyAsync()

@@ -9,6 +9,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using VIBN_Tools.Core.Diagnostics;
+using VIBN_Tools.Quality;
 
 var temporaryRoot = Path.Combine(Path.GetTempPath(), $"vibn-vico-tests-{Guid.NewGuid():N}");
 
@@ -67,6 +68,8 @@ try
     await RockwellSmokeTests.VerifyAsync(temporaryRoot);
     Console.WriteLine("Running measurable performance-mode smoke test...");
     VerifyPerformanceMeasurement(temporaryRoot);
+    Console.WriteLine("Running project quality automation smoke test...");
+    await VerifyProjectQualityAutomationAsync(temporaryRoot);
     Console.WriteLine("Running IBN Remote fixed in-work filter smoke test...");
     IbnRemoteSelectionSmokeTests.Verify();
     Console.WriteLine("All ViCo core smoke tests passed.");
@@ -1098,7 +1101,7 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
         using var reader = new StreamReader(server, leaveOpen: true);
         using var writer = new StreamWriter(server, leaveOpen: true) { AutoFlush = true };
 
-        for (var requestIndex = 0; requestIndex < 8; requestIndex++)
+        for (var requestIndex = 0; requestIndex < 9; requestIndex++)
         {
             var requestLine = await reader.ReadLineAsync();
             var request = JsonSerializer.Deserialize<TiaRequestEnvelope>(requestLine!);
@@ -1111,6 +1114,7 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
                 4 => TiaCommands.ExportAxisConfigurations,
                 5 => TiaCommands.ImportAxisConfigurations,
                 6 => TiaCommands.ExportAxisInterfaceWorkbook,
+                7 => TiaCommands.CompileSelectedPlc,
                 _ => TiaCommands.Close
             };
             Assert(request?.Command == expectedCommand, $"Typed TIA pipe command '{expectedCommand}' was not received.");
@@ -1195,6 +1199,25 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
                         AxisCount = 1,
                         FilePath = "C:\\Exchange\\AxisValueTags.xlsx",
                     }),
+                    7 => JsonSerializer.Serialize(new TiaCompileResult
+                    {
+                        TargetName = "PLC_1",
+                        TargetType = "Device",
+                        State = "Warning",
+                        ErrorCount = 0,
+                        WarningCount = 1,
+                        DurationMilliseconds = 1234,
+                        Messages =
+                        [
+                            new TiaCompileMessage
+                            {
+                                Path = "PLC_1/Program blocks/FB1",
+                                State = "Warning",
+                                WarningCount = 1,
+                                Description = "Test warning",
+                            },
+                        ],
+                    }),
                     _ => JsonSerializer.Serialize((object?)null)
                 }
             };
@@ -1238,6 +1261,9 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
         var interfaceExport = await client.ExportAxisInterfaceWorkbookAsync("C:\\Exchange\\AxisValueTags.xlsx");
         Assert(interfaceExport.AxisCount == 1 && interfaceExport.FilePath.EndsWith("AxisValueTags.xlsx", StringComparison.Ordinal),
             "TIA axis interface workbook results must survive the typed pipe boundary.");
+        var compile = await client.CompileSelectedPlcAsync();
+        Assert(compile.Success && compile.WarningCount == 1 && compile.Messages.Single().Path.Contains("FB1", StringComparison.Ordinal),
+            "TIA compile evidence must survive the typed pipe boundary.");
     }
     finally
     {
@@ -1245,6 +1271,95 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
     }
 
     await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+}
+
+static async Task VerifyProjectQualityAutomationAsync(string temporaryRoot)
+{
+    var qualityRoot = Path.Combine(temporaryRoot, "quality");
+    Directory.CreateDirectory(qualityRoot);
+    var requirementsPath = Path.Combine(qualityRoot, "Requirements.xml");
+    var containerPath = Path.Combine(qualityRoot, "Container.xml");
+    await File.WriteAllTextAsync(requirementsPath, "<Requirements><Type Name=\"Cylinder\" /></Requirements>");
+    await File.WriteAllTextAsync(containerPath,
+        "<Root><Container><Component>Cylinder_1</Component><Type>Cylinder</Type>" +
+        "<Entry><ID>S1</ID><Signal>Home</Signal><Slot>PLC_IN_HOME</Slot><Address>E0.0</Address><DataType>Bool</DataType></Entry>" +
+        "<Entry><ID>S2</ID><Signal>Move</Signal><Slot>PLC_OUT_MOVE</Slot><Address>A0.0</Address><DataType>Bool</DataType></Entry>" +
+        "</Container></Root>");
+
+    var profilePath = Path.Combine(qualityRoot, "profiles.json");
+    var profileStore = new JsonProjectProfileStore(profilePath);
+    var profile = ProjectProfile.Create("Quality Test") with
+    {
+        ProjectRoot = qualityRoot,
+        RequirementsPath = requirementsPath,
+        ContainerPath = containerPath,
+        AllowedContainerTypes = ["Cylinder"],
+        NamingRules = new Dictionary<string, string> { ["Signal"] = "^[A-Z].+$" },
+        SignalAddressRanges = ["E0-E9", "A0-A9"],
+        SimulationTools =
+        [
+            new SimulationToolConfiguration("Emulate3D", true, qualityRoot, containerPath),
+        ],
+    };
+    profileStore.Save(new ProjectProfileCollection(profile.Id, [profile]));
+    Assert(profileStore.Load().Profiles.Single().ContainerPath == containerPath,
+        "Project profiles must roundtrip atomically.");
+
+    var signalReader = new ContainerSignalObservationReader();
+    var observations = signalReader.Read(containerPath);
+    Assert(observations.Count == 2 && observations.Any(item => item.SignalId == "S1" && item.Address == "E0.0"),
+        "Container signals must be read namespace-independently.");
+    var registryPath = Path.Combine(qualityRoot, "signals.json");
+    var registry = new SignalIdentityRegistry(registryPath);
+    var initial = registry.Reconcile(observations);
+    Assert(initial.Added == 2 && initial.Conflicts == 0 && File.Exists(registryPath),
+        "The first signal reconciliation must persist stable identities.");
+    var changed = registry.Reconcile(observations.Select(item => item.SignalId == "S1" ? item with { Address = "E4.0" } : item));
+    Assert(changed.Updated == 1 && changed.Identities.Single(item => item.SignalId == "S1").PreviousAddresses.Contains("E0.0"),
+        "Address changes must preserve signal identity and history.");
+    var conflict = registry.Reconcile(observations.Select(item => item.SignalId == "S1" ? item with { DataType = "DInt" } : item), persist: false);
+    Assert(conflict.Conflicts == 1 && conflict.Findings.Any(item => item.Code == "SIGNAL_IDENTITY_CONFLICT"),
+        "Datatype identity conflicts must not be silently merged.");
+
+    var scenarios = new SimulationTestScenarioGenerator().Generate(containerPath);
+    Assert(scenarios.Scenarios.Count == 1 && scenarios.Scenarios[0].RequiresDomainReview,
+        "A cylinder must create a reviewable neutral simulation scenario.");
+
+    var adapter = new ExternalSimulationReadinessAdapter(
+        "Emulate3D", "Emulate3D", [SimulationCapability.DiscoverModel]);
+    var probe = await adapter.ProbeAsync(profile);
+    Assert(probe.IsAvailable && !probe.IsLiveVerified,
+        "External adapter readiness must never be presented as a live API test.");
+
+    var evidenceStore = new QualityEvidenceStore(Path.Combine(qualityRoot, "evidence.json"));
+    evidenceStore.Upsert(new QualityEvidence("TIA Compile", "PLC_1", QualityStatus.Passed,
+        "0 errors", DateTimeOffset.UtcNow, []));
+    var gate = new ProjectQualityGateService(adapters: [adapter], evidenceStore: evidenceStore);
+    var gateResult = await gate.RunAsync(profile);
+    Assert(gateResult.Report.OverallStatus == QualityStatus.Warning && gateResult.Report.GeneratedScenarioCount == 1 &&
+           gateResult.Report.Evidence.Single().Area == "TIA Compile" &&
+           gateResult.Report.Findings.Any(item => item.Code == "PROFILE_POLICY_PASSED"),
+        "The central quality gate must combine structural checks, scenarios, adapters and evidence.");
+    var reportPaths = new QualityGateReportWriter().Write(gateResult.Report, Path.Combine(qualityRoot, "reports"));
+    Assert(File.Exists(reportPaths.JsonPath) && File.Exists(reportPaths.HtmlPath),
+        "Quality Gate JSON and HTML reports must be written.");
+
+    var manifestBuilder = new GenerationManifestBuilder();
+    var before = new[] { new GenerationObjectObservation("C1", "N1", "Signal", "Home", "Planned", string.Empty) };
+    var after = new[] { new GenerationObjectObservation("C1", "N1", "Signal", "Home", "Verified", "fee-guid") };
+    var manifest = manifestBuilder.Build(containerPath, "fingerprint", DateTimeOffset.UtcNow, true,
+        "done", before, after, []);
+    Assert(manifest.Items.Single().Action == GenerationManifestAction.CreatedOrCompleted && manifest.UnresolvedContainerIds.Count == 0,
+        "Generation manifests must classify completed work.");
+    var unfinished = manifestBuilder.Build(containerPath, "unfinished", DateTimeOffset.UtcNow, false,
+        "pending", before, before, []);
+    Assert(unfinished.Items.Single().Action == GenerationManifestAction.Pending &&
+           unfinished.UnresolvedContainerIds.SequenceEqual(["C1"]),
+        "An unchanged planned node must remain resumable rather than appearing complete.");
+    var manifestStore = new GenerationManifestStore(Path.Combine(qualityRoot, "manifests"));
+    _ = manifestStore.Save(manifest);
+    Assert(manifestStore.LoadLatest("fingerprint")?.Items.Count == 1,
+        "The latest matching generation manifest must be resumable.");
 }
 
 static async Task VerifyTypedTiaPipeTimeoutDiagnosticAsync()

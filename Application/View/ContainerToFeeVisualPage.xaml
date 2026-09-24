@@ -118,6 +118,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -154,6 +155,9 @@
                             ToolTip="Ordnet freie Ziele nach identischem Komponentenname und kompatiblem FEE-Typ zu." />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Abbrechen"
                             Command="{Binding CancelCommand}" />
+                    <Button Style="{StaticResource VisualToolbarButton}" Content="Letzten Lauf reparieren"
+                            Command="{Binding ResumeLastGenerationCommand}"
+                            ToolTip="Wählt anhand des letzten Vorher-/Nachher-Manifests nur fehlgeschlagene oder offene Container erneut aus." />
 
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Alle selektieren"
                             Command="{Binding SelectAllCommand}" />
@@ -180,6 +184,9 @@
                 </WrapPanel>
                 <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,7,0,0"
                            Foreground="#FF245B78" Text="{Binding FeeRefreshHint}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,4,0,0"
+                           Foreground="#FF5A3C00" Text="{Binding LastManifestSummary}" TextWrapping="Wrap"
+                           ToolTip="{Binding LastManifestPath}" />
             </Grid>
         </Border>
 

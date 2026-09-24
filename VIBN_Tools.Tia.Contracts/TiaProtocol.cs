@@ -21,6 +21,7 @@ public static class TiaCommands
     public const string ExportAxisConfigurations = "technology.export-axis-configurations";
     public const string ImportAxisConfigurations = "technology.import-axis-configurations";
     public const string ExportAxisInterfaceWorkbook = "technology.export-axis-interface-workbook";
+    public const string CompileSelectedPlc = "quality.compile-selected-plc";
     public const string Save = "project.save";
     public const string Close = "system.close";
 }

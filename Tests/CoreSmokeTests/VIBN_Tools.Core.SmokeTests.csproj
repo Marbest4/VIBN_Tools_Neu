@@ -17,6 +17,7 @@
     <ProjectReference Include="..\..\VIBN_Tools.Core\VIBN_Tools.Core.csproj" />
     <ProjectReference Include="..\..\VIBN_Tools.Infrastructure\VIBN_Tools.Infrastructure.csproj" />
     <ProjectReference Include="..\..\VIBN_Tools.Rockwell\VIBN_Tools.Rockwell.csproj" />
+    <ProjectReference Include="..\..\VIBN_Tools.Quality\VIBN_Tools.Quality.csproj" />
     <ProjectReference Include="..\..\VIBN_Tools.Tia.Client\VIBN_Tools.Tia.Client.csproj" />
   </ItemGroup>
 

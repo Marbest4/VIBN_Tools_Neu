@@ -256,6 +256,12 @@ public sealed class NamedPipeTiaBridgeClient : ITiaBridgeClient
             new TiaPathPayload { Path = filePath },
             cancellationToken);
 
+    public Task<TiaCompileResult> CompileSelectedPlcAsync(CancellationToken cancellationToken = default) =>
+        SendAsync<EmptyPayload, TiaCompileResult>(
+            TiaCommands.CompileSelectedPlc,
+            EmptyPayload.Instance,
+            cancellationToken);
+
     public Task SaveAsync(CancellationToken cancellationToken = default) =>
         SendWithoutResultAsync(TiaCommands.Save, EmptyPayload.Instance, cancellationToken);
 

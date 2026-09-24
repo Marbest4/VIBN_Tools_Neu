@@ -121,6 +121,42 @@ public sealed class TiaAxisParameterResult
     public string Error { get; set; } = string.Empty;
 }
 
+public sealed class TiaCompileResult
+{
+    public string TargetName { get; set; } = string.Empty;
+
+    public string TargetType { get; set; } = string.Empty;
+
+    public string State { get; set; } = string.Empty;
+
+    public int ErrorCount { get; set; }
+
+    public int WarningCount { get; set; }
+
+    public long DurationMilliseconds { get; set; }
+
+    public List<TiaCompileMessage> Messages { get; set; } = new();
+
+    public bool Success => ErrorCount == 0 &&
+                           State.IndexOf("Error", StringComparison.OrdinalIgnoreCase) < 0 &&
+                           State.IndexOf("Failed", StringComparison.OrdinalIgnoreCase) < 0;
+}
+
+public sealed class TiaCompileMessage
+{
+    public string Path { get; set; } = string.Empty;
+
+    public string State { get; set; } = string.Empty;
+
+    public string Description { get; set; } = string.Empty;
+
+    public int ErrorCount { get; set; }
+
+    public int WarningCount { get; set; }
+
+    public List<TiaCompileMessage> Children { get; set; } = new();
+}
+
 /// <summary>
 /// Single source of truth for the parameters changed by the explicit axis
 /// configuration command. All values are integer Openness parameter values.

@@ -1,0 +1,126 @@
+<UserControl x:Class="VIBN_Tools.Application.View.ProjectQualityPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
+             mc:Ignorable="d" d:DesignHeight="850" d:DesignWidth="1500">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+    <UserControl.DataContext>
+        <vm:ProjectQualityPageVM />
+    </UserControl.DataContext>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <TextBlock FontSize="24" FontWeight="SemiBold" Text="Project Quality Gate" />
+        <DockPanel Grid.Row="1" Margin="0,12,0,10">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button MinWidth="120" Margin="6,0,0,0" Content="Neu" Command="{Binding NewProfileCommand}" />
+                <Button MinWidth="120" Margin="6,0,0,0" Content="Speichern" Command="{Binding SaveProfileCommand}" />
+                <Button MinWidth="120" Margin="6,0,0,0" Content="Löschen" Command="{Binding DeleteProfileCommand}" />
+                <Button MinWidth="160" Margin="18,0,0,0" Content="Quality Gate ausführen" Command="{Binding RunQualityGateCommand}" />
+                <Button MinWidth="150" Margin="6,0,0,0" Content="Bericht exportieren" Command="{Binding ExportReportCommand}" />
+            </StackPanel>
+            <ComboBox Width="330" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}"
+                      DisplayMemberPath="Name" />
+        </DockPanel>
+
+        <TabControl Grid.Row="2">
+            <TabItem Header="Projektprofil">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" VerticalAlignment="Center" Text="Name"/><TextBox Grid.Row="0" Grid.Column="1" Margin="4" Text="{Binding Editor.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Kunde"/><TextBox Grid.Row="1" Grid.Column="1" Margin="4" Text="{Binding Editor.Customer}"/>
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Projektwurzel"/><TextBox Grid.Row="2" Grid.Column="1" Margin="4" Text="{Binding Editor.ProjectRoot}"/><Button Grid.Row="2" Grid.Column="2" Content="…" Command="{Binding BrowseProjectRootCommand}"/>
+                        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Requirements.xml"/><TextBox Grid.Row="3" Grid.Column="1" Margin="4" Text="{Binding Editor.RequirementsPath}"/><Button Grid.Row="3" Grid.Column="2" Content="…" Command="{Binding BrowseRequirementsCommand}"/>
+                        <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Container.xml"/><TextBox Grid.Row="4" Grid.Column="1" Margin="4" Text="{Binding Editor.ContainerPath}"/><Button Grid.Row="4" Grid.Column="2" Content="…" Command="{Binding BrowseContainerCommand}"/>
+                        <TextBlock Grid.Row="5" VerticalAlignment="Center" Text="TIA-Version"/><TextBox Grid.Row="5" Grid.Column="1" Margin="4" Text="{Binding Editor.TiaVersion}"/>
+                        <TextBlock Grid.Row="6" VerticalAlignment="Center" Text="ViCo-Bibliothek"/><TextBox Grid.Row="6" Grid.Column="1" Margin="4" Text="{Binding Editor.VicoLibraryPath}"/><Button Grid.Row="6" Grid.Column="2" Content="…" Command="{Binding BrowseLibraryCommand}"/>
+                        <TextBlock Grid.Row="7" VerticalAlignment="Center" Text="Rockwell-Standard"/><TextBox Grid.Row="7" Grid.Column="1" Margin="4" Text="{Binding Editor.RockwellStandard}"/>
+                        <TextBlock Grid.Row="8" VerticalAlignment="Center" Text="Container-Typen (Komma)"/><TextBox Grid.Row="8" Grid.Column="1" Margin="4" Text="{Binding Editor.AllowedContainerTypes}"/>
+                        <TextBlock Grid.Row="9" VerticalAlignment="Center" Text="Namensregeln" ToolTip="Semikolon-getrennt, z. B. Container=^GM_; Signal=^[A-Z]"/><TextBox Grid.Row="9" Grid.Column="1" Margin="4" Text="{Binding Editor.NamingRules}"/>
+                        <TextBlock Grid.Row="10" VerticalAlignment="Center" Text="Adressbereiche (Komma)"/><TextBox Grid.Row="10" Grid.Column="1" Margin="4" Text="{Binding Editor.SignalAddressRanges}" ToolTip="Beispiel: E0-E127, A0-A127"/>
+                        <CheckBox Grid.Row="11" Grid.Column="1" Margin="4" Content="fe.screen-sim/FEE prüfen" IsChecked="{Binding Editor.FeeEnabled}"/>
+                        <CheckBox Grid.Row="12" Grid.Column="1" Margin="4" Content="Emulate3D-Bereitschaft prüfen" IsChecked="{Binding Editor.Emulate3DEnabled}"/>
+                        <TextBlock Grid.Row="13" Text="Emulate3D Installation/Projekt"/><StackPanel Grid.Row="13" Grid.Column="1"><TextBox Margin="4" Text="{Binding Editor.Emulate3DInstallationPath}"/><TextBox Margin="4" Text="{Binding Editor.Emulate3DProjectPath}"/></StackPanel>
+                        <CheckBox Grid.Row="14" Grid.Column="1" Margin="4" Content="EKS-Bereitschaft prüfen" IsChecked="{Binding Editor.EksEnabled}"/>
+                        <TextBlock Grid.Row="15" Text="EKS Installation/Projekt"/><StackPanel Grid.Row="15" Grid.Column="1"><TextBox Margin="4" Text="{Binding Editor.EksInstallationPath}"/><TextBox Margin="4" Text="{Binding Editor.EksProjectPath}"/></StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Prüfergebnis">
+                <DataGrid ItemsSource="{Binding Findings}" AutoGenerateColumns="False" IsReadOnly="True" EnableRowVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Bereich" Binding="{Binding Area}" Width="160"/>
+                        <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="190"/>
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90"/>
+                        <DataGridTextColumn Header="Meldung" Binding="{Binding Message}" Width="3*"/>
+                        <DataGridTextColumn Header="Empfehlung" Binding="{Binding Recommendation}" Width="2*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="Signalregister">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button MinWidth="150" Content="Nur vergleichen" Command="{Binding AnalyzeSignalsCommand}"/>
+                        <Button MinWidth="190" Margin="8,0,0,0" Content="Konfliktfrei übernehmen" Command="{Binding ApplySignalRegistryCommand}"/>
+                        <TextBlock Margin="14,0,0,0" VerticalAlignment="Center" Text="Bei Konflikten wird das Register nicht verändert."/>
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding SignalIdentities}" AutoGenerateColumns="False" IsReadOnly="True" EnableRowVirtualization="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Stabile ID" Binding="{Binding StableId}" Width="180"/>
+                            <DataGridTextColumn Header="Signal-ID" Binding="{Binding SignalId}" Width="130"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding SymbolicName}" Width="180"/>
+                            <DataGridTextColumn Header="Adresse" Binding="{Binding Address}" Width="95"/>
+                            <DataGridTextColumn Header="Container" Binding="{Binding Container}" Width="180"/>
+                            <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="110"/>
+                            <DataGridTextColumn Header="Vorherige Namen" Binding="{Binding PreviousNamesText}" Width="*"/>
+                            <DataGridTextColumn Header="Vorherige Adressen" Binding="{Binding PreviousAddressesText}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Testszenarien">
+                <DataGrid ItemsSource="{Binding Scenarios}" AutoGenerateColumns="False" IsReadOnly="True" EnableRowVirtualization="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Container" Binding="{Binding Container}" Width="200"/>
+                        <DataGridTextColumn Header="Typ" Binding="{Binding ContainerType}" Width="160"/>
+                        <DataGridTextColumn Header="Szenario" Binding="{Binding Name}" Width="*"/>
+                        <DataGridCheckBoxColumn Header="Fachprüfung" Binding="{Binding RequiresDomainReview}" Width="90"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem Header="Adapter/Nachweise">
+                <Grid><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <DataGrid ItemsSource="{Binding AdapterProbes}" AutoGenerateColumns="False" IsReadOnly="True"><DataGrid.Columns>
+                        <DataGridTextColumn Header="Plattform" Binding="{Binding DisplayName}" Width="180"/><DataGridCheckBoxColumn Header="Verfügbar" Binding="{Binding IsAvailable}" Width="80"/><DataGridCheckBoxColumn Header="Live bestätigt" Binding="{Binding IsLiveVerified}" Width="100"/><DataGridTextColumn Header="Aussage" Binding="{Binding Message}" Width="*"/>
+                    </DataGrid.Columns></DataGrid>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Evidence}" AutoGenerateColumns="False" IsReadOnly="True"><DataGrid.Columns>
+                        <DataGridTextColumn Header="Bereich" Binding="{Binding Area}" Width="180"/><DataGridTextColumn Header="Quelle" Binding="{Binding Source}" Width="220"/><DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90"/><DataGridTextColumn Header="Nachweis" Binding="{Binding Summary}" Width="*"/><DataGridTextColumn Header="Zeitpunkt UTC" Binding="{Binding TimestampUtc}" Width="170"/>
+                    </DataGrid.Columns></DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+        <DockPanel Grid.Row="3" Margin="0,10,0,0">
+            <ProgressBar DockPanel.Dock="Right" Width="170" Height="7" IsIndeterminate="True"
+                         Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+            <StackPanel><TextBlock FontWeight="SemiBold" Text="{Binding StatusText}"/><TextBlock Margin="0,4,0,0" Foreground="#FF7A4E00" Text="{Binding Limitations}" TextWrapping="Wrap"/></StackPanel>
+        </DockPanel>
+    </Grid>
+</UserControl>

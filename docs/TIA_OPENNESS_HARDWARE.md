@@ -8,6 +8,8 @@ Der normale ViCo-Bibliotheksablauf ist Export vor Import: In einem neuen Kundenp
 
 Der Bereich **Achsen-Austausch** besitzt getrennte Buttons für TO-Export, TO-Import und die Excel-Schnittstelle. Er benötigt TIA-Verbindung, ausgewählte PLC und einen beschreibbaren Austauschordner. Der Import setzt nur gleichnamige Achsen/Parameter und speichert nicht automatisch; die Excel-Erzeugung verändert TIA nicht.
 
+Der Bereich **TIA Quality Gate** kompiliert die ausgewählte PLC über den Siemens-Dienst `ICompilable`, überträgt den rekursiven Meldungsbaum typisiert durch die isolierte Bridge und zeigt Fehler, Warnungen, Pfade und Laufzeit. Das Projekt wird nicht gespeichert. Ein fehlerfreies Ergebnis wird als Quality-Evidence persistiert; fehlende Safety-Anmeldung oder ein Openness-Dialog bleiben sichtbare Fehler und werden nicht als Erfolg umgedeutet.
+
 ## Ursache der bisherigen Falschdaten
 
 Die alte Routine lief rekursiv über `DeviceItems`, stellte aber jedes Hierarchieelement als flachen Datensatz dar und übernahm `Address.Length` fälschlich direkt als Bytezahl. Siemens liefert diese Länge in Bits. Dadurch wurden aus 96 Bit scheinbar 96 Byte und aus `E 62` fälschlich `E 62–157`. Adresslose Kopf-, Rack- und Interfaceelemente erzeugten zusätzliche Leerzeilen. Außerdem basierte die Deduplizierung auf Proxyreferenzen beziehungsweise zu groben Identitäten, obwohl Openness dasselbe Engineering-Objekt über mehrere Proxyinstanzen liefern kann.

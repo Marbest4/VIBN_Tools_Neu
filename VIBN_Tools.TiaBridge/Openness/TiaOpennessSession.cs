@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Globalization;
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using ClosedXML.Excel;
@@ -535,6 +536,57 @@ public sealed class TiaOpennessSession : ITiaOpennessSession
         return new TiaAxisInterfaceExportResult { FilePath = filePath, AxisCount = axes.Count };
     }
 
+    public TiaCompileResult CompileSelectedPlc()
+    {
+        var software = (object)RequireSelectedSoftware();
+        var compilableType = ResolveEngineeringType("Siemens.Engineering.Compiler.ICompilable")
+            ?? throw new NotSupportedException(
+                $"Die TIA-Openness-Version {_selectedVersion} stellt Siemens.Engineering.Compiler.ICompilable nicht bereit.");
+        var compileService = compilableType.IsInstanceOfType(software)
+            ? software
+            : GetService(software, compilableType);
+        if (compileService is null)
+            throw new NotSupportedException("Für die ausgewählte PLC-Software ist kein Openness-Compiler-Service verfügbar.");
+
+        var compileMethod = compilableType.GetMethod("Compile", Type.EmptyTypes) ??
+                            compileService.GetType().GetMethod("Compile", Type.EmptyTypes) ??
+                            throw new MissingMethodException(compilableType.FullName, "Compile");
+        var stopwatch = Stopwatch.StartNew();
+        object compilerResult;
+        try
+        {
+            compilerResult = compileMethod.Invoke(compileService, null)
+                ?? throw new InvalidOperationException("TIA lieferte kein Compilergebnis zurück.");
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is not null)
+        {
+            throw exception.InnerException;
+        }
+        finally
+        {
+            stopwatch.Stop();
+        }
+
+        var targetName = _selectedPlcIndex.HasValue
+            ? ReadStringMember(GetProjectDevices()[_selectedPlcIndex.Value], "Name")
+            : string.Empty;
+        var messages = ReadEnumerableProperty(compilerResult, "Messages")
+            .Select(message => MapCompileMessage(message, 0))
+            .ToList();
+        var errorCount = ReadIntMember(compilerResult, "ErrorCount");
+        var warningCount = ReadIntMember(compilerResult, "WarningCount");
+        return new TiaCompileResult
+        {
+            TargetName = targetName,
+            TargetType = software.GetType().Name,
+            State = ReadStringMember(compilerResult, "State"),
+            ErrorCount = Math.Max(errorCount, messages.Sum(message => CountCompileMessages(message, errors: true))),
+            WarningCount = Math.Max(warningCount, messages.Sum(message => CountCompileMessages(message, errors: false))),
+            DurationMilliseconds = stopwatch.ElapsedMilliseconds,
+            Messages = messages,
+        };
+    }
+
     public void Save()
     {
         RequireProject().Save();
@@ -893,6 +945,56 @@ public sealed class TiaOpennessSession : ITiaOpennessSession
 
         foreach (dynamic child in group.Groups)
             ProcessTechnologyGroup(child, groupPath, axes, selectedIds);
+    }
+
+    private Type? ResolveEngineeringType(string fullName) =>
+        _engineeringAssembly?.GetType(fullName, throwOnError: false) ??
+        AppDomain.CurrentDomain.GetAssemblies()
+            .Select(assembly => assembly.GetType(fullName, throwOnError: false))
+            .FirstOrDefault(type => type is not null);
+
+    private static TiaCompileMessage MapCompileMessage(object message, int depth)
+    {
+        if (depth > 32)
+        {
+            return new TiaCompileMessage
+            {
+                State = "Warning",
+                Description = "Compilerdiagnose wurde nach 32 Ebenen gekürzt.",
+                WarningCount = 1,
+            };
+        }
+        return new TiaCompileMessage
+        {
+            Path = ReadStringMember(message, "Path"),
+            State = ReadStringMember(message, "State"),
+            Description = ReadStringMember(message, "Description"),
+            ErrorCount = ReadIntMember(message, "ErrorCount"),
+            WarningCount = ReadIntMember(message, "WarningCount"),
+            Children = ReadEnumerableProperty(message, "Messages")
+                .Select(child => MapCompileMessage(child, depth + 1))
+                .ToList(),
+        };
+    }
+
+    private static int ReadIntMember(object target, string name)
+    {
+        try
+        {
+            return Convert.ToInt32(ReadMemberValue(target, name), CultureInfo.InvariantCulture);
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
+    }
+
+    private static int CountCompileMessages(TiaCompileMessage message, bool errors)
+    {
+        var direct = errors ? message.ErrorCount : message.WarningCount;
+        if (message.Children.Count == 0)
+            return direct;
+        return Math.Max(direct, message.Children.Sum(child => CountCompileMessages(child, errors)));
     }
 
     private static void ForEachAxis(

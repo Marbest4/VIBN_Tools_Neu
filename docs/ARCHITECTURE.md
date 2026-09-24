@@ -10,6 +10,7 @@
 - `VIBN_Tools.Tia.Contracts`: serializable protocol DTOs.
 - `VIBN_Tools.Tia.Client`: typed named-pipe client.
 - `VIBN_Tools.TiaBridge`: isolated Siemens Openness process.
+- `VIBN_Tools.Quality`: platform-neutral project profiles, findings/evidence, stable signal identities, generated simulation scenarios, adapter contracts and generation manifests.
 
 ## Source of truth matrix
 
@@ -25,6 +26,7 @@
 | ViCo refresh/display preferences | `%LOCALAPPDATA%/GROB/VIBN_Tools/ViCo/user-preferences.json` | 1–1440 minutes plus optional-column visibility; atomic local write |
 | FEE/Kanbanize/RDP configuration | current Windows user's Credential Manager | UI writes/deletes generic credentials; live adapters resolve values only for the action |
 | Navigation width | `%LOCALAPPDATA%/GROB/VIBN_Tools/navigation-preferences.json` | expanded/collapsed boolean only; atomic local write |
+| Quality profiles/evidence/signal identities/manifests | `%LOCALAPPDATA%/VIBN_Tools/quality` | atomic JSON; conflicts never partially overwrite the signal registry |
 
 ## Reliability and performance
 
@@ -35,6 +37,8 @@
 - Workstation ping and remote-session queries have separate bounded concurrency.
 - Kanbanize synchronization is idempotent through source `custom_id` and uses narrow payloads.
 - TIA stays outside the WPF process and bridge failures are caught at view-model boundaries.
+- TIA compile results cross the same typed pipe boundary and are persisted as explicit evidence; compile never implies project save.
+- External simulation adapters must distinguish filesystem readiness from a live manufacturer-API verification.
 - WPF grids use virtualization and deferred tab templates are covered by a UI startup test.
 - The main window uses practical minimum dimensions; data grids keep their own virtualization/scrolling and detail panels scroll independently.
 - `MainWindowVM` owns the navigation-width state; only TabItem header text is collapsed, while icons, content and role visibility remain intact.

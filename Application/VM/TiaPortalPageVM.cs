@@ -7,6 +7,7 @@ using VIBN_Tools.Tia.Client;
 using VIBN_Tools.Tia.Contracts;
 using VIBN_Tools.Core.Collections;
 using VIBN_Tools.Core.Diagnostics;
+using VIBN_Tools.Quality;
 
 namespace VIBN_Tools.Application.VM;
 
@@ -68,6 +69,7 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         ExportAxisInterfaceCommand = GetCommandBindingAsync(ExportAxisInterfaceAsync);
         ToggleAxisExchangeInfoCommand = GetCommandBinding(() =>
             IsAxisExchangeInfoVisible = !IsAxisExchangeInfoVisible);
+        CompileQualityGateCommand = GetCommandBindingAsync(CompileQualityGateAsync);
     }
 
     public ObservableCollection<string> InstalledVersions { get; } = new();
@@ -79,6 +81,8 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
     public ObservableCollection<TiaAxisSelectionRowVM> FoundAxes { get; } = new();
 
     public ObservableCollection<TiaAxisSelectionRowVM> ConfiguredAxes { get; } = new();
+
+    public ObservableCollection<TiaCompileMessageRowVM> CompileMessages { get; } = new();
 
     public ObservableCollection<TiaAxisSelectionRowVM> Axes => FoundAxes;
 
@@ -123,6 +127,14 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
     public ICommand ExportAxisInterfaceCommand { get; }
 
     public ICommand ToggleAxisExchangeInfoCommand { get; }
+
+    public ICommand CompileQualityGateCommand { get; }
+
+    public string CompileQualityGateInfo =>
+        "Kompiliert ausschließlich die ausgewählte PLC über TIA Openness und liest Fehler, Warnungen und " +
+        "Meldungspfade aus. Das Projekt wird dabei nicht gespeichert. Ein erfolgreiches Ergebnis wird als " +
+        "Nachweis für das zentrale Quality Gate hinterlegt; Safety- oder Know-how-geschützte Inhalte können " +
+        "weiterhin eine Anmeldung direkt in TIA erfordern.";
 
     public string AxisConfigurationInfo =>
         "Auswahl konfigurieren ändert ausschließlich die markierten Technologieachsen. " +
@@ -437,6 +449,78 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
             ExportPath = selected;
     }
 
+    private async Task CompileQualityGateAsync()
+    {
+        if (SelectedPlc is null)
+        {
+            StatusText = "Bitte zuerst TIA verbinden und die gewünschte PLC auswählen.";
+            return;
+        }
+
+        await RunBusyAsync("Ausgewählte PLC wird kompiliert …", async () =>
+        {
+            CompileMessages.Clear();
+            OperationProgress = 10;
+            TiaCompileResult result;
+            try
+            {
+                result = await _client.CompileSelectedPlcAsync();
+            }
+            catch (Exception exception)
+            {
+                QualityEvidenceStore.Instance.Upsert(new QualityEvidence(
+                    "TIA Compile",
+                    SelectedPlc.Name,
+                    QualityStatus.Failed,
+                    $"Compile-Aufruf fehlgeschlagen: {exception.Message}",
+                    DateTimeOffset.UtcNow,
+                    [new QualityFinding("TIA Compile", "TIA_COMPILE_FAILED", QualityStatus.Failed, exception.Message)]));
+                throw;
+            }
+            OperationProgress = 90;
+            foreach (var message in FlattenCompileMessages(result.Messages))
+                CompileMessages.Add(message);
+
+            var status = result.Success ? QualityStatus.Passed : QualityStatus.Failed;
+            var findings = CompileMessages
+                .Where(message => message.IsRelevant)
+                .Select(message => new QualityFinding(
+                    "TIA Compile",
+                    "TIA_COMPILE_MESSAGE",
+                    message.IsError ? QualityStatus.Failed : QualityStatus.Warning,
+                    $"{message.Path}: {message.Description}"))
+                .ToArray();
+            QualityEvidenceStore.Instance.Upsert(new QualityEvidence(
+                "TIA Compile",
+                $"{result.TargetType}:{result.TargetName}",
+                status,
+                $"{result.ErrorCount} Fehler, {result.WarningCount} Warnungen, {result.DurationMilliseconds} ms",
+                DateTimeOffset.UtcNow,
+                findings));
+
+            OperationProgress = 100;
+            StatusText = result.Success
+                ? $"TIA-Compile erfolgreich: {result.TargetName}, {result.WarningCount} Warnung(en), {result.DurationMilliseconds} ms. Projekt nicht gespeichert."
+                : $"TIA-Compile fehlgeschlagen: {result.ErrorCount} Fehler, {result.WarningCount} Warnungen. Details stehen unten und im Log.";
+            if (result.Success)
+                _log.Information("TIA Quality Gate", StatusText);
+            else
+                _log.Warning("TIA Quality Gate", StatusText);
+        });
+    }
+
+    private static IEnumerable<TiaCompileMessageRowVM> FlattenCompileMessages(
+        IEnumerable<TiaCompileMessage> messages,
+        int depth = 0)
+    {
+        foreach (var message in messages)
+        {
+            yield return new TiaCompileMessageRowVM(message, depth);
+            foreach (var child in FlattenCompileMessages(message.Children, depth + 1))
+                yield return child;
+        }
+    }
+
     private void BrowseAxisExchange()
     {
         var selected = _folderSelection.SelectFolder("Ordner für Achsen-Austausch auswählen", AxisExchangePath);
@@ -701,6 +785,27 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         }
     }
 
+}
+
+public sealed record TiaCompileMessageRowVM(
+    string Path,
+    string State,
+    string Description,
+    int ErrorCount,
+    int WarningCount,
+    int Depth)
+{
+    public TiaCompileMessageRowVM(TiaCompileMessage message, int depth)
+        : this(message.Path, message.State, message.Description, message.ErrorCount, message.WarningCount, depth)
+    {
+    }
+
+    public bool IsError => ErrorCount > 0 ||
+                           State.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                           State.Contains("Failed", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsRelevant => IsError || WarningCount > 0 ||
+                              State.Contains("Warning", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class TiaAxisSelectionRowVM : MvvmBase

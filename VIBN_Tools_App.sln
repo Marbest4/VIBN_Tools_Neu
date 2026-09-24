@@ -14,6 +14,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VIBN_Tools.Infrastructure",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VIBN_Tools.Rockwell", "VIBN_Tools.Rockwell\VIBN_Tools.Rockwell.csproj", "{A0A1B2C3-D4E5-46F7-8901-23456789ABCD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VIBN_Tools.Quality", "VIBN_Tools.Quality\VIBN_Tools.Quality.csproj", "{C6D8A233-0C42-4A75-B4D5-98ACF739E271}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VIBN_Tools.Core.SmokeTests", "Tests\CoreSmokeTests\VIBN_Tools.Core.SmokeTests.csproj", "{FA9FDF2D-2B9E-4623-863E-40D6B0E9968F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VIBN_Tools.Tia.Contracts", "VIBN_Tools.Tia.Contracts\VIBN_Tools.Tia.Contracts.csproj", "{15E29A6B-4619-4643-AD73-5F2D91A921CD}"
@@ -64,6 +66,10 @@ Global
 		{A0A1B2C3-D4E5-46F7-8901-23456789ABCD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A0A1B2C3-D4E5-46F7-8901-23456789ABCD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A0A1B2C3-D4E5-46F7-8901-23456789ABCD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C6D8A233-0C42-4A75-B4D5-98ACF739E271}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C6D8A233-0C42-4A75-B4D5-98ACF739E271}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C6D8A233-0C42-4A75-B4D5-98ACF739E271}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C6D8A233-0C42-4A75-B4D5-98ACF739E271}.Release|Any CPU.Build.0 = Release|Any CPU
 		{FA9FDF2D-2B9E-4623-863E-40D6B0E9968F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{FA9FDF2D-2B9E-4623-863E-40D6B0E9968F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FA9FDF2D-2B9E-4623-863E-40D6B0E9968F}.Release|Any CPU.ActiveCfg = Release|Any CPU
