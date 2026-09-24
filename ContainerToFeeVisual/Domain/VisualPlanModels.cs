@@ -217,6 +217,32 @@ public sealed record VisualFeeSignal(
     public string Location => string.IsNullOrWhiteSpace(Path) ? Address : Path;
 }
 
+/// <summary>
+/// One object-side endpoint currently assigned to an existing FEE variable.
+/// Indirect endpoints are reached through a generated MoveBit fan-in.
+/// </summary>
+public sealed record VisualFeeSignalLink(
+    string SignalGuidString,
+    string ObjectGuidString,
+    string ObjectType,
+    string SlotName,
+    bool IsIndirect);
+
+public enum VisualSignalConnectionKind
+{
+    NotRead,
+    NotRequired,
+    Linked,
+    LinkMissing,
+}
+
+public sealed record VisualSignalConnectionState(
+    VisualSignalConnectionKind Kind,
+    string Description)
+{
+    public bool IsVerified => Kind is VisualSignalConnectionKind.Linked or VisualSignalConnectionKind.NotRequired;
+}
+
 /// <summary>A typed drop target declared by the unchanged legacy container.</summary>
 public sealed class VisualSimObjectTarget
 {

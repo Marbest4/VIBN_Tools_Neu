@@ -363,28 +363,70 @@
                     </ListBox>
 
                     <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,8,0,4"
-                               Text="Signale des ausgewählten Containers" />
-                    <ListBox Grid.Row="4" ItemsSource="{Binding SelectedContainerSignals}"
-                             BorderThickness="0" ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             VirtualizingPanel.IsVirtualizing="True">
+                               Text="Signalslots des ausgewählten Containers" />
+                    <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}"
+                             BorderThickness="0" Background="Transparent"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.CanContentScroll="True"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.VirtualizationMode="Recycling">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,0,0,7" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Margin="0,2" Padding="7,4" BorderBrush="#D3D3D3" BorderThickness="1" CornerRadius="3">
+                                <Border Padding="9" BorderBrush="#C7D7EA" BorderThickness="1" CornerRadius="4"
+                                        Background="{Binding StateBackground}"
+                                        ToolTip="{Binding ToolTipText}"
+                                        behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
+                                        behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
+                                        behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
                                     <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock FontSize="10" Foreground="#666666">
-                                                <Run Text="{Binding Slot, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding AssignedFeeSignal, Mode=OneWay}" />
-                                            </TextBlock>
-                                        </StackPanel>
-                                        <Button Grid.Column="1" MinWidth="26" MinHeight="24" Margin="6,0,0,0"
-                                                Content="×" ToolTip="{Binding RemoveToolTip}"
-                                                Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
-                                                CommandParameter="{Binding}" />
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid Grid.Row="0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Slot}" />
+                                            <TextBlock Grid.Column="1" Foreground="#666666" FontSize="11"
+                                                       Text="{Binding SelectionMode}" />
+                                        </Grid>
+                                        <TextBlock Grid.Row="1" Margin="0,2,0,5" FontSize="11" FontWeight="SemiBold"
+                                                   Text="{Binding AssignmentState}" />
+                                        <ItemsControl Grid.Row="2" ItemsSource="{Binding Assignments}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,2" Padding="7,4" Background="{Binding StateBackground}"
+                                                            BorderBrush="#B6C9E0" BorderThickness="1" CornerRadius="3"
+                                                            ToolTip="{Binding ToolTipText}"
+                                                            behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock FontSize="10" Foreground="#666666" Text="{Binding AssignedFeeSignal}" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                            <Button Grid.Column="1" MinWidth="26" MinHeight="24" Margin="6,0,0,0"
+                                                                    Content="×" ToolTip="{Binding RemoveToolTip}"
+                                                                    Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                                    CommandParameter="{Binding}" />
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

@@ -145,7 +145,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public ObservableCollection<ContainerToFeeVisualTargetVM> Targets { get; } = new();
 
-    public ObservableCollection<ContainerToFeeVisualSignalEntryVM> SelectedContainerSignals { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualSignalSlotVM> SignalSlots { get; } = new();
 
     public ObservableCollection<ContainerToFeeVisualEdgeVM> VisibleEdges { get; } = new();
 
@@ -393,7 +393,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             _selectedExistingInterface = value;
             OnPropertyChanged();
             if (!_isApplyingPlan)
+            {
                 _planService.SetExistingInterface(value?.Model);
+                ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+            }
             RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             OnPropertyChanged(nameof(CanLinkSignalsOnly));
             OnPropertyChanged(nameof(LinkSignalsOnlyUnavailableReason));
@@ -555,13 +558,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             IReadOnlyList<VisualFeeInterface> interfaces = await interfacesTask;
             RefreshFeeObjectProjection(objects);
             RefreshFeeInterfaceProjection(interfaces);
-            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             // Auto-assignment raises PlanChanged and rebuilds the tree. Apply
             // live discovery colours only afterwards so complete-container
             // verification is not lost again in that rebuild.
             int automaticAssignments = _planService.AutoAssignMatches();
+            var signalLinks = await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
             ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
             ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             var verifiedContainers = await _planService
                 .DiscoverVerifiedContainerIdsAsync(cancellationToken);
             _verifiedContainerIds.Clear();
@@ -573,9 +577,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 : "FEE-Daten wurden direkt über die API aktualisiert. Falls kürzlich geänderte SimObjects oder Signale fehlen: Model Validation ausführen und danach erneut aktualisieren.";
             StatusText = automaticAssignments > 0
                 ? $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeContainerObjects.Count} Logik-/Cabinet-Objekte, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
-                  $"{automaticAssignments} automatisch zugeordnet; {verifiedContainers.Count} Container vollständig verifiziert."
+                  $"{signalLinks.Count} Signal-Slot-Verknüpfungen gelesen; {automaticAssignments} automatisch zugeordnet; {verifiedContainers.Count} Container vollständig verifiziert."
                 : $"{objects.Count} FEE-SimObjects, {_planService.DiscoveredFeeContainerObjects.Count} Logik-/Cabinet-Objekte, {_planService.DiscoveredFeeSignals.Count} Signale und {interfaces.Count} Interfaces geladen; " +
-                  $"{verifiedContainers.Count} Container vollständig verifiziert.";
+                  $"{signalLinks.Count} Signal-Slot-Verknüpfungen gelesen; {verifiedContainers.Count} Container vollständig verifiziert.";
             _log.Information(LogArea, StatusText);
             InvalidateCommands();
         });
@@ -781,6 +785,36 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             ? selectedItems
             : request?.Source is null ? [] : [request.Source];
 
+        if (request?.Target is ContainerToFeeVisualSignalSlotVM signalSlot)
+        {
+            var feeSignalGuids = sources
+                .Select(TryGetFeeSignalGuid)
+                .Where(guid => !string.IsNullOrWhiteSpace(guid))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (feeSignalGuids.Length != sources.Count)
+            {
+                Reject("Auf einen Signalslot dürfen ausschließlich FEE-Signale gezogen werden. SimObjects und Signale sind getrennte Zuordnungsbereiche.");
+                return;
+            }
+
+            var result = _planService.AssignSignalsToSlot(
+                signalSlot.ContainerId,
+                signalSlot.Slot,
+                feeSignalGuids);
+            PublishIssues(result.Issues);
+            if (!result.Success)
+            {
+                Reject(result.Message);
+                return;
+            }
+
+            StatusText = result.Message;
+            _log.Information(LogArea, result.Message);
+            return;
+        }
+
         if (request?.Target is ContainerToFeeVisualTreeNodeVM dropNode)
         {
             // The selected item is the scroll anchor used after the immutable
@@ -898,6 +932,12 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         IReadOnlyList<object> sources = request.Source is IReadOnlyList<object> selectedItems
             ? selectedItems
             : new[] { request.Source };
+        if (request.Target is ContainerToFeeVisualSignalSlotVM signalSlot)
+        {
+            var signalGuids = sources.Select(TryGetFeeSignalGuid).ToArray();
+            return signalGuids.All(guid => !string.IsNullOrWhiteSpace(guid)) &&
+                   (signalSlot.AllowMultiSelect || signalGuids.Length == 1);
+        }
         if (sources.All(item => item is ContainerToFeeVisualFeeSignalVM) &&
             request.Target is ContainerToFeeVisualTreeNodeVM signalTarget)
         {
@@ -928,6 +968,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 _ => false,
             });
     }
+
+    private static string? TryGetFeeSignalGuid(object source) => source switch
+    {
+        ContainerToFeeVisualFeeSignalVM signal => signal.GuidString,
+        ContainerToFeeVisualSignalEntryVM entry when !string.IsNullOrWhiteSpace(entry.FeeSignalGuid) =>
+            entry.FeeSignalGuid,
+        _ => null,
+    };
 
     private async Task SaveContainerXmlAsync()
     {
@@ -1184,9 +1232,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             }
             RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
             RefreshFeeInterfaceProjection(_planService.DiscoveredFeeInterfaces);
-            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
             ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             ApplyVerifiedContainerStates(_verifiedContainerIds);
             PublishIssues(validation.Issues);
             ApplyTreeFilter();
@@ -1412,17 +1460,15 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants())
                      .Where(node => node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
         {
-            if (_planService.CurrentPlan?.SignalAssignments.Any(assignment =>
-                    assignment.SignalNodeId == node.Id &&
-                    selectedSignalGuids.Contains(assignment.FeeSignalGuid)) == true)
-            {
-                node.ApplyExecutionState(
-                    node.Kind == VisualNodeKind.UnknownSignal
-                        ? ContainerToFeeVisualNodeState.Planned
-                        : ContainerToFeeVisualNodeState.FoundUnlinked,
-                    node.LinkedObjectDescription);
-                continue;
-            }
+            var explicitAssignment = _planService.CurrentPlan?.SignalAssignments.LastOrDefault(assignment =>
+                assignment.SignalNodeId == node.Id &&
+                selectedSignalGuids.Contains(assignment.FeeSignalGuid));
+            var explicitlyAssignedSignal = explicitAssignment is null
+                ? null
+                : signals.FirstOrDefault(signal => string.Equals(
+                    signal.GuidString,
+                    explicitAssignment.FeeSignalGuid,
+                    StringComparison.OrdinalIgnoreCase));
             var matches = signals.Where(signal => string.Equals(
                     signal.Tag,
                     node.Name,
@@ -1434,14 +1480,21 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                     signal.Location,
                     node.SourceLocation,
                     StringComparison.OrdinalIgnoreCase)).ToArray();
-            var state = (matches.Length, exactMatches.Length) switch
+            var resolvedSignal = explicitlyAssignedSignal ?? (exactMatches.Length == 1 ? exactMatches[0] : null);
+            var state = resolvedSignal is not null
+                ? _planService.GetSignalConnectionState(node.Id, resolvedSignal.GuidString).IsVerified
+                    ? ContainerToFeeVisualNodeState.Verified
+                    : ContainerToFeeVisualNodeState.FoundUnlinked
+                : (matches.Length, exactMatches.Length) switch
             {
                 (0, _) => ContainerToFeeVisualNodeState.Planned,
-                (_, 1) => ContainerToFeeVisualNodeState.FoundUnlinked,
                 _ => ContainerToFeeVisualNodeState.Ambiguous,
             };
-            var connection = exactMatches.Length == 1
-                ? $"Gefundenes FEE-Signal: {exactMatches[0].Tag} · {exactMatches[0].InterfaceName} · {exactMatches[0].Location}"
+            var connectionState = resolvedSignal is null
+                ? null
+                : _planService.GetSignalConnectionState(node.Id, resolvedSignal.GuidString);
+            var connection = resolvedSignal is not null
+                ? $"Gefundenes FEE-Signal: {resolvedSignal.Tag} · {resolvedSignal.InterfaceName} · {resolvedSignal.Location}. {connectionState!.Description}"
                 : matches.Length > 1
                     ? $"Mehrdeutig: {matches.Length} FEE-Signale mit Tag '{node.Name}' gefunden"
                     : node.Kind == VisualNodeKind.UnknownSignal
@@ -1452,6 +1505,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 connection);
         }
         RefreshAggregateTreeStates();
+        RefreshSelectionProjection();
     }
 
     private void ApplyDiscoveredContainerObjectStates(
@@ -1521,7 +1575,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private void RefreshSelectionProjection()
     {
         Targets.Clear();
-        SelectedContainerSignals.Clear();
+        SignalSlots.Clear();
         VisibleEdges.Clear();
 
         VisualPlan? plan = _planService.CurrentPlan;
@@ -1542,13 +1596,27 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 Issues.Where(issue => string.Equals(issue.NodeId, target.Id, StringComparison.Ordinal))));
         }
 
-        foreach (var signal in plan.Nodes
-                     .Where(node => string.Equals(node.ContainerId, containerId, StringComparison.Ordinal) &&
-                                    node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
-                                    !plan.IsSignalRemoved(node.Id))
-                     .OrderBy(node => plan.GetEffectiveSlot(node), StringComparer.OrdinalIgnoreCase)
-                     .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase))
-            SelectedContainerSignals.Add(new ContainerToFeeVisualSignalEntryVM(signal, plan));
+        var container = plan.FindNode(containerId);
+        if (container is not null && ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
+        {
+            var signalNodes = plan.Nodes
+                .Where(node => string.Equals(node.ContainerId, containerId, StringComparison.Ordinal) &&
+                               node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                               !plan.IsSignalRemoved(node.Id))
+                .ToArray();
+            foreach (var slot in descriptor.Slots.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+            {
+                var entries = signalNodes
+                    .Where(node => string.Equals(
+                        plan.GetEffectiveSlot(node),
+                        slot,
+                        StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(node => node.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(node => new ContainerToFeeVisualSignalEntryVM(node, plan, FindTreeNode(node.Id)))
+                    .ToArray();
+                SignalSlots.Add(new ContainerToFeeVisualSignalSlotVM(containerId, slot, entries));
+            }
+        }
 
         HashSet<string> nodeIds = plan.Nodes
             .Where(node => node.ContainerId == containerId)
@@ -1612,8 +1680,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 signal.InterfaceGuidString,
                 selectedGuid,
                 StringComparison.OrdinalIgnoreCase)).ToArray();
+        var verifiedNodeIds = _planService.FindVerifiedSignalNodeIds();
         AvailableFeeSignals.ReplaceWith(source.Select(signal =>
-            new ContainerToFeeVisualFeeSignalVM(signal, scopedSignals, plan)));
+            new ContainerToFeeVisualFeeSignalVM(
+                signal,
+                scopedSignals,
+                plan,
+                verifiedNodeIds.TryGetValue(signal.GuidString, out var nodeIds) ? nodeIds : [])));
         FeeSignalsView.Refresh();
     }
 
@@ -2083,7 +2156,8 @@ public sealed class ContainerToFeeVisualFeeSignalVM
     public ContainerToFeeVisualFeeSignalVM(
         VisualFeeSignal model,
         IReadOnlyCollection<VisualFeeSignal> allSignals,
-        VisualPlan? plan)
+        VisualPlan? plan,
+        IReadOnlyCollection<string>? verifiedNodeIds = null)
     {
         Model = model;
         var assignments = plan?.SignalAssignments
@@ -2092,8 +2166,13 @@ public sealed class ContainerToFeeVisualFeeSignalVM
                 model.GuidString,
                 StringComparison.OrdinalIgnoreCase))
             .ToArray() ?? [];
-        AssignedTargets = assignments
+        var explicitTargets = assignments
             .Select(item => DescribeSignalAssignment(plan, item))
+            .ToArray();
+        var liveTargets = verifiedNodeIds?
+            .Select(nodeId => DescribeSignalNode(plan, nodeId))
+            .ToArray() ?? [];
+        AssignedTargets = explicitTargets.Concat(liveTargets)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         HasDuplicateName = !string.IsNullOrWhiteSpace(model.Tag) && allSignals
@@ -2135,10 +2214,13 @@ public sealed class ContainerToFeeVisualFeeSignalVM
         $"Signal-GUID: {GuidString}{Environment.NewLine}{AssignmentText}";
 
     private static string DescribeSignalAssignment(VisualPlan? plan, VisualSignalAssignment assignment)
+        => DescribeSignalNode(plan, assignment.SignalNodeId);
+
+    private static string DescribeSignalNode(VisualPlan? plan, string signalNodeId)
     {
-        var node = plan?.FindNode(assignment.SignalNodeId);
+        var node = plan?.FindNode(signalNodeId);
         if (node is null)
-            return assignment.SignalNodeId;
+            return signalNodeId;
         var container = node.ContainerId is null ? null : plan?.FindNode(node.ContainerId);
         return $"{container?.Name ?? "—"} / {node.Name} [{plan?.GetEffectiveSlot(node) ?? node.Slot}]";
     }
@@ -2162,16 +2244,30 @@ public sealed class ContainerToFeeVisualAssignmentVM
 
 public sealed class ContainerToFeeVisualSignalEntryVM
 {
-    public ContainerToFeeVisualSignalEntryVM(VisualNode model, VisualPlan plan)
+    public ContainerToFeeVisualSignalEntryVM(
+        VisualNode model,
+        VisualPlan plan,
+        ContainerToFeeVisualTreeNodeVM? treeNode = null)
     {
         Model = model;
         Slot = plan.GetEffectiveSlot(model);
         IsAdded = plan.IsAddedSignal(model.Id);
         var assignment = plan.SignalAssignments.LastOrDefault(item =>
             string.Equals(item.SignalNodeId, model.Id, StringComparison.Ordinal));
+        FeeSignalGuid = assignment?.FeeSignalGuid ?? string.Empty;
         AssignedFeeSignal = assignment is null
             ? "Keine vorhandene FEE-Zuordnung"
             : $"{assignment.FeeSignalTag} · {assignment.FeeInterfaceName}";
+        State = treeNode?.EffectiveState ?? ContainerToFeeVisualNodeState.Planned;
+        ToolTipText = string.Join(
+            Environment.NewLine,
+            new[]
+            {
+                $"Signal: {Name}",
+                $"Slot: {Slot}",
+                AssignedFeeSignal,
+                treeNode?.LinkedObjectDescription,
+            }.Where(text => !string.IsNullOrWhiteSpace(text)));
     }
 
     public VisualNode Model { get; }
@@ -2180,10 +2276,59 @@ public sealed class ContainerToFeeVisualSignalEntryVM
     public string Slot { get; }
     public string SourceLocation => Model.SourceLocation;
     public bool IsAdded { get; }
+    public string FeeSignalGuid { get; }
     public string AssignedFeeSignal { get; }
+    public ContainerToFeeVisualNodeState State { get; }
+    public string StateBackground => State.Background;
+    public string ToolTipText { get; }
     public string RemoveToolTip => IsAdded
         ? "Zusätzliches Signal vollständig aus dem bearbeiteten ContainerFile entfernen"
         : "Signal aus dem wirksamen ContainerFile entfernen; die Quelldatei bleibt unverändert und Rückgängig stellt es wieder her";
+}
+
+/// <summary>
+/// One declared signal slot of the selected container. Empty entries remain
+/// visible so users can assign existing FEE signals without first creating an
+/// artificial XML signal row.
+/// </summary>
+public sealed class ContainerToFeeVisualSignalSlotVM
+{
+    public ContainerToFeeVisualSignalSlotVM(
+        string containerId,
+        string slot,
+        IEnumerable<ContainerToFeeVisualSignalEntryVM> assignments)
+    {
+        ContainerId = containerId;
+        Slot = slot;
+        Assignments = new ObservableCollection<ContainerToFeeVisualSignalEntryVM>(assignments);
+    }
+
+    public string ContainerId { get; }
+    public string Slot { get; }
+    public bool AllowMultiSelect => global::VIBN_Tools.ContainerGeneration.Models.ContainerSlotMultiplicityPolicy.IsPlcInput(Slot);
+    public string SelectionMode => AllowMultiSelect ? "Mehrfachbelegung" : "Einzelbelegung";
+    public ObservableCollection<ContainerToFeeVisualSignalEntryVM> Assignments { get; }
+    public string AssignmentState => Assignments.Count == 0
+        ? "Noch kein Containersignal belegt"
+        : $"{Assignments.Count} Containersignal(e) belegt";
+    public string StateBackground
+    {
+        get
+        {
+            var states = Assignments.Select(assignment => assignment.State.Kind).ToArray();
+            if (states.Length == 0)
+                return "#FFF3F5F7";
+            if (states.Any(state => state == ContainerToFeeVisualNodeStateKind.Missing))
+                return ContainerToFeeVisualNodeState.Missing.Background;
+            if (states.Any(state => state is ContainerToFeeVisualNodeStateKind.Planned or ContainerToFeeVisualNodeStateKind.None))
+                return ContainerToFeeVisualNodeState.Planned.Background;
+            if (states.Any(state => state == ContainerToFeeVisualNodeStateKind.FoundUnlinked))
+                return ContainerToFeeVisualNodeState.FoundUnlinked.Background;
+            return ContainerToFeeVisualNodeState.Verified.Background;
+        }
+    }
+    public string ToolTipText =>
+        $"Signalslot '{Slot}' · {SelectionMode}. Hier dürfen nur FEE-Signale abgelegt werden; SimObjects werden abgewiesen.";
 }
 
 /// <summary>Readable presentation of one technical plan edge without exposing internal IDs.</summary>

@@ -64,6 +64,21 @@
         </DataGrid>
 
         <Grid Grid.Row="3" Margin="0,10,0,0">
+            <Grid.Resources>
+                <Style x:Key="Fee2RelatedRowStyle" TargetType="DataGridRow">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsRelatedToSelection}" Value="True">
+                            <Setter Property="Background" Value="#FFD9ECFF" />
+                            <Setter Property="Foreground" Value="#FF102A43" />
+                        </DataTrigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#FF2B579A" />
+                            <Setter Property="Foreground" Value="White" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Resources>
             <Grid.RowDefinitions>
                 <RowDefinition Height="2*" />
                 <RowDefinition Height="8" />
@@ -76,6 +91,7 @@
             </Grid.ColumnDefinitions>
             <GroupBox Header="Erkannte Container">
                 <DataGrid ItemsSource="{Binding FoundContainers}" SelectedItem="{Binding SelectedFoundContainer}"
+                          RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
@@ -98,6 +114,7 @@
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
             <GroupBox Grid.Column="2" Header="Erkannte Signalzuordnungen">
                 <DataGrid ItemsSource="{Binding FoundSignals}" SelectedItem="{Binding SelectedFoundSignal}"
+                          RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>

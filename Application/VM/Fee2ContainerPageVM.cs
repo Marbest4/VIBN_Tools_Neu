@@ -65,7 +65,28 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     public Fee2ContainerFoundContainerVM? SelectedFoundContainer
     {
         get => _selectedFoundContainer;
-        set { _selectedFoundContainer = value; OnPropertyChanged(); }
+        set
+        {
+            if (ReferenceEquals(_selectedFoundContainer, value))
+                return;
+            _selectedFoundContainer = value;
+            OnPropertyChanged();
+            if (value is null)
+                return;
+
+            if (_selectedFoundSignal is not null)
+            {
+                _selectedFoundSignal = null;
+                OnPropertyChanged(nameof(SelectedFoundSignal));
+            }
+            foreach (var container in FoundContainers)
+                container.IsRelatedToSelection = false;
+            foreach (var signal in FoundSignals)
+                signal.IsRelatedToSelection = string.Equals(
+                    signal.ContainerId,
+                    value.Id,
+                    StringComparison.Ordinal);
+        }
     }
 
     public Fee2ContainerFoundSignalVM? SelectedFoundSignal
@@ -73,11 +94,25 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         get => _selectedFoundSignal;
         set
         {
+            if (ReferenceEquals(_selectedFoundSignal, value))
+                return;
             _selectedFoundSignal = value;
             OnPropertyChanged();
-            if (value is not null)
-                SelectedFoundContainer = FoundContainers.FirstOrDefault(container =>
-                    string.Equals(container.Id, value.ContainerId, StringComparison.Ordinal));
+            if (value is null)
+                return;
+
+            if (_selectedFoundContainer is not null)
+            {
+                _selectedFoundContainer = null;
+                OnPropertyChanged(nameof(SelectedFoundContainer));
+            }
+            foreach (var signal in FoundSignals)
+                signal.IsRelatedToSelection = false;
+            foreach (var container in FoundContainers)
+                container.IsRelatedToSelection = string.Equals(
+                    container.Id,
+                    value.ContainerId,
+                    StringComparison.Ordinal);
         }
     }
 
@@ -484,6 +519,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     private string _component;
     private string _type;
     private bool _isIncluded = true;
+    private bool _isRelatedToSelection;
 
     public Fee2ContainerFoundContainerVM(string id, string component, string type, int originalSignalCount)
     {
@@ -498,6 +534,11 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
     public int OriginalSignalCount { get; }
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
+    public bool IsRelatedToSelection
+    {
+        get => _isRelatedToSelection;
+        set => SetPropertyChange(ref _isRelatedToSelection, value);
+    }
 }
 
 public sealed class Fee2ContainerFoundSignalVM : NotifyBase
@@ -511,6 +552,7 @@ public sealed class Fee2ContainerFoundSignalVM : NotifyBase
     private string _signalId;
     private string _note;
     private bool _isIncluded = true;
+    private bool _isRelatedToSelection;
 
     public Fee2ContainerFoundSignalVM(
         string containerId, string container, string containerType, string signal, string slot,
@@ -539,6 +581,11 @@ public sealed class Fee2ContainerFoundSignalVM : NotifyBase
     public string Note { get => _note; set => SetPropertyChange(ref _note, value); }
     public Guid? VariableGuid { get; }
     public bool IsIncluded { get => _isIncluded; set { if (SetPropertyChange(ref _isIncluded, value)) NotifyAssignment(); } }
+    public bool IsRelatedToSelection
+    {
+        get => _isRelatedToSelection;
+        set => SetPropertyChange(ref _isRelatedToSelection, value);
+    }
     public bool IsAssigned => IsIncluded && !string.IsNullOrWhiteSpace(Signal) && !string.IsNullOrWhiteSpace(Slot);
     public string AssignmentState => IsAssigned ? "Zugeordnet" : IsIncluded ? "Zuordnung unvollständig" : "Vom Export ausgeschlossen";
 

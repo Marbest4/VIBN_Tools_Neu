@@ -54,6 +54,7 @@ internal static class Program
         await ValidateContainerToFeeModelContractsAsync();
         await ValidateVisualMotionJointReuseAsync();
         await ValidateVisualFeeSignalStatusAsync();
+        ValidateFee2ContainerSelectionHighlighting();
         ValidatePlcInputFanInParsing();
         ValidateContainerFileComparison();
         await ValidateFee2ContainerProvenanceRoundTripAsync();
@@ -669,7 +670,45 @@ internal static class Program
                     throw new InvalidOperationException("Test signal could not be assigned.");
             }
 
-            var assigned = new ContainerToFeeVisualFeeSignalVM(signals[0], signals, loaded.Plan);
+            var logicGuid = Guid.NewGuid().ToString("D");
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeContainerObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[]
+                {
+                    new VisualFeeContainerObject(
+                        logicGuid,
+                        "Sensor_1",
+                        VisualFeeContainerObjectKind.Logic,
+                        "Grob_Sensor"),
+                });
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSignalLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[]
+                {
+                    new VisualFeeSignalLink(
+                        sharedGuid,
+                        logicGuid,
+                        "LogicObject",
+                        "PLC_IN_PartPresent_Ch1",
+                        false),
+                });
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_hasDiscoveredFeeSignalLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, true);
+            var verifiedNodes = service.FindVerifiedSignalNodeIds(sharedGuid);
+            if (verifiedNodes.Count != signalNodes.Length ||
+                service.GetSignalConnectionState(signalNodes[0].Id, sharedGuid).Kind !=
+                    VisualSignalConnectionKind.Linked)
+            {
+                throw new InvalidOperationException(
+                    "Existing FEE signal-to-logic links were not recognized as verified visual assignments.");
+            }
+
+            var assigned = new ContainerToFeeVisualFeeSignalVM(
+                signals[0],
+                signals,
+                loaded.Plan,
+                verifiedNodes);
             var duplicate = new ContainerToFeeVisualFeeSignalVM(signals[1], signals, loaded.Plan);
             if (!assigned.IsAssigned || !assigned.HasDuplicateAssignment || !assigned.HasDuplicateName ||
                 assigned.StateBackground != "#FFFFCDD2" || !duplicate.HasDuplicateName)
@@ -710,6 +749,36 @@ internal static class Program
             {
                 throw new InvalidOperationException("Removing a dynamically added signal left stale plan state behind.");
             }
+            var slotAssignment = service.AssignSignalsToSlot(
+                container.Id,
+                "PLC_IN_PartPresent",
+                [addedGuid]);
+            var slotAssignedNode = loaded.Plan.AddedSignals.SingleOrDefault();
+            if (!slotAssignment.Success || slotAssignedNode is null ||
+                !string.Equals(
+                    loaded.Plan.GetEffectiveSlot(loaded.Plan.FindNode(slotAssignedNode.NodeId)!),
+                    "PLC_IN_PartPresent",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Dropping an existing FEE signal onto an empty declared signal slot did not create a correctly slotted plan entry.");
+            }
+            var movedSlotAssignment = service.AssignSignalsToSlot(
+                container.Id,
+                "PLC_IN_PartPresent_Ch2",
+                [addedGuid]);
+            if (!movedSlotAssignment.Success || loaded.Plan.AddedSignals.Count != 1 ||
+                loaded.Plan.AddedSignals[0].NodeId != slotAssignedNode.NodeId ||
+                !string.Equals(
+                    loaded.Plan.GetEffectiveSlot(loaded.Plan.FindNode(slotAssignedNode.NodeId)!),
+                    "PLC_IN_PartPresent_Ch2",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Moving an already assigned FEE signal to another slot duplicated its plan entry.");
+            }
+            if (!service.RemoveSignal(slotAssignedNode.NodeId).Success)
+                throw new InvalidOperationException("The signal-slot test entry could not be removed again.");
             if (!service.RemoveSignal(signalNodes[0].Id).Success ||
                 !loaded.Plan.IsSignalRemoved(signalNodes[0].Id))
             {
@@ -742,6 +811,34 @@ internal static class Program
         {
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void ValidateFee2ContainerSelectionHighlighting()
+    {
+        var viewModel = new Fee2ContainerPageVM();
+        var firstContainer = new Fee2ContainerFoundContainerVM("c-1", "Cylinder_1", "Cylinder", 2);
+        var secondContainer = new Fee2ContainerFoundContainerVM("c-2", "Sensor_1", "Sensor", 1);
+        var firstSignal = new Fee2ContainerFoundSignalVM(
+            "c-1", "Cylinder_1", "Cylinder", "Home", "PLC_IN_InHomePos",
+            "%I0.0", "Bool", "A", string.Empty, null);
+        var secondSignal = new Fee2ContainerFoundSignalVM(
+            "c-2", "Sensor_1", "Sensor", "Detected", "PLC_IN_PartPresent",
+            "%I0.1", "Bool", "B", string.Empty, null);
+        viewModel.FoundContainers.Add(firstContainer);
+        viewModel.FoundContainers.Add(secondContainer);
+        viewModel.FoundSignals.Add(firstSignal);
+        viewModel.FoundSignals.Add(secondSignal);
+
+        viewModel.SelectedFoundContainer = firstContainer;
+        if (!firstSignal.IsRelatedToSelection || secondSignal.IsRelatedToSelection)
+            throw new InvalidOperationException("Container selection did not highlight exactly its FEE2Container signals.");
+
+        viewModel.SelectedFoundSignal = secondSignal;
+        if (!secondContainer.IsRelatedToSelection || firstContainer.IsRelatedToSelection ||
+            viewModel.SelectedFoundContainer is not null)
+        {
+            throw new InvalidOperationException("Signal selection did not highlight exactly its FEE2Container container.");
         }
     }
 
