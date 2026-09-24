@@ -1352,7 +1352,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         .Distinct(StringComparer.Ordinal)
         .ToArray();
 
-    private static ContainerToFeeVisualNodeState GetNodeState(
+    private ContainerToFeeVisualNodeState GetNodeState(
         VisualNode node,
         VisualPlan plan)
     {
@@ -1364,7 +1364,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         {
             var assigned = plan.Assignments.Any(assignment => assignment.TargetId == node.Id);
             return assigned
-                ? ContainerToFeeVisualNodeState.FoundUnlinked
+                ? _planService.GetSimObjectConnectionState(node.Id).IsVerified
+                    ? ContainerToFeeVisualNodeState.Verified
+                    : ContainerToFeeVisualNodeState.FoundUnlinked
                 : plan.IsCreationRequested(node.ContainerId ?? string.Empty)
                     ? ContainerToFeeVisualNodeState.Planned
                     : ContainerToFeeVisualNodeState.Missing;
@@ -1402,7 +1404,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             : ContainerToFeeVisualNodeState.Missing;
     }
 
-    private static string GetNodeConnectionDescription(VisualNode node, VisualPlan plan)
+    private string GetNodeConnectionDescription(VisualNode node, VisualPlan plan)
     {
         if (node.Kind == VisualNodeKind.Container)
         {
@@ -1426,7 +1428,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 ? plan.IsCreationRequested(node.ContainerId ?? string.Empty)
                     ? "Noch nicht vorhanden – wird neu erzeugt"
                     : "Nicht vorhanden und von der Erzeugung ausgeschlossen"
-                : $"Verbundenes FEE-SimObject: {string.Join(", ", assignments)}";
+                : $"Zugeordnetes FEE-SimObject: {string.Join(", ", assignments)}. " +
+                  _planService.GetSimObjectConnectionState(node.Id).Description;
         }
 
         if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
@@ -2255,9 +2258,13 @@ public sealed class ContainerToFeeVisualSignalEntryVM
         var assignment = plan.SignalAssignments.LastOrDefault(item =>
             string.Equals(item.SignalNodeId, model.Id, StringComparison.Ordinal));
         FeeSignalGuid = assignment?.FeeSignalGuid ?? string.Empty;
-        AssignedFeeSignal = assignment is null
-            ? "Keine vorhandene FEE-Zuordnung"
-            : $"{assignment.FeeSignalTag} · {assignment.FeeInterfaceName}";
+        AssignedFeeSignal = assignment is not null
+            ? $"{assignment.FeeSignalTag} · {assignment.FeeInterfaceName}"
+            : treeNode is not null &&
+              (treeNode.EffectiveState.Kind is ContainerToFeeVisualNodeStateKind.Verified or ContainerToFeeVisualNodeStateKind.FoundUnlinked) &&
+              treeNode.LinkedObjectDescription.Contains("FEE-Signal", StringComparison.OrdinalIgnoreCase)
+                ? treeNode.LinkedObjectDescription
+                : "Keine vorhandene FEE-Zuordnung";
         State = treeNode?.EffectiveState ?? ContainerToFeeVisualNodeState.Planned;
         ToolTipText = string.Join(
             Environment.NewLine,

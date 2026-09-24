@@ -144,7 +144,7 @@
         </Grid>
             </GroupBox>
 
-            <GroupBox Header="ViCo-Bibliothek">
+            <GroupBox Header="ViCo-Bibliothek" Margin="0,0,0,10">
                 <Grid Margin="8" MinHeight="260">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -201,6 +201,41 @@
                             VerticalAlignment="Top"
                             Content="Bibliothek exportieren"
                             Command="{Binding ExportLibraryCommand}" />
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="Achsen-Austausch (TiaBridge Rev23)">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Austauschordner" />
+                    <TextBox Grid.Row="0" Grid.Column="1" Margin="8,4" Text="{Binding AxisExchangePath}" />
+                    <Button Grid.Row="0" Grid.Column="2" MinWidth="110" Content="Durchsuchen"
+                            Command="{Binding BrowseAxisExchangeCommand}" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8"
+                               Text="{Binding AxisExchangeInfo}" TextWrapping="Wrap" />
+
+                    <WrapPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" HorizontalAlignment="Right">
+                        <Button MinWidth="185" Content="TO-Konfiguration exportieren"
+                                ToolTip="Liest alle Achsenparameter und schreibt sie in den Austauschordner."
+                                Command="{Binding ExportAxisConfigurationsCommand}" />
+                        <Button MinWidth="185" Margin="8,0,0,0" Content="TO-Konfiguration importieren"
+                                ToolTip="Ändert passende Achsenparameter. Speichert das TIA-Projekt nicht automatisch."
+                                Command="{Binding ImportAxisConfigurationsCommand}" />
+                        <Button MinWidth="185" Margin="8,0,0,0" Content="Achsen-Schnittstelle erzeugen"
+                                ToolTip="Erzeugt AxisValueTags.xlsx; das TIA-Projekt bleibt unverändert."
+                                Command="{Binding ExportAxisInterfaceCommand}" />
+                    </WrapPanel>
                 </Grid>
             </GroupBox>
           </StackPanel>

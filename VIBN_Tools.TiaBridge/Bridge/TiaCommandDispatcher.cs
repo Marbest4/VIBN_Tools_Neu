@@ -77,6 +77,15 @@ public sealed class TiaCommandDispatcher
             case TiaCommands.ConfigureAxes:
                 return TiaDispatchResult.From(_session.ConfigureAxes(Read<TiaAxisConfigurationPayload>(request)));
 
+            case TiaCommands.ExportAxisConfigurations:
+                return TiaDispatchResult.From(_session.ExportAxisConfigurations(Read<TiaPathPayload>(request)));
+
+            case TiaCommands.ImportAxisConfigurations:
+                return TiaDispatchResult.From(_session.ImportAxisConfigurations(Read<TiaPathPayload>(request)));
+
+            case TiaCommands.ExportAxisInterfaceWorkbook:
+                return TiaDispatchResult.From(_session.ExportAxisInterfaceWorkbook(Read<TiaPathPayload>(request)));
+
             case TiaCommands.Save:
                 _session.Save();
                 return TiaDispatchResult.Empty();

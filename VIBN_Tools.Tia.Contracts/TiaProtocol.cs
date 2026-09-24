@@ -18,6 +18,9 @@ public static class TiaCommands
     public const string CreateDataTypeFolder = "program.create-data-type-folder";
     public const string ListAxes = "technology.list-axes";
     public const string ConfigureAxes = "technology.configure-axes";
+    public const string ExportAxisConfigurations = "technology.export-axis-configurations";
+    public const string ImportAxisConfigurations = "technology.import-axis-configurations";
+    public const string ExportAxisInterfaceWorkbook = "technology.export-axis-interface-workbook";
     public const string Save = "project.save";
     public const string Close = "system.close";
 }

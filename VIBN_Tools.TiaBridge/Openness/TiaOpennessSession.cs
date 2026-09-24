@@ -1,5 +1,8 @@
 using System.Reflection;
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
+using ClosedXML.Excel;
 using VIBN_Tools.Tia.Contracts;
 
 namespace VIBN_Tools.TiaBridge.Openness;
@@ -380,6 +383,158 @@ public sealed class TiaOpennessSession : ITiaOpennessSession
         return axes;
     }
 
+    public TiaAxisConfigurationTransferResult ExportAxisConfigurations(TiaPathPayload payload)
+    {
+        var destination = RequireDirectoryPath(payload, create: true);
+        var root = Path.Combine(destination, "ToConfig");
+        Directory.CreateDirectory(root);
+        var result = new TiaAxisConfigurationTransferResult();
+        var exportedAxisNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        dynamic software = RequireSelectedSoftware();
+
+        object technologyRoot = software.TechnologicalObjectGroup;
+        ForEachAxis(technologyRoot, string.Empty, (axisObject, axisName, _, _) =>
+        {
+            if (!exportedAxisNames.Add(axisName))
+                throw new InvalidOperationException($"Der Achsenname '{axisName}' ist mehrfach vorhanden; ein namensbasierter TO-Export wäre nicht eindeutig.");
+            dynamic axis = axisObject;
+            var lines = new List<string> { axisName };
+            foreach (dynamic parameter in axis.Parameters)
+            {
+                try
+                {
+                    lines.Add(Convert.ToString(parameter.GetAttribute("Name"), CultureInfo.InvariantCulture) ?? string.Empty);
+                    lines.Add(Convert.ToString(parameter.Value, CultureInfo.InvariantCulture) ?? string.Empty);
+                    result.ParameterCount++;
+                }
+                catch (Exception exception)
+                {
+                    result.Warnings.Add($"{axisName}: Parameter konnte nicht gelesen werden: {Unwrap(exception).Message}");
+                }
+            }
+
+            var safeName = CreateSafeFileName(axisName);
+            var axisFolder = Path.Combine(root, safeName);
+            Directory.CreateDirectory(axisFolder);
+            WriteAllLinesAtomically(Path.Combine(axisFolder, safeName + ".txt"), lines);
+            result.AxisCount++;
+            result.FileCount++;
+        });
+        return result;
+    }
+
+    public TiaAxisConfigurationTransferResult ImportAxisConfigurations(TiaPathPayload payload)
+    {
+        var source = RequireDirectoryPath(payload, create: false);
+        var configurations = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        var result = new TiaAxisConfigurationTransferResult();
+        foreach (var file in Directory.GetFiles(source, "*.txt", SearchOption.AllDirectories))
+        {
+            var lines = File.ReadAllLines(file);
+            if (lines.Length < 1 || string.IsNullOrWhiteSpace(lines[0]) || (lines.Length - 1) % 2 != 0)
+            {
+                result.Warnings.Add($"Ungültige TO-Konfigurationsdatei übersprungen: {file}");
+                continue;
+            }
+
+            var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (var index = 1; index < lines.Length; index += 2)
+            {
+                if (!string.IsNullOrWhiteSpace(lines[index]))
+                    parameters[lines[index]] = lines[index + 1];
+            }
+            configurations[lines[0].Trim()] = parameters;
+            result.FileCount++;
+        }
+        if (configurations.Count == 0)
+            throw new InvalidOperationException("Im ausgewählten Ordner wurde keine gültige TO-Konfigurationsdatei gefunden.");
+
+        var projectAxes = ListAxes();
+        var duplicateProjectAxisNames = projectAxes.GroupBy(axis => axis.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1 && configurations.ContainsKey(group.Key))
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateProjectAxisNames.Length > 0)
+            throw new InvalidOperationException($"TO-Import ist wegen mehrfacher Achsennamen nicht eindeutig: {string.Join(", ", duplicateProjectAxisNames)}");
+
+        dynamic software = RequireSelectedSoftware();
+        object technologyRoot = software.TechnologicalObjectGroup;
+        ForEachAxis(technologyRoot, string.Empty, (axisObject, axisName, _, _) =>
+        {
+            if (!configurations.TryGetValue(axisName, out var configuredParameters))
+                return;
+
+            dynamic axis = axisObject;
+            var applied = 0;
+            foreach (dynamic parameter in axis.Parameters)
+            {
+                var parameterName = string.Empty;
+                try
+                {
+                    parameterName = Convert.ToString(parameter.GetAttribute("Name"), CultureInfo.InvariantCulture) ?? string.Empty;
+                    if (!configuredParameters.TryGetValue(parameterName, out var value))
+                        continue;
+                    parameter.Value = value;
+                    applied++;
+                }
+                catch (Exception exception)
+                {
+                    result.Warnings.Add($"{axisName}/{parameterName}: {Unwrap(exception).Message}");
+                }
+            }
+            result.AxisCount++;
+            result.ParameterCount += applied;
+        });
+        var availableAxisNames = projectAxes.Select(axis => axis.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var missing in configurations.Keys.Where(name => !availableAxisNames.Contains(name)))
+            result.Warnings.Add($"Achse aus Konfiguration nicht im TIA-Projekt gefunden: {missing}");
+        return result;
+    }
+
+    public TiaAxisInterfaceExportResult ExportAxisInterfaceWorkbook(TiaPathPayload payload)
+    {
+        if (payload == null || string.IsNullOrWhiteSpace(payload.Path))
+            throw new ArgumentException("Eine Zieldatei für die Achsen-Schnittstelle ist erforderlich.", nameof(payload));
+        var filePath = Path.GetFullPath(payload.Path);
+        if (!string.Equals(Path.GetExtension(filePath), ".xlsx", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Die Achsen-Schnittstelle muss als .xlsx-Datei gespeichert werden.", nameof(payload));
+        Directory.CreateDirectory(Path.GetDirectoryName(filePath) ?? throw new InvalidOperationException("Ungültiger Zielpfad."));
+
+        var axes = ListAxes();
+        var duplicateAxisNames = axes.GroupBy(axis => axis.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+        if (duplicateAxisNames.Length > 0)
+            throw new InvalidOperationException($"Achsen-Schnittstelle ist wegen mehrfacher Achsennamen nicht eindeutig: {string.Join(", ", duplicateAxisNames)}");
+        using (var workbook = new XLWorkbook())
+        {
+            var worksheet = workbook.Worksheets.Add("Data");
+            var headers = new[]
+            {
+                "IsValid", "Tag", "Address", "Type", "Comment", "Usage", "Cycle", "WriteAlways",
+                "HwIndex", "AcyclicVariable", "ForcingActive", "PartOfCommunicationLoop", "Value", "References"
+            };
+            for (var column = 0; column < headers.Length; column++)
+                worksheet.Cell(1, column + 1).Value = headers[column];
+            for (var index = 0; index < axes.Count; index++)
+            {
+                var row = index + 2;
+                var values = new[]
+                {
+                    "WAHR", $"viCo_Axes_DB.{axes[index].Name}", "", "Real", "AxisValue", "Read", "Continous",
+                    "FALSCH", "", "FALSCH", "FALSCH", "FALSCH", "0", "1"
+                };
+                for (var column = 0; column < values.Length; column++)
+                    worksheet.Cell(row, column + 1).Value = values[column];
+            }
+            worksheet.Columns().AdjustToContents();
+            workbook.SaveAs(filePath);
+        }
+        return new TiaAxisInterfaceExportResult { FilePath = filePath, AxisCount = axes.Count };
+    }
+
     public void Save()
     {
         RequireProject().Save();
@@ -738,6 +893,61 @@ public sealed class TiaOpennessSession : ITiaOpennessSession
 
         foreach (dynamic child in group.Groups)
             ProcessTechnologyGroup(child, groupPath, axes, selectedIds);
+    }
+
+    private static void ForEachAxis(
+        dynamic group,
+        string parentPath,
+        Action<object, string, string, string> action)
+    {
+        var groupName = ReadStringMember(group, "Name");
+        var groupPath = string.IsNullOrWhiteSpace(groupName)
+            ? parentPath
+            : string.IsNullOrWhiteSpace(parentPath) ? groupName : $"{parentPath}/{groupName}";
+        if (HasProperty(group, "TechnologicalObjects"))
+        {
+            foreach (dynamic technologyObject in group.TechnologicalObjects)
+            {
+                var technologyType = Convert.ToString((object?)technologyObject.OfSystemLibElement) ?? string.Empty;
+                if (technologyType.IndexOf("Axis", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                var name = Convert.ToString((object?)technologyObject.Name) ?? string.Empty;
+                action((object)technologyObject, name, technologyType, groupPath);
+            }
+        }
+        if (!HasProperty(group, "Groups"))
+            return;
+        foreach (dynamic child in group.Groups)
+            ForEachAxis(child, groupPath, action);
+    }
+
+    private static string RequireDirectoryPath(TiaPathPayload payload, bool create)
+    {
+        if (payload == null || string.IsNullOrWhiteSpace(payload.Path))
+            throw new ArgumentException("Ein Ordnerpfad ist erforderlich.", nameof(payload));
+        var path = Path.GetFullPath(payload.Path);
+        if (create)
+            Directory.CreateDirectory(path);
+        else if (!Directory.Exists(path))
+            throw new DirectoryNotFoundException($"Ordner wurde nicht gefunden: {path}");
+        return path;
+    }
+
+    private static string CreateSafeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var safe = new string((value ?? string.Empty).Select(character =>
+            invalid.Contains(character) ? '_' : character).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(safe) ? "Axis" : safe;
+    }
+
+    private static void WriteAllLinesAtomically(string filePath, IEnumerable<string> lines)
+    {
+        var temporaryPath = filePath + ".tmp";
+        File.WriteAllLines(temporaryPath, lines, new UTF8Encoding(false));
+        if (File.Exists(filePath))
+            File.Delete(filePath);
+        File.Move(temporaryPath, filePath);
     }
 
     private static IReadOnlyList<TiaAxisParameterResult> ConfigureAxisParameters(dynamic technologyObject, string axisName)

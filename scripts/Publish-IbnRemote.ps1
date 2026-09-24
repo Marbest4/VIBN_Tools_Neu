@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$OutputDirectory = "",
-    [string]$InWorkFilter = ""
+    [string]$InWorkFilter = "",
+    [string]$ApiKey = "12345",
+    [string]$RemoteDesktopPassword = "67890"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,6 +23,15 @@ if ([string]::IsNullOrWhiteSpace($InWorkFilter)) {
 if ($InWorkFilter.IndexOfAny([char[]]";`r`n") -ge 0) {
     throw 'Der In-Arbeit-Filter darf kein Semikolon und keinen Zeilenumbruch enthalten.'
 }
+if ([string]::IsNullOrWhiteSpace($ApiKey) -or [string]::IsNullOrWhiteSpace($RemoteDesktopPassword)) {
+    throw 'API-Key und Remote-Desktop-Passwort dürfen nicht leer sein.'
+}
+if ($ApiKey.IndexOfAny([char[]]";`r`n") -ge 0 -or $RemoteDesktopPassword.IndexOfAny([char[]]";`r`n") -ge 0) {
+    throw 'API-Key und Remote-Desktop-Passwort dürfen kein Semikolon und keinen Zeilenumbruch enthalten.'
+}
+if ($ApiKey -ne '12345' -or $RemoteDesktopPassword -ne '67890') {
+    Write-Warning 'Die übergebenen Zugangsdaten werden in die EXE eingebettet und sind aus der Binärdatei extrahierbar. Nur für kontrollierte Verteilung verwenden.'
+}
 
 $publishArguments = @(
     'publish', $project,
@@ -33,7 +44,9 @@ $publishArguments = @(
     '-p:EnableCompressionInSingleFile=true',
     '-p:DebugType=embedded',
     '-p:DebugSymbols=false',
-    "-p:IbnRemoteInWorkFilter=$InWorkFilter"
+    "-p:IbnRemoteInWorkFilter=$InWorkFilter",
+    "-p:IbnRemoteApiKey=$ApiKey",
+    "-p:IbnRemoteRemoteDesktopPassword=$RemoteDesktopPassword"
 )
 & dotnet @publishArguments
 
@@ -53,4 +66,9 @@ if ($unexpected.Count -gt 0) {
 
 Write-Host "IBN Remote bereit: $executable"
 Write-Host "In-Arbeit-Filter: $InWorkFilter"
-Write-Host 'Die angeforderten ungültigen Platzhalter 12345/67890 sind in der EXE eingebettet.'
+if ($ApiKey -eq '12345' -and $RemoteDesktopPassword -eq '67890') {
+    Write-Host 'Die angeforderten ungültigen Platzhalter 12345/67890 sind in der EXE eingebettet.'
+}
+else {
+    Write-Warning 'Benutzerdefinierte Zugangsdaten sind in der erzeugten EXE enthalten und nicht als Geheimnis geschützt.'
+}

@@ -87,6 +87,29 @@ public sealed class TiaAxisConfigurationPayload
     public List<string> AxisIds { get; set; } = new();
 }
 
+public sealed class TiaPathPayload
+{
+    public string Path { get; set; } = string.Empty;
+}
+
+public sealed class TiaAxisConfigurationTransferResult
+{
+    public int AxisCount { get; set; }
+
+    public int ParameterCount { get; set; }
+
+    public int FileCount { get; set; }
+
+    public List<string> Warnings { get; set; } = new();
+}
+
+public sealed class TiaAxisInterfaceExportResult
+{
+    public string FilePath { get; set; } = string.Empty;
+
+    public int AxisCount { get; set; }
+}
+
 public sealed class TiaAxisParameterResult
 {
     public string Name { get; set; } = string.Empty;

@@ -104,6 +104,7 @@
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="2*" />
                         <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="*" />
+                        <DataGridTextColumn Header="Zugeordnete FEE-Objekte" Binding="{Binding AssociatedObjects}" Width="2*" IsReadOnly="True" />
                         <DataGridTextColumn Header="Ursprüngliche Einträge" Binding="{Binding OriginalSignalCount}" Width="Auto" IsReadOnly="True" />
                         <DataGridTemplateColumn Header="Aktion" Width="Auto">
                             <DataGridTemplateColumn.CellTemplate>

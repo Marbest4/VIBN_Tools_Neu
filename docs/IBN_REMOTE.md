@@ -18,7 +18,7 @@ Nicht enthalten sind FEE-SDK, TIA-Bridge, Container-/CAD-/Modellfunktionen, Admi
 Auf dem Buildrechner genügt:
 
 ```powershell
-.\scripts\Publish-IbnRemote.ps1
+.\scripts\Publish-IbnRemote.ps1 -InWorkFilter 'GM7283' -ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'
 ```
 
 Das Ergebnis ist:
@@ -31,9 +31,9 @@ Die Datei ist `win-x64`, self-contained und single-file. Auf dem Ziel-PC sind we
 
 ## Vorkonfigurierte Testwerte
 
-Der feste Filter wird mit `-InWorkFilter` beim Publish gesetzt. Zusätzlich enthält die EXE auf ausdrücklichen Wunsch die ungültigen Platzhalter `12345` (Kanbanize API-Key) und `67890` (RDP-Passwort). Eine Konfigurationsoberfläche gibt es nicht. Der API-Key wird für den read-only Kanbanize-Abruf verwendet. Beim RDP-Start wird der Passwortplatzhalter kurzzeitig als `TERMSRV/<PC>`-Eintrag angelegt und nach 20 Sekunden wieder entfernt. Logs liegen unter `%LOCALAPPDATA%\GROB\VIBN_Tools_IBN\Logs` und enthalten die Werte nicht.
+Der feste Filter wird mit `-InWorkFilter` beim Publish gesetzt. `-ApiKey` und `-RemoteDesktopPassword` überschreiben die Standardplatzhalter `12345` und `67890`; damit lassen sich beispielsweise die vom Anwender genannten Werte `abcde` und `fghijk` einbetten. Eine Konfigurationsoberfläche gibt es nicht. Der API-Key wird für den read-only Kanbanize-Abruf verwendet. Beim RDP-Start wird das konfigurierte Passwort kurzzeitig als `TERMSRV/<PC>`-Eintrag angelegt und nach 20 Sekunden wieder entfernt. Logs liegen unter `%LOCALAPPDATA%\GROB\VIBN_Tools_IBN\Logs` und enthalten die Werte nicht.
 
-Die eingebetteten Zeichenfolgen sind mit üblichen .NET-Werkzeugen aus der EXE auslesbar. Sie dürfen deshalb nicht durch echte Zugangsdaten ersetzt werden. Ein produktiver Rollout benötigt einen Windows-/gerätegebundenen Secret-Speicher oder ein freigegebenes Unternehmens-Secretsystem.
+Die eingebetteten Zeichenfolgen sind mit üblichen .NET-Werkzeugen aus der EXE auslesbar; auch der Publish-Prozess kann sie in seiner Befehlszeile sichtbar machen. Das Skript warnt deshalb ausdrücklich bei Werten außerhalb der Testplatzhalter. Technisch ist das Überschreiben möglich, sicherheitstechnisch sind echte Zugangsdaten in dieser Form aber kein Geheimnis. Ein produktiver Rollout benötigt einen Windows-/gerätegebundenen Secret-Speicher oder ein freigegebenes Unternehmens-Secretsystem.
 
 ## Technische Grenze
 

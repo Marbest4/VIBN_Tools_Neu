@@ -1,6 +1,7 @@
 using System.IO;
 using System.Xml.Linq;
 using VIBN_Tools.ContainerGeneration.Models;
+using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
@@ -295,6 +296,73 @@ public sealed class ContainerToFeeVisualPlanService
         return new(
             VisualSignalConnectionKind.LinkMissing,
             $"Signal gefunden, erforderliche Verknüpfung zu '{container.Name}' fehlt. {actual}");
+    }
+
+    public VisualSimObjectConnectionState GetSimObjectConnectionState(string targetId)
+    {
+        var plan = CurrentPlan;
+        var target = plan?.FindTarget(targetId);
+        var container = target is null ? null : plan?.FindNode(target.ContainerId);
+        if (plan is null || target is null || container is null)
+            return new(VisualSimObjectConnectionKind.NotRead, "SimObject-Ziel ist nicht mehr vorhanden.");
+
+        var assignments = plan.Assignments.Where(item =>
+                string.Equals(item.TargetId, targetId, StringComparison.Ordinal))
+            .ToArray();
+        if (assignments.Length == 0)
+            return new(VisualSimObjectConnectionKind.NotRead, "Noch kein vorhandenes FEE-SimObject zugeordnet.");
+        if (!_hasDiscoveredFeeObjects)
+            return new(VisualSimObjectConnectionKind.NotRead, "FEE-SimObjects wurden noch nicht aktualisiert.");
+        if (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
+            return new(VisualSimObjectConnectionKind.LinkMissing, "Containerdefinition ist nicht auflösbar.");
+        if (string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName))
+        {
+            return new(
+                VisualSimObjectConnectionKind.NotRequired,
+                "Vorhandenes FEE-SimObject bestätigt; dieser Container erwartet keine SimObject-zu-Logik-Verknüpfung.");
+        }
+
+        var expectedLogics = _feeContainerObjects.Where(item =>
+                item.Kind == VisualFeeContainerObjectKind.Logic &&
+                string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, item.Definition) &&
+                Guid.TryParse(item.GuidString, out _))
+            .ToArray();
+        if (expectedLogics.Length != 1)
+        {
+            return new(
+                VisualSimObjectConnectionKind.LinkMissing,
+                expectedLogics.Length == 0
+                    ? $"FEE-SimObject gefunden; passende Logik '{descriptor.ExpectedLogicName}' fehlt."
+                    : $"FEE-SimObject gefunden; {expectedLogics.Length} passende Logiken sind nicht eindeutig.");
+        }
+
+        var logicGuid = Guid.Parse(expectedLogics[0].GuidString);
+        var unlinked = new List<string>();
+        foreach (var assignment in assignments)
+        {
+            if (!_runtimeObjects.TryGetValue(assignment.FeeObjectId, out var runtimeObject) ||
+                !IsObjectLinked(runtimeObject, logicGuid))
+            {
+                unlinked.Add(assignment.FeeObjectName);
+            }
+        }
+        return unlinked.Count == 0
+            ? new(
+                VisualSimObjectConnectionKind.Linked,
+                $"Vorhandene FEE-SimObject-Verknüpfung zu '{expectedLogics[0].Name}' bestätigt.")
+            : new(
+                VisualSimObjectConnectionKind.LinkMissing,
+                $"FEE-SimObject gefunden; Verknüpfung zur Logik fehlt oder ist nicht rücklesbar: {string.Join(", ", unlinked)}");
+    }
+
+    private static bool IsObjectLinked(FeeAbstractObject runtimeObject, Guid expectedLogicGuid)
+    {
+        if (runtimeObject.Slots?.Values.Contains(expectedLogicGuid) == true)
+            return true;
+        return Services.FeeObjects?.AllFeeObjects?.Any(item =>
+                   item.Guid == expectedLogicGuid &&
+                   item.Slots?.Values.Contains(runtimeObject.Guid) == true) == true;
     }
 
     public IReadOnlyList<string> FindVerifiedSignalNodeIds(string feeSignalGuid)

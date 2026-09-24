@@ -564,6 +564,26 @@ internal static class Program
             throw new InvalidOperationException(
                 "FEE2Container did not reconstruct every distinct catalogued Grob logic type.");
         }
+
+        var liftLogicGuid = Guid.NewGuid();
+        var liftJointGuid = Guid.NewGuid();
+        var jointAssociation = FeeContainerLiveReconstructor.Reconstruct(
+            rootGuid,
+            "Motion association",
+            [
+                new(liftLogicGuid, "Lift_1", "LogicObject", "Grob_LiftUnit"),
+                new(liftJointGuid, "Lift_1", "MotionJoint"),
+            ],
+            [],
+            []);
+        if (jointAssociation.ObjectAssociations.Count != 1 ||
+            jointAssociation.ObjectAssociations[0].ObjectGuid != liftJointGuid ||
+            jointAssociation.ObjectAssociations[0].ContainerObjectGuid != liftLogicGuid ||
+            jointAssociation.UnmappedObjects.Any(item => item.Guid == liftJointGuid))
+        {
+            throw new InvalidOperationException(
+                "FEE2Container did not associate a unique same-name MotionJoint with its compatible LiftUnit container.");
+        }
     }
 
     private static async Task ValidateVisualMotionJointReuseAsync()
@@ -590,19 +610,45 @@ internal static class Program
             var visualObjectConstructor = typeof(VisualFeeObject).GetConstructors(
                     BindingFlags.Instance | BindingFlags.NonPublic)
                 .Single();
-            VisualFeeObject CreateJoint() => (VisualFeeObject)visualObjectConstructor.Invoke(
+            var logicGuid = Guid.NewGuid();
+            VisualFeeObject CreateJoint()
+            {
+                var objectGuid = Guid.NewGuid();
+                return (VisualFeeObject)visualObjectConstructor.Invoke(
                 [
-                    $"fee:{Guid.NewGuid():D}",
-                    Guid.NewGuid().ToString("D"),
+                    $"fee:{objectGuid:D}",
+                    objectGuid.ToString("D"),
                     "Axis_1",
                     typeof(FeeJoint).FullName!,
                     "MotionJoint",
                     new[] { nameof(FeeJoint), typeof(FeeJoint).FullName! },
                 ]);
+            }
             var objects = new[] { CreateJoint(), CreateJoint() };
             typeof(ContainerToFeeVisualPlanService)
                 .GetField("_feeObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(service, objects);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_hasDiscoveredFeeObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, true);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeContainerObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[]
+                {
+                    new VisualFeeContainerObject(logicGuid.ToString("D"), "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder")
+                });
+            var runtimeObjects = objects.ToDictionary(
+                item => item.Id,
+                item => (FeeAbstractObject)new FeeJoint
+                {
+                    Guid = Guid.Parse(item.GuidString),
+                    Name = item.Name,
+                    Slots = new Dictionary<string, Guid> { ["InTarget"] = logicGuid },
+                },
+                StringComparer.Ordinal);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_runtimeObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, runtimeObjects);
 
             var added = service.AutoAssignMatches();
             var target = loaded.Plan.Targets.Single(item => item.AllowMultiSelect);
@@ -611,6 +657,8 @@ internal static class Program
                 throw new InvalidOperationException(
                     "Existing same-name MotionJoints were not reused for a multi-select visual target.");
             }
+            if (!service.GetSimObjectConnectionState(target.Id).IsVerified)
+                throw new InvalidOperationException("A linked existing MotionJoint was not verified as green in the visual plan.");
             if (!service.RemoveAssignment(target.Id, objects[0].Id).Success ||
                 loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 1)
             {

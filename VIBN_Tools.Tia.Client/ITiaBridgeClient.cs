@@ -51,5 +51,17 @@ public interface ITiaBridgeClient : IAsyncDisposable
         IReadOnlyCollection<string> axisIds,
         CancellationToken cancellationToken = default);
 
+    Task<TiaAxisConfigurationTransferResult> ExportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default);
+
+    Task<TiaAxisConfigurationTransferResult> ImportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default);
+
+    Task<TiaAxisInterfaceExportResult> ExportAxisInterfaceWorkbookAsync(
+        string filePath,
+        CancellationToken cancellationToken = default);
+
     Task SaveAsync(CancellationToken cancellationToken = default);
 }

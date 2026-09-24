@@ -20,10 +20,12 @@ RDP-Sitzung und letzte Anmeldung werden nicht aus dem Windows-Ereignisprotokoll 
 | Export VicoBib | rekursiver Export der gewählten Bibliothek nach `_Programm` und `_Datatype` | vorhanden |
 | PLC-Auswahl/Projekt speichern | typisierte Bridge-Befehle mit erklärender UI | vorhanden |
 | Hardware lesen | typisierte, rekursive Hardwareabfrage für SpecialDevices | zusätzlich vorhanden |
-| AxisDB → ExcelInterface | Referenz sendet nur den Stringbefehl an eine nicht enthaltene externe Bridge | nicht verifizierbar |
-| TO-Config Export/Import | Referenz sendet nur `ExportTO`/`ImportTO`; serverseitige Implementierung fehlt im Repository | nicht verifizierbar |
+| AxisDB → ExcelInterface | `AxisValueTags.xlsx` mit den 14 Rev23-Spalten und einem `viCo_Axes_DB.<Achse>`-Eintrag je rekursiv gefundener Achse | integriert |
+| TO-Config Export/Import | typisierte Befehle, rekursive Achsensuche, je Achse eine Parameterdatei unter `ToConfig`; Import protokolliert fehlende Achsen/Parameter und speichert nicht automatisch | integriert |
 
 Die TIA-Bridge bleibt absichtlich eine automatisch gestartete `net48`-EXE. Siemens Openness und der synchrone Hersteller-API-Aufruf werden dadurch vom `net8.0-windows`-Hauptprozess isoliert. Ein hängender Siemens-Aufruf kann so beendet werden, ohne VIBN Tools, FEE oder Rechnerübersicht mit zu beenden.
+
+Für den zweiten Abgleich wurde zusätzlich `Marbest4/TiaBridge_Rev23` ausgewertet. Dessen fest verdrahtete Ausgabe nach `C:\Treiber\VICO_Tool\Files`, begrenzte Gruppenebenen und Fehlerpfade mit erfolgreicher Antwort trotz Ausnahme wurden nicht übernommen. Der Austauschordner wird in der VIBN-Tools-Oberfläche gewählt; alle Technologiegruppen werden rekursiv durchlaufen und Fehler bleiben echte Bridge-Fehler. Named-Pipe-Vertrag und Solution-Build sind automatisiert geprüft. Die Live-Ausführung setzt weiterhin eine geöffnete TIA-Portal-Instanz mit Projekt, ausgewählter PLC und bestätigter Openness-Freigabe voraus.
 
 ## Rockwell
 

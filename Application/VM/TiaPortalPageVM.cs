@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.Core.ViCo;
@@ -59,6 +60,10 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         ImportLibraryCommand = GetCommandBindingAsync(ImportLibraryAsync);
         ExportLibraryCommand = GetCommandBindingAsync(ExportLibraryAsync);
         ToggleLibraryOperationInfoCommand = GetCommandBinding(ToggleLibraryOperationInfo);
+        BrowseAxisExchangeCommand = GetCommandBinding(BrowseAxisExchange);
+        ExportAxisConfigurationsCommand = GetCommandBindingAsync(ExportAxisConfigurationsAsync);
+        ImportAxisConfigurationsCommand = GetCommandBindingAsync(ImportAxisConfigurationsAsync);
+        ExportAxisInterfaceCommand = GetCommandBindingAsync(ExportAxisInterfaceAsync);
     }
 
     public ObservableCollection<string> InstalledVersions { get; } = new();
@@ -99,6 +104,14 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
     public ICommand ToggleLibraryOperationInfoCommand { get; }
 
+    public ICommand BrowseAxisExchangeCommand { get; }
+
+    public ICommand ExportAxisConfigurationsCommand { get; }
+
+    public ICommand ImportAxisConfigurationsCommand { get; }
+
+    public ICommand ExportAxisInterfaceCommand { get; }
+
     public string AxisConfigurationInfo =>
         "Auswahl konfigurieren ändert ausschließlich die markierten Technologieachsen. " +
         "Ein separates X/Y/Z-Kennzeichen beziehungsweise Namen wie AxisX/AchseX werden als linear erkannt; andere Namen als rotatorisch. " +
@@ -125,6 +138,13 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         "und Datentypbaum exportiert werden soll. Die XML-Dateien werden unter " +
         "<Exportordner>/<Name>_<TIA-Version>/_Programm und _Datatype geschrieben; vorhandene gleichnamige " +
         "Exportdateien werden ersetzt. Das TIA-Projekt wird beim Export nicht verändert oder gespeichert.";
+
+    public string AxisExchangeInfo =>
+        "TO-Konfiguration exportieren schreibt für jede Technologieachse alle lesbaren Parameter nach " +
+        "<Ordner>/ToConfig/<Achse>/<Achse>.txt. Importieren setzt nur Parameter gleichnamiger Achsen; " +
+        "nicht gefundene Achsen und nicht setzbare Parameter werden protokolliert. Der Import speichert das " +
+        "TIA-Projekt nicht automatisch. Achsen-Schnittstelle erzeugt AxisValueTags.xlsx im gewählten Ordner " +
+        "und verändert das TIA-Projekt nicht.";
 
     private bool _isAxisConfigurationInfoVisible;
     public bool IsAxisConfigurationInfoVisible
@@ -181,6 +201,17 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         set
         {
             _libraryName = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private string _axisExchangePath = string.Empty;
+    public string AxisExchangePath
+    {
+        get => _axisExchangePath;
+        set
+        {
+            _axisExchangePath = value;
             OnPropertyChanged();
         }
     }
@@ -396,6 +427,72 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         var selected = _folderSelection.SelectFolder("Exportziel auswählen", ExportPath);
         if (selected is not null)
             ExportPath = selected;
+    }
+
+    private void BrowseAxisExchange()
+    {
+        var selected = _folderSelection.SelectFolder("Ordner für Achsen-Austausch auswählen", AxisExchangePath);
+        if (selected is not null)
+            AxisExchangePath = selected;
+    }
+
+    private async Task ExportAxisConfigurationsAsync()
+    {
+        if (!CanUseAxisExchange())
+            return;
+        await RunBusyAsync("TO-Konfigurationen werden exportiert …", async () =>
+        {
+            var result = await _client.ExportAxisConfigurationsAsync(AxisExchangePath);
+            StatusText = $"{result.AxisCount} Achse(n) mit {result.ParameterCount} Parameter(n) in {result.FileCount} Datei(en) exportiert.";
+            LogTransferWarnings("TIA TO-Export", result.Warnings);
+        });
+    }
+
+    private async Task ImportAxisConfigurationsAsync()
+    {
+        if (!CanUseAxisExchange())
+            return;
+        await RunBusyAsync("TO-Konfigurationen werden importiert …", async () =>
+        {
+            var result = await _client.ImportAxisConfigurationsAsync(AxisExchangePath);
+            StatusText = $"{result.AxisCount} Achse(n) aktualisiert; {result.ParameterCount} Parameter gesetzt. Projekt noch nicht gespeichert.";
+            LogTransferWarnings("TIA TO-Import", result.Warnings);
+        });
+    }
+
+    private async Task ExportAxisInterfaceAsync()
+    {
+        if (!CanUseAxisExchange())
+            return;
+        await RunBusyAsync("Achsen-Schnittstelle wird erzeugt …", async () =>
+        {
+            var result = await _client.ExportAxisInterfaceWorkbookAsync(
+                Path.Combine(AxisExchangePath, "AxisValueTags.xlsx"));
+            StatusText = $"Achsen-Schnittstelle für {result.AxisCount} Achse(n) geschrieben: {result.FilePath}";
+        });
+    }
+
+    private bool CanUseAxisExchange()
+    {
+        if (SelectedPlc is null)
+        {
+            StatusText = "Bitte zuerst TIA verbinden und die gewünschte PLC auswählen.";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(AxisExchangePath))
+        {
+            StatusText = "Bitte zuerst einen Ordner für den Achsen-Austausch auswählen.";
+            return false;
+        }
+        return true;
+    }
+
+    private void LogTransferWarnings(string area, IReadOnlyList<string> warnings)
+    {
+        foreach (var warning in warnings)
+            _log.Warning(area, warning);
+        if (warnings.Count > 0)
+            StatusText += $" {warnings.Count} Warnung(en) stehen im Log.";
     }
 
     private async Task ImportLibraryAsync()

@@ -49,6 +49,8 @@ Separate IBN-Remote-Einzeldatei (kein FEE-SDK und kein Inno Setup erforderlich):
 .\scripts\Publish-IbnRemote.ps1 -InWorkFilter 'GM7283'
 ```
 
+Die Buildwerte können bewusst überschrieben werden, zum Beispiel mit `-ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'`. Diese Werte stehen danach auslesbar in der EXE und können zusätzlich in der Prozessbefehlszeile des Publish-Laufs erscheinen; das ist eine Konfigurationsmöglichkeit, kein Secret-Speicher.
+
 Das Skript schreibt den Filter als Assembly-Metadatum in die erzeugte EXE. Auf ausdrücklichen Wunsch enthält die IBN-EXE außerdem die **absichtlich ungültigen Testplatzhalter** `12345` als Kanbanize-API-Key und `67890` als RDP-Passwort. Dadurch kann das Verhalten einer vollständig vorkonfigurierten Einzeldatei getestet werden, ohne echte Zugangsdaten einzuchecken. Zur Laufzeit hält der Prozess den API-Key nur im Arbeitsspeicher. Das RDP-Passwort wird unmittelbar vor dem RDP-Start temporär über `cmdkey` hinterlegt und anschließend wieder entfernt.
 
 Wichtig: Assembly-Metadaten und andere in einer .NET-EXE eingebettete Zeichenfolgen sind auslesbar. Diese Technik ist daher **nur für die genannten ungültigen Platzhalter** zulässig und kein sicherer Speicher für echte Zugangsdaten. Für eine produktive Verteilung mit echten Werten muss wieder ein benutzer- oder gerätegebundener Secret-Speicher (beispielsweise Windows Credential Manager beziehungsweise DPAPI) verwendet werden.

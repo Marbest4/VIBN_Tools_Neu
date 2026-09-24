@@ -232,6 +232,30 @@ public sealed class NamedPipeTiaBridgeClient : ITiaBridgeClient
             new TiaAxisConfigurationPayload { AxisIds = axisIds?.ToList() ?? new List<string>() },
             cancellationToken);
 
+    public Task<TiaAxisConfigurationTransferResult> ExportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<TiaPathPayload, TiaAxisConfigurationTransferResult>(
+            TiaCommands.ExportAxisConfigurations,
+            new TiaPathPayload { Path = folderPath },
+            cancellationToken);
+
+    public Task<TiaAxisConfigurationTransferResult> ImportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<TiaPathPayload, TiaAxisConfigurationTransferResult>(
+            TiaCommands.ImportAxisConfigurations,
+            new TiaPathPayload { Path = folderPath },
+            cancellationToken);
+
+    public Task<TiaAxisInterfaceExportResult> ExportAxisInterfaceWorkbookAsync(
+        string filePath,
+        CancellationToken cancellationToken = default) =>
+        SendAsync<TiaPathPayload, TiaAxisInterfaceExportResult>(
+            TiaCommands.ExportAxisInterfaceWorkbook,
+            new TiaPathPayload { Path = filePath },
+            cancellationToken);
+
     public Task SaveAsync(CancellationToken cancellationToken = default) =>
         SendWithoutResultAsync(TiaCommands.Save, EmptyPayload.Instance, cancellationToken);
 

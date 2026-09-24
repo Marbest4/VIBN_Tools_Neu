@@ -20,7 +20,8 @@ public sealed record Fee2ContainerRoot(
     int InspectedObjectCount = 0,
     int IgnoredObjectCount = 0,
     IReadOnlyList<FeeContainerReconstructionIssue>? ReconstructionIssues = null,
-    IReadOnlyList<FeeContainerUnmappedObject>? NonContainerObjects = null)
+    IReadOnlyList<FeeContainerUnmappedObject>? NonContainerObjects = null,
+    IReadOnlyList<FeeContainerObjectAssociation>? ObjectAssociations = null)
 {
     public bool HasProvenance => Provenance is not null && UsesExactProvenance;
     public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : "FEE-Struktur (rekonstruiert)";
@@ -524,7 +525,8 @@ public sealed class Fee2ContainerService
                         scoped.Length,
                         0,
                         [],
-                        classification.UnmappedObjects));
+                        classification.UnmappedObjects,
+                        classification.ObjectAssociations));
                     continue;
                 }
 
@@ -562,7 +564,8 @@ public sealed class Fee2ContainerService
                     reconstructed.InspectedObjectCount,
                     reconstructed.IgnoredObjectCount,
                     reconstructed.Issues,
-                    reconstructed.UnmappedObjects));
+                    reconstructed.UnmappedObjects,
+                    reconstructed.ObjectAssociations));
                 resultIssues.AddRange(reconstructed.Issues.Select(issue =>
                     new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, root.Name, issue.Message)));
             }

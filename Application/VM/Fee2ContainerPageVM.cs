@@ -53,7 +53,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         FoundSignalsView = CollectionViewSource.GetDefaultView(FoundSignals);
         NonContainerObjectsView = CollectionViewSource.GetDefaultView(NonContainerObjects);
         FoundContainersView.Filter = item => item is Fee2ContainerFoundContainerVM container &&
-            Matches(ContainerSearchText, container.Component, container.Type, container.OriginalSignalCount.ToString());
+            Matches(ContainerSearchText, container.Component, container.Type, container.AssociatedObjects,
+                container.OriginalSignalCount.ToString());
         FoundSignalsView.Filter = item => item is Fee2ContainerFoundSignalVM signal &&
             Matches(SignalSearchText, signal.Container, signal.ContainerType, signal.Signal, signal.Slot,
                 signal.Address, signal.DataType, signal.SignalId, signal.AssignmentState, signal.Note);
@@ -498,7 +499,17 @@ public sealed class Fee2ContainerRootEditor
                 var component = container.Element("Component")?.Value ?? string.Empty;
                 var type = container.Element("Type")?.Value ?? string.Empty;
                 var entries = container.Descendants("Entry").ToArray();
-                Containers.Add(new Fee2ContainerFoundContainerVM(id, component, type, entries.Length));
+                var associatedObjects = (root.ObjectAssociations ?? [])
+                    .Where(item => string.Equals(item.ContainerId, id, StringComparison.Ordinal))
+                    .Select(item => $"{item.ObjectName} ({item.ObjectType})")
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                Containers.Add(new Fee2ContainerFoundContainerVM(
+                    id,
+                    component,
+                    type,
+                    entries.Length,
+                    string.Join(", ", associatedObjects)));
                 foreach (var (entry, entryIndex) in entries.Select((item, index) => (item, index)))
                 {
                     bindings.TryGetValue((containerIndex, entryIndex), out var variableGuid);
@@ -613,18 +624,25 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     private bool _isIncluded = true;
     private bool _isRelatedToSelection;
 
-    public Fee2ContainerFoundContainerVM(string id, string component, string type, int originalSignalCount)
+    public Fee2ContainerFoundContainerVM(
+        string id,
+        string component,
+        string type,
+        int originalSignalCount,
+        string associatedObjects = "")
     {
         Id = id;
         _component = component;
         _type = type;
         OriginalSignalCount = originalSignalCount;
+        AssociatedObjects = associatedObjects;
     }
 
     public string Id { get; }
     public string Component { get => _component; set => SetPropertyChange(ref _component, value); }
     public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
     public int OriginalSignalCount { get; }
+    public string AssociatedObjects { get; }
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
     public bool IsRelatedToSelection
     {

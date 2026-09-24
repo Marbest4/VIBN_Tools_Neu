@@ -1070,7 +1070,7 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
         using var reader = new StreamReader(server, leaveOpen: true);
         using var writer = new StreamWriter(server, leaveOpen: true) { AutoFlush = true };
 
-        for (var requestIndex = 0; requestIndex < 5; requestIndex++)
+        for (var requestIndex = 0; requestIndex < 8; requestIndex++)
         {
             var requestLine = await reader.ReadLineAsync();
             var request = JsonSerializer.Deserialize<TiaRequestEnvelope>(requestLine!);
@@ -1080,6 +1080,9 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
                 1 => TiaCommands.ListHardware,
                 2 => TiaCommands.ListAxes,
                 3 => TiaCommands.ConfigureAxes,
+                4 => TiaCommands.ExportAxisConfigurations,
+                5 => TiaCommands.ImportAxisConfigurations,
+                6 => TiaCommands.ExportAxisInterfaceWorkbook,
                 _ => TiaCommands.Close
             };
             Assert(request?.Command == expectedCommand, $"Typed TIA pipe command '{expectedCommand}' was not received.");
@@ -1146,6 +1149,24 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
                             ]
                         }
                     }),
+                    4 => JsonSerializer.Serialize(new TiaAxisConfigurationTransferResult
+                    {
+                        AxisCount = 1,
+                        ParameterCount = 42,
+                        FileCount = 1,
+                    }),
+                    5 => JsonSerializer.Serialize(new TiaAxisConfigurationTransferResult
+                    {
+                        AxisCount = 1,
+                        ParameterCount = 40,
+                        FileCount = 1,
+                        Warnings = ["Two read-only parameters"],
+                    }),
+                    6 => JsonSerializer.Serialize(new TiaAxisInterfaceExportResult
+                    {
+                        AxisCount = 1,
+                        FilePath = "C:\\Exchange\\AxisValueTags.xlsx",
+                    }),
                     _ => JsonSerializer.Serialize((object?)null)
                 }
             };
@@ -1180,6 +1201,15 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
         var configuredAxes = await client.ConfigureAxesAsync(new[] { axes[0].Id });
         Assert(configuredAxes.Count == 1 && configuredAxes[0].ParameterResults.Single().Success,
             "Selective TIA axis configuration results must survive the typed pipe boundary.");
+        var exported = await client.ExportAxisConfigurationsAsync("C:\\Exchange");
+        Assert(exported.AxisCount == 1 && exported.ParameterCount == 42 && exported.FileCount == 1,
+            "TIA TO export results must survive the typed pipe boundary.");
+        var imported = await client.ImportAxisConfigurationsAsync("C:\\Exchange");
+        Assert(imported.AxisCount == 1 && imported.ParameterCount == 40 && imported.Warnings.Count == 1,
+            "TIA TO import diagnostics must survive the typed pipe boundary.");
+        var interfaceExport = await client.ExportAxisInterfaceWorkbookAsync("C:\\Exchange\\AxisValueTags.xlsx");
+        Assert(interfaceExport.AxisCount == 1 && interfaceExport.FilePath.EndsWith("AxisValueTags.xlsx", StringComparison.Ordinal),
+            "TIA axis interface workbook results must survive the typed pipe boundary.");
     }
     finally
     {

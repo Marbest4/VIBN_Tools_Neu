@@ -243,6 +243,21 @@ public sealed record VisualSignalConnectionState(
     public bool IsVerified => Kind is VisualSignalConnectionKind.Linked or VisualSignalConnectionKind.NotRequired;
 }
 
+public enum VisualSimObjectConnectionKind
+{
+    NotRead,
+    NotRequired,
+    Linked,
+    LinkMissing,
+}
+
+public sealed record VisualSimObjectConnectionState(
+    VisualSimObjectConnectionKind Kind,
+    string Description)
+{
+    public bool IsVerified => Kind is VisualSimObjectConnectionKind.Linked or VisualSimObjectConnectionKind.NotRequired;
+}
+
 /// <summary>A typed drop target declared by the unchanged legacy container.</summary>
 public sealed class VisualSimObjectTarget
 {

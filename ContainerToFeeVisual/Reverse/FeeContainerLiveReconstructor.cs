@@ -35,12 +35,21 @@ public sealed record FeeContainerUnmappedObject(
     string FeeType,
     string Reason);
 
+public sealed record FeeContainerObjectAssociation(
+    Guid ObjectGuid,
+    string ObjectName,
+    string ObjectType,
+    Guid ContainerObjectGuid,
+    string ContainerId,
+    string Reason);
+
 public sealed record FeeContainerReconstructionResult(
     FeeContainerProvenanceSnapshot Snapshot,
     int InspectedObjectCount,
     int IgnoredObjectCount,
     IReadOnlyList<FeeContainerReconstructionIssue> Issues,
-    IReadOnlyList<FeeContainerUnmappedObject> UnmappedObjects);
+    IReadOnlyList<FeeContainerUnmappedObject> UnmappedObjects,
+    IReadOnlyList<FeeContainerObjectAssociation> ObjectAssociations);
 
 /// <summary>
 /// Reconstructs the container schema from a bounded FEE subtree. Exact
@@ -94,7 +103,8 @@ public static class FeeContainerLiveReconstructor
         // Property provenance is intentionally written to every generated
         // primary/technical object. Collapse those objects back to one
         // container and prefer the logic object because PLC variables are
-        // normally assigned there. MotionJoints are never inferred/merged.
+        // normally assigned there. MotionJoints are not emitted as standalone
+        // containers; they are associated with one compatible container below.
         var versioned = candidates
             .Where(item => !string.IsNullOrWhiteSpace(item.Object.ProvenanceContainerId))
             .GroupBy(item => item.Object.ProvenanceContainerId!, StringComparer.Ordinal)
@@ -108,6 +118,9 @@ public static class FeeContainerLiveReconstructor
             .Where(item => !IsRedundantLegacySimObject(item, candidates))
             .ToArray();
         candidates = versioned.Concat(unversioned).ToList();
+
+        var objectAssociations = ResolveMotionJointAssociations(sourceObjects, candidates, issues);
+        relevantObjectGuids.UnionWith(objectAssociations.Select(item => item.ObjectGuid));
 
         var containerElements = new List<XElement>();
         var bindings = new List<FeeContainerSignalBinding>();
@@ -214,7 +227,50 @@ public static class FeeContainerLiveReconstructor
             sourceObjects.Length,
             unmapped.Length,
             issues,
-            unmapped);
+            unmapped,
+            objectAssociations);
+    }
+
+    private static IReadOnlyList<FeeContainerObjectAssociation> ResolveMotionJointAssociations(
+        IReadOnlyList<FeeContainerLiveObject> objects,
+        IReadOnlyList<ContainerCandidate> candidates,
+        ICollection<FeeContainerReconstructionIssue> issues)
+    {
+        var result = new List<FeeContainerObjectAssociation>();
+        foreach (var joint in objects.Where(item => EndsWithType(item.FeeType, "MotionJoint")))
+        {
+            var compatible = candidates.Where(candidate =>
+                    candidate.Descriptor.Targets.Any(target =>
+                        string.Equals(target.AllowedType.Name, "MotionJoint", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(target.AllowedType.Name, "FeeJoint", StringComparison.OrdinalIgnoreCase)) &&
+                    ((!string.IsNullOrWhiteSpace(joint.ProvenanceContainerId) &&
+                      string.Equals(joint.ProvenanceContainerId, candidate.Object.ProvenanceContainerId, StringComparison.Ordinal)) ||
+                     string.Equals(joint.Name, candidate.ComponentName, StringComparison.OrdinalIgnoreCase)))
+                .DistinctBy(candidate => candidate.Object.Guid)
+                .ToArray();
+            if (compatible.Length == 1)
+            {
+                var container = compatible[0];
+                result.Add(new FeeContainerObjectAssociation(
+                    joint.Guid,
+                    joint.Name,
+                    joint.FeeType,
+                    container.Object.Guid,
+                    string.IsNullOrWhiteSpace(container.Object.ProvenanceContainerId)
+                        ? $"fee:{container.Object.Guid:D}"
+                        : container.Object.ProvenanceContainerId!,
+                    !string.IsNullOrWhiteSpace(joint.ProvenanceContainerId)
+                        ? "Über Container-Provenienz zugeordnet"
+                        : "Über eindeutigen Komponentenname und kompatiblen MotionJoint-Zieltyp zugeordnet"));
+            }
+            else if (compatible.Length > 1)
+            {
+                issues.Add(new FeeContainerReconstructionIssue(
+                    joint.Guid,
+                    $"MotionJoint '{joint.Name}' passt zu mehreren Containern und bleibt zur Prüfung unzugeordnet."));
+            }
+        }
+        return result;
     }
 
     private static bool TryCreateCandidate(

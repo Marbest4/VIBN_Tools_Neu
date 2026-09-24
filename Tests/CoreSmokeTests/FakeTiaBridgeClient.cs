@@ -99,6 +99,29 @@ internal sealed class FakeTiaBridgeClient : ITiaBridgeClient
             AxisItems.Where(axis => axisIds.Contains(axis.Id, StringComparer.OrdinalIgnoreCase)).ToArray());
     }
 
+    public Task<TiaAxisConfigurationTransferResult> ExportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new TiaAxisConfigurationTransferResult
+        {
+            AxisCount = AxisItems.Count,
+            FileCount = AxisItems.Count,
+        });
+
+    public Task<TiaAxisConfigurationTransferResult> ImportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new TiaAxisConfigurationTransferResult { AxisCount = AxisItems.Count });
+
+    public Task<TiaAxisInterfaceExportResult> ExportAxisInterfaceWorkbookAsync(
+        string filePath,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(new TiaAxisInterfaceExportResult
+        {
+            AxisCount = AxisItems.Count,
+            FilePath = filePath,
+        });
+
     public Task SaveAsync(CancellationToken cancellationToken = default)
     {
         Saved = true;
