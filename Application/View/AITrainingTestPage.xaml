@@ -573,6 +573,96 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Container-Vorschläge">
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Button HorizontalAlignment="Left" Content="Container-Muster aktualisieren" Width="210"
+                                Command="{Binding RefreshContainerSuggestionsCommand}" />
+                        <TextBlock Margin="0,7,0,0" TextWrapping="Wrap" Text="{Binding ContainerSuggestionSummary}" />
+                        <TextBlock Margin="0,4,0,0" Foreground="#FF555555" TextWrapping="Wrap"
+                                   Text="Die Auswertung lernt vollständige Ziel-Container und wiederkehrende Slots aus bestätigten Add-/Move-Aktionen. Sie erzeugt bewusst nichts automatisch: Ein Muster muss fachlich geprüft und angenommen werden." />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding ContainerSuggestions}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Container-Typ" Binding="{Binding ContainerType}" Width="140" />
+                            <DataGridTextColumn Header="Beispielname" Binding="{Binding SuggestedName}" Width="160" />
+                            <DataGridTextColumn Header="Wiederkehrende Slots" Binding="{Binding Slots}" Width="2*" />
+                            <DataGridTextColumn Header="Beispielsignale" Binding="{Binding ExampleSignals}" Width="2*" />
+                            <DataGridTextColumn Header="Container" Binding="{Binding SupportingContainers}" Width="80" />
+                            <DataGridTextColumn Header="Aktionen" Binding="{Binding Observations}" Width="75" />
+                            <DataGridTextColumn Header="Konfidenz" Binding="{Binding Confidence, StringFormat={}{0:P0}}" Width="90" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="95" />
+                            <DataGridTemplateColumn Header="Prüfung" Width="175">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="Annehmen" Padding="7,2" Margin="0,0,4,0"
+                                                    Command="{Binding DataContext.AcceptContainerSuggestionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Content="Ablehnen" Padding="7,2"
+                                                    Command="{Binding DataContext.RejectContainerSuggestionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                    CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Abdeckungsmatrix">
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <Button HorizontalAlignment="Left" Content="Requirements-XML prüfen" Width="175"
+                                Command="{Binding LoadCoverageMatrixCommand}" />
+                        <TextBlock Margin="0,7,0,0" TextWrapping="Wrap" Text="{Binding CoverageSummary}" />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding CoverageRows}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Container-Typ" Binding="{Binding ContainerType}" Width="130" />
+                            <DataGridTextColumn Header="Runtimeklasse" Binding="{Binding RuntimeClass}" Width="180" />
+                            <DataGridCheckBoxColumn Header="Requirements" Binding="{Binding RequirementsPresent}" Width="90" />
+                            <DataGridTextColumn Header="Runtime-Slots" Binding="{Binding RuntimeSlotCount}" Width="90" />
+                            <DataGridTextColumn Header="XML-Slots" Binding="{Binding RequirementsSlotCount}" Width="75" />
+                            <DataGridTextColumn Header="Fehlt in XML" Binding="{Binding MissingInRequirements}" Width="2*" />
+                            <DataGridTextColumn Header="Nicht in Runtime" Binding="{Binding UnknownInRuntime}" Width="2*" />
+                            <DataGridCheckBoxColumn Header="2FEE" Binding="{Binding ForwardGeneration}" Width="55" />
+                            <DataGridCheckBoxColumn Header="FEE2" Binding="{Binding ReverseRecognition}" Width="55" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="150" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Performance">
+                <DockPanel Margin="10">
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox VerticalAlignment="Center" Margin="0,0,12,0"
+                                      Content="Messbaren Performance-Modus aktivieren"
+                                      IsChecked="{Binding IsPerformanceModeEnabled}" />
+                            <Button Content="Aktualisieren" Width="110" Command="{Binding RefreshPerformanceCommand}" />
+                            <Button Content="Sitzung leeren" Width="115" Command="{Binding ClearPerformanceCommand}" />
+                            <Button Content="Messdateien öffnen" Width="145" Command="{Binding OpenPerformanceFolderCommand}" />
+                        </StackPanel>
+                        <TextBlock Margin="0,6,0,0" Foreground="#FF555555" TextWrapping="Wrap"
+                                   Text="Gemessen werden vollständige ContainerGeneration-, Container2FEE-, TIA- und Rockwell-Vorgänge. JSONL-Dateien enthalten Zeit, Bereich, Vorgang, Dauer und Erfolg – keine Projektinhalte oder Passwörter." />
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding PerformanceSummaries}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Bereich" Binding="{Binding Area}" Width="150" />
+                            <DataGridTextColumn Header="Vorgang" Binding="{Binding Operation}" Width="2*" />
+                            <DataGridTextColumn Header="Anzahl" Binding="{Binding Count}" Width="65" />
+                            <DataGridTextColumn Header="Ø ms" Binding="{Binding AverageMilliseconds, StringFormat={}{0:F0}}" Width="80" />
+                            <DataGridTextColumn Header="Max. ms" Binding="{Binding MaximumMilliseconds}" Width="80" />
+                            <DataGridTextColumn Header="Letzte ms" Binding="{Binding LastMilliseconds}" Width="80" />
+                            <DataGridTextColumn Header="Fehler" Binding="{Binding FailureCount}" Width="65" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
         </TabControl>
 
         <!-- =========================

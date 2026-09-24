@@ -27,6 +27,14 @@ Das Skript fragt nacheinander den festen Filter, den Kanbanize-/Businessmap-API-
 .\scripts\Publish-IbnRemote.ps1 -InWorkFilter 'GM7283' -ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'
 ```
 
+In der verdeckten `SecureString`-Abfrage unterstützt die klassische PowerShell-Konsole kein zuverlässiges Einfügen per Strg+V. Für einen beaufsichtigten Build kann deshalb ausdrücklich der sichtbare Eingabemodus aktiviert werden:
+
+```powershell
+.\scripts\Publish-IbnRemote.ps1 -PasteFriendlyCredentials
+```
+
+API-Key und Passwort lassen sich in diesem Modus einfügen, stehen aber während der Eingabe im Klartext auf dem Bildschirm. Sie werden weiterhin nicht als Argument an `dotnet publish` übergeben. Auf gemeinsam genutzten oder aufgezeichneten Konsolen ist der sichtbare Modus nicht zu verwenden.
+
 Das Ergebnis ist:
 
 ```text

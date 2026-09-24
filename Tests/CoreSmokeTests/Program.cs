@@ -8,6 +8,7 @@ using System.IO.Pipes;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using VIBN_Tools.Core.Diagnostics;
 
 var temporaryRoot = Path.Combine(Path.GetTempPath(), $"vibn-vico-tests-{Guid.NewGuid():N}");
 
@@ -64,6 +65,8 @@ try
     await VerifyTypedTiaPipeTimeoutDiagnosticAsync();
     Console.WriteLine("Running Rockwell L5X editing smoke test...");
     await RockwellSmokeTests.VerifyAsync(temporaryRoot);
+    Console.WriteLine("Running measurable performance-mode smoke test...");
+    VerifyPerformanceMeasurement(temporaryRoot);
     Console.WriteLine("Running IBN Remote fixed in-work filter smoke test...");
     IbnRemoteSelectionSmokeTests.Verify();
     Console.WriteLine("All ViCo core smoke tests passed.");
@@ -994,6 +997,14 @@ static async Task VerifyTiaLibraryWorkflowAsync(string temporaryRoot)
 
     var client = new FakeTiaBridgeClient();
     var service = new TiaLibraryService(client);
+    var standaloneAxisArtifacts = await service.CreateAxisArtifactsAsync(
+        Path.Combine(temporaryRoot, "axis-artifacts"),
+        ["AxisX", "AxisY"],
+        "V18");
+    Assert(standaloneAxisArtifacts.AxisCount == 2 &&
+           File.Exists(standaloneAxisArtifacts.DataBlockPath) &&
+           File.Exists(standaloneAxisArtifacts.FunctionPath),
+        "The explicit TIA axis button must be able to create AxisDB/AxisFC without importing a library.");
     await service.ImportAsync(library, configureAxes: true, "V18");
 
     Assert(client.Saved, "TIA library import should save the project.");
@@ -1011,6 +1022,23 @@ static async Task VerifyTiaLibraryWorkflowAsync(string temporaryRoot)
         "TIA block export structure is incorrect.");
     Assert(File.Exists(Path.Combine(exportPath, "_Datatype", "VICOBIB", "Type.xml")),
         "TIA data type export structure is incorrect.");
+}
+
+static void VerifyPerformanceMeasurement(string temporaryRoot)
+{
+    var service = new PerformanceMeasurementService(
+        Path.Combine(temporaryRoot, "performance"),
+        enabled: true);
+    using (service.Start("Test", "Successful operation"))
+    {
+    }
+    using (var failed = service.Start("Test", "Failed operation"))
+        failed.MarkFailed();
+    var summaries = service.GetSummaries();
+    Assert(summaries.Count == 2 && summaries.Sum(item => item.FailureCount) == 1,
+        "Performance mode must aggregate successful and failed workflows separately.");
+    Assert(Directory.GetFiles(service.LogDirectory, "performance-*.jsonl").Length == 1,
+        "Performance mode must persist JSONL measurements when explicitly enabled.");
 }
 
 static void VerifyTiaAxisSelectionModel()

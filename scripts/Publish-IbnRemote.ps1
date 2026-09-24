@@ -3,13 +3,19 @@ param(
     [string]$OutputDirectory = "",
     [string]$InWorkFilter = "",
     [string]$ApiKey = "",
-    [string]$RemoteDesktopPassword = ""
+    [string]$RemoteDesktopPassword = "",
+    [switch]$PasteFriendlyCredentials
 )
 
 $ErrorActionPreference = 'Stop'
 
 function Read-SecretValue {
     param([Parameter(Mandatory = $true)][string]$Prompt)
+
+    if ($PasteFriendlyCredentials) {
+        Write-Warning "$Prompt wird sichtbar eingegeben. Der Wert landet nicht in der PowerShell-History, ist aber auf dem Bildschirm lesbar."
+        return Read-Host "$Prompt (Einfügen mit Strg+V möglich)"
+    }
 
     $secureValue = Read-Host $Prompt -AsSecureString
     $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)

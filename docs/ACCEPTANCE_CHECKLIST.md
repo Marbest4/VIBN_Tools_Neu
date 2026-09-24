@@ -74,9 +74,10 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 ## TIA und SpecialDevices2FEE
 
 - [ ] TIA-Version, Attach und PLC-Auswahl funktionieren.
-- [ ] **Auswahl konfigurieren** verarbeitet einen statischen Auswahlsatz ohne Dynamic-Binder-Ausnahme; **Was wird geändert?** zeigt alle zehn Parameter und die Linear-/Rotatorikregel.
+- [ ] **Achsen nur lesen** füllt ausschließlich **Gefundene Achsen**; **Konfigurieren + AxisDB/AxisFC erzeugen** verarbeitet einen statischen Auswahlsatz ohne Dynamic-Binder-Ausnahme und verschiebt nur vollständig erfolgreiche Achsen in **Konfigurierte Achsen**.
 - [ ] **Gesamtes TIA-Projekt speichern** ist von der Konfiguration getrennt und weist darauf hin, dass `Project.Save()` alle offenen Projektänderungen persistiert.
-- [ ] **ViCo-Bibliothek → Was wird gemacht?** beschreibt Voraussetzungen sowie Überschreiben/Speichern beim Import, Achsen-/AxisXML-Option und read-only TIA-Export vollständig.
+- [ ] **ViCo-Bibliothek → Was wird gemacht?** beschreibt den manuellen Erstimport, kundenspezifische Bearbeitung, Export auf das Projektlaufwerk und den späteren Import einschließlich Überschreiben/Speichern.
+- [ ] TO-Export, TO-Import und Achsen-Schnittstelle sind als getrennte Buttons vorhanden; Hilfe und Log nennen Voraussetzungen, Dateiziele und Speicherwirkung.
 - [ ] TIA-Projektübersicht und ViCo-Bibliothek sind auf einer gemeinsamen scrollbaren Seite bedienbar.
 - [ ] Die einzige Hardwareansicht unter SpecialDevices2FEE gruppiert gleiche Gerätenamen und zeigt Hardware-ID, GSDML, IP, Modultyp, Firmware, E-/A-Bereich und -Länge, Präfix, Logik und Status; #, Tiefe, Modul, Parent, Slot/Subslot, Pfad und Objektklasse sind ausgeblendet.
 - [ ] Die Logikauswahl bietet **Keine Logik**; eine entsprechend gesetzte Zeile gelangt auch mit aktivem Übernehmen-Haken nicht in die Warteschlange.
@@ -116,6 +117,9 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Fehlende SimObject-Ziele sind rot, Erzeugungswünsche gelb und vorhandene Zuordnungen auf Ziel- und FEE-Objektseite grün dargestellt.
 - [ ] **Nur SimObjects verknüpfen** verbindet nach Model Validation → Update Objects vorhandene SimObjects mit genau einer gleichnamigen vorhandenen Logik und erzeugt kein Modellobjekt neu.
 - [ ] Container2FEE Visual erzeugt mit denselben Zuordnungen fachlich dasselbe Ergebnis wie der bestehende Executor; Erzeugen und Überspringen sind geprüft.
+- [ ] Die Statusfilter begrenzen Containerbaum, verfügbare SimObjects und FEE-Signale auf den gewählten Zustand; bei Baumtreffern bleiben die benötigten Elternknoten sichtbar.
+- [ ] Ein Abbruch gibt die UI sofort frei und verhindert einen neuen FEE-Vorgang, bis ein bereits laufender nicht abbrechbarer SDK-Aufruf beendet ist.
+- [ ] Ein vorhandenes gleichnamiges Cabinet wird wiederverwendet; mehrere gleichnamige Cabinets blockieren als Mehrdeutigkeit und erzeugen kein weiteres Duplikat.
 - [ ] Ein Stopper-Floor besitzt nach Erzeugung oder Link-only-Aktualisierung einen aktiven `CollisionSlot`; `SIM_Collision` und alle gewählten `Floor/Collision`-Slots sind nach Save/Reload verbunden.
 - [ ] Eine von FEE abgewiesene Variablen- oder Slotverknüpfung wird mit GUID-/Slot-Kontext als Fehler gemeldet und nicht als Erfolg angezeigt.
 - [ ] Fehlende ModelValidation-Pflichtsignale/-ziele brechen vor dem ersten Schreibzugriff ab; Stopper-Rückmeldungen werden über `Opened/Closed` geprüft.
@@ -133,4 +137,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] `scripts/Publish-IbnRemote.ps1` erzeugt nur `VIBN_Tools_IBN.exe`; die EXE startet auf einem sauberen Windows-x64-PC ohne .NET-, FEE- oder TIA-Installation und enthält keine Volltool-Reiter.
 - [ ] Ohne Zugangsdatenparameter fragt `Publish-IbnRemote.ps1` API-Key und RDP-Passwort verdeckt in der Konsole ab; die Werte erscheinen weder im Shell-Verlauf noch in der `dotnet publish`-Befehlszeile. Die Auslesbarkeit aus der fertigen EXE ist als Sicherheitsgrenze dokumentiert.
 - [ ] Das Prüfstatus-Dropdown der ContainerGeneration filtert nur die Haupt-Containerliste; **Unassigned Data** und **Filtered Data** behalten unabhängig davon alle Treffer ihres jeweiligen Textfilters.
+- [ ] Abdeckungsmatrix meldet Abweichungen zwischen Requirements, Vorwärtsgenerator und FEE2Container-Typkatalog; neue Container-Vorschläge benötigen mehrere Fälle und verändern keine XML automatisch.
+- [ ] Der opt-in Performance-Modus misst ContainerGeneration, Container2FEE, TIA und Rockwell und kann seine Diagnosewerte wieder löschen.
+- [ ] Rockwell führt seine drei Stufen über den gewählten Standard aus; **Generierte L5X öffnen** verwendet die Windows-Dateizuordnung und meldet eine fehlende Studio-5000-Installation verständlich.
 - [ ] Bekannte externe SDK-Warnungen bzw. Abhängigkeiten sind dokumentiert und keine neue funktionale Warnung aus den geänderten Integrationsmodulen offen.

@@ -1,5 +1,13 @@
 # TIA-Openness-Hardwareauslesung
 
+## Bedienablauf im TIA-Reiter
+
+Die kompakte Übersicht für Programmbausteine und Datentypen steht am unteren Seitenende. **Achsen nur lesen** verändert das Projekt nicht und füllt **Gefundene Achsen**. **Konfigurieren + AxisDB/AxisFC erzeugen** bearbeitet ausschließlich die ausgewählten Achsen, schreibt die beiden XML-Dateien in den gewählten ViCo-Bibliotheksordner und verschiebt nur vollständig erfolgreiche Achsen in **Konfigurierte Achsen**. Import und Projektspeicherung bleiben getrennte, ausdrücklich beschriebene Aktionen. Die Achsen werden nacheinander verarbeitet, sodass Fortschrittsbalken und Log Achsname und Parameterergebnis nachvollziehbar anzeigen.
+
+Der normale ViCo-Bibliotheksablauf ist Export vor Import: In einem neuen Kundenprojekt wird die Bibliothek manuell eingebracht und kundenspezifisch angepasst, danach auf das Projektlaufwerk exportiert. Weitere Projekte desselben Kunden importieren diese Ablage. Der Export ist read-only; der Import überschreibt gleichnamige Bausteine/Datentypen und speichert am Ende das gesamte TIA-Projekt.
+
+Der Bereich **Achsen-Austausch** besitzt getrennte Buttons für TO-Export, TO-Import und die Excel-Schnittstelle. Er benötigt TIA-Verbindung, ausgewählte PLC und einen beschreibbaren Austauschordner. Der Import setzt nur gleichnamige Achsen/Parameter und speichert nicht automatisch; die Excel-Erzeugung verändert TIA nicht.
+
 ## Ursache der bisherigen Falschdaten
 
 Die alte Routine lief rekursiv über `DeviceItems`, stellte aber jedes Hierarchieelement als flachen Datensatz dar und übernahm `Address.Length` fälschlich direkt als Bytezahl. Siemens liefert diese Länge in Bits. Dadurch wurden aus 96 Bit scheinbar 96 Byte und aus `E 62` fälschlich `E 62–157`. Adresslose Kopf-, Rack- und Interfaceelemente erzeugten zusätzliche Leerzeilen. Außerdem basierte die Deduplizierung auf Proxyreferenzen beziehungsweise zu groben Identitäten, obwohl Openness dasselbe Engineering-Objekt über mehrere Proxyinstanzen liefern kann.

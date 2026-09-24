@@ -21,6 +21,7 @@ using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerGeneration.Utils;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.ContainerGeneration.AI;
+using VIBN_Tools.Core.Diagnostics;
 
 namespace VIBN_Tools.Application.VM
 {
@@ -811,6 +812,9 @@ namespace VIBN_Tools.Application.VM
         private async Task Generate_Containers(object parameter)
         {
             IsBusyGenerateContainers = true;
+            using var measurement = PerformanceMeasurementService.Instance.Start(
+                "ContainerGeneration",
+                "Container generieren und Reimport abgleichen");
             try
             {
                 var resultGrouping = Settings.GenerateGroupingRules();
@@ -942,6 +946,7 @@ namespace VIBN_Tools.Application.VM
             }
             catch (RegexMatchTimeoutException ex)
             {
+                measurement.MarkFailed();
                 Logger.Error(ex, "Regex timeout during container generation.");
                 StatusText =
                     "Die Generierung wurde abgebrochen, weil ein regulärer Ausdruck zu lange benötigt. " +
@@ -950,6 +955,7 @@ namespace VIBN_Tools.Application.VM
             }
             catch (Exception ex)
             {
+                measurement.MarkFailed();
                 Logger.Error(ex, "Container generation failed.");
                 StatusText =
                     $"Die Generierung konnte nicht abgeschlossen werden: {ex.Message}. " +

@@ -133,8 +133,14 @@ internal static class Program
             VerifyContainerReviewFilterScope(containerGenerationViewModel);
 
             var rockwellPage = new RockwellPage();
-            if (rockwellPage.DataContext is not RockwellPageVM)
+            if (rockwellPage.DataContext is not RockwellPageVM rockwellViewModel)
                 throw new InvalidOperationException("The Rockwell page has no Rockwell view model.");
+            if (rockwellViewModel.SelectedStandard?.Id != "GCCS" ||
+                !rockwellViewModel.WorkflowHelp.Contains("Studio 5000", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The Rockwell page must select its explicit GCCS standard and disclose the Studio 5000 prerequisite.");
+            }
             ExerciseDeferredTemplates(rockwellPage);
 
             var specialDevicePage = new SpecialDevicePage();
@@ -186,6 +192,12 @@ internal static class Program
 
             var visualPlanService = VerifyContainerToFeeVisualPlan();
             var visualContainerViewModel = new ContainerToFeeVisualPageVM(visualPlanService);
+            if (visualContainerViewModel.TreeStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Unassigned) ||
+                visualContainerViewModel.FeeSignalStatusFilters.All(item => item.Key != VisualStatusFilterKey.Error))
+            {
+                throw new InvalidOperationException("The visual Container2FEE status filters are incomplete.");
+            }
             VerifyVisualSimObjectColorAggregation();
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
@@ -318,9 +330,16 @@ internal static class Program
             var tiaPortalPage = new TiaPortalPage();
             var tiaPortalViewModel = (TiaPortalPageVM)tiaPortalPage.DataContext;
             if (!tiaPortalViewModel.LibraryOperationInfo.Contains("überschrieben", StringComparison.OrdinalIgnoreCase) ||
-                !tiaPortalViewModel.LibraryOperationInfo.Contains("automatisch gespeichert", StringComparison.OrdinalIgnoreCase))
+                !tiaPortalViewModel.LibraryOperationInfo.Contains("automatisch gespeichert", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.LibraryOperationInfo.Contains("Projektlaufwerk", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("The TIA ViCo library help does not disclose its write and save effects.");
+            }
+            if (!tiaPortalViewModel.AxisExchangeInfo.Contains("ToConfig", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.AxisExchangeInfo.Contains("AxisValueTags.xlsx", StringComparison.OrdinalIgnoreCase) ||
+                !ReferenceEquals(tiaPortalViewModel.Axes, tiaPortalViewModel.FoundAxes))
+            {
+                throw new InvalidOperationException("The TIA axis workflow or exchange help is incomplete.");
             }
             tiaPortalViewModel.ToggleLibraryOperationInfoCommand.Execute(null);
             if (!tiaPortalViewModel.IsLibraryOperationInfoVisible)

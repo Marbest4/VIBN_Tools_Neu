@@ -217,9 +217,14 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Container- und Objektstruktur" />
-                    <TextBox Grid.Row="1" Margin="0,0,0,8" MinHeight="29"
-                             Text="{Binding TreeFilter, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Nach Name, Typ oder Slot filtern" />
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="180" /></Grid.ColumnDefinitions>
+                        <TextBox MinHeight="29" Text="{Binding TreeFilter, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Nach Name, Typ oder Slot filtern" />
+                        <ComboBox Grid.Column="1" Margin="6,0,0,0" ItemsSource="{Binding TreeStatusFilters}"
+                                  SelectedItem="{Binding SelectedTreeStatusFilter}" DisplayMemberPath="DisplayName"
+                                  ToolTip="Containerbaum nach Ausführungs- und Verknüpfungszustand filtern" />
+                    </Grid>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,7">
                         <Button Content="Alles aufklappen" Command="{Binding ExpandAllCommand}" Padding="8,2" />
                         <Button Content="Alles zuklappen" Command="{Binding CollapseAllCommand}" Padding="8,2" Margin="5,0,0,0" />
@@ -465,6 +470,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Verfügbare FEE-SimObjects" />
@@ -473,7 +479,12 @@
                                  ToolTip="Nach Name oder Typ filtern" />
                         <CheckBox Grid.Row="2" Margin="0,0,0,6" Content="Nur kompatible Objekte"
                                   IsChecked="{Binding ShowOnlyCompatibleFeeObjects}" />
-                        <ListBox Grid.Row="3" ItemsSource="{Binding FeeObjectsView}"
+                        <ComboBox Grid.Row="3" MinHeight="28" Margin="0,0,0,6"
+                                  ItemsSource="{Binding FeeObjectStatusFilters}"
+                                  SelectedItem="{Binding SelectedFeeObjectStatusFilter}"
+                                  DisplayMemberPath="DisplayName"
+                                  ToolTip="SimObjects nach Zuordnungszustand filtern" />
+                        <ListBox Grid.Row="4" ItemsSource="{Binding FeeObjectsView}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -511,6 +522,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="2*" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
@@ -524,7 +536,12 @@
                         <TextBox Grid.Row="2" MinHeight="29" Margin="0,0,0,6"
                                   Text="{Binding FeeSignalFilter, UpdateSourceTrigger=PropertyChanged}"
                                   ToolTip="Nach Tag, Adresse/Pfad, Interface oder Datentyp filtern" />
-                        <ListBox Grid.Row="3" ItemsSource="{Binding FeeSignalsView}"
+                        <ComboBox Grid.Row="3" MinHeight="28" Margin="0,0,0,6"
+                                  ItemsSource="{Binding FeeSignalStatusFilters}"
+                                  SelectedItem="{Binding SelectedFeeSignalStatusFilter}"
+                                  DisplayMemberPath="DisplayName"
+                                  ToolTip="Signale nach Zuordnung, Fehlern oder Duplikaten filtern" />
+                        <ListBox Grid.Row="4" ItemsSource="{Binding FeeSignalsView}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -546,9 +563,9 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <TextBlock Grid.Row="4" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
+                        <TextBlock Grid.Row="5" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
                                    Text="Validierung" />
-                        <ListBox Grid.Row="5" ItemsSource="{Binding Issues}"
+                        <ListBox Grid.Row="6" ItemsSource="{Binding Issues}"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">
                             <ListBox.ItemTemplate>

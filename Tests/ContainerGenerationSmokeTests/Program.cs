@@ -63,6 +63,8 @@ internal static class Program
         ValidateTopLevelBasicFrameSelection();
         ValidateFee2SpecialDevicesProvenanceRoundTrip();
         ValidateRuleSuggestionWorkflow();
+        ValidateContainerTemplateSuggestions();
+        ValidateAutomaticCoverageMatrix();
         await ValidateRequirementsRulePatchWorkflowAsync();
 
         Console.WriteLine(
@@ -1454,6 +1456,82 @@ internal static class Program
         {
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void ValidateContainerTemplateSuggestions()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-container-suggestions-{Guid.NewGuid():N}");
+        try
+        {
+            var logger = new ActionLogger(directory);
+            logger.LogAdded(
+                "Cylinder_1",
+                "Cylinder",
+                new ContainerEntry { SignalId = "A", Signal = "Work position", Slot = "PLC_IN_InWorkPos" },
+                null,
+                null,
+                null,
+                "project-1");
+            logger.LogAdded(
+                "Cylinder_2",
+                "Cylinder",
+                new ContainerEntry { SignalId = "B", Signal = "End position", Slot = "PLC_IN_InWorkPos" },
+                null,
+                null,
+                null,
+                "project-2");
+            var analysis = new ContainerTemplateSuggestionService().Analyze(
+                Directory.GetFiles(directory, "*.jsonl"));
+            var suggestion = analysis.Suggestions.Single();
+            if (suggestion.ContainerType != "Cylinder" || suggestion.SupportingContainers != 2 ||
+                suggestion.Slots != "PLC_IN_InWorkPos" || Math.Abs(suggestion.Confidence - 1d) > 0.0001)
+            {
+                throw new InvalidOperationException("Container-template suggestions are not deterministic.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void ValidateAutomaticCoverageMatrix()
+    {
+        var requirements = Path.Combine(
+            AppContext.BaseDirectory,
+            "TestData",
+            "GoldenMaster",
+            "DE_AutoCreate_Master_V17.xml");
+        var matrix = new ContainerCoverageMatrixService().Build(requirements);
+        if (matrix.Rows.Count < FeeContainerLiveReconstructor.SupportedContainerTypes.Count ||
+            matrix.Rows.Where(row => row.ForwardGeneration).Any(row => !row.ReverseRecognition) ||
+            matrix.Rows.All(row => row.ContainerType != "Cylinder" || !row.RequirementsPresent))
+        {
+            throw new InvalidOperationException(
+                "Automatic coverage matrix does not represent the shared forward/reverse container catalog.");
+        }
+
+        var unknownRequirements = Path.Combine(Path.GetTempPath(), $"vibn-coverage-{Guid.NewGuid():N}.xml");
+        try
+        {
+            File.WriteAllText(
+                unknownRequirements,
+                "<Requirements><Component type=\"CustomerOnly\"><Slot name=\"PLC_IN_Test\" /></Component></Requirements>");
+            var unknownRow = new ContainerCoverageMatrixService().Build(unknownRequirements).Rows
+                .Single(row => row.ContainerType == "CustomerOnly");
+            if (unknownRow.ForwardGeneration || unknownRow.ReverseRecognition ||
+                !unknownRow.UnknownInRuntime.Contains("PLC_IN_Test", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Requirements-only component types must remain visible as an uncovered matrix row.");
+            }
+        }
+        finally
+        {
+            if (File.Exists(unknownRequirements))
+                File.Delete(unknownRequirements);
         }
     }
 

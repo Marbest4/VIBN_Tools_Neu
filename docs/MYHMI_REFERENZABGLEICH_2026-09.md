@@ -37,6 +37,10 @@ Der neue Reiter bildet die im Referenzrepository vorhandenen GCCS-Schritte ab:
 - dasselbe für erkannte Safety-Programme als `s_A001_Simulation`;
 - ausschließlich eine neue `_Generated.L5X` schreiben und diese optional öffnen.
 
+Der Standard wird vor der Bearbeitung über ein Dropdown gewählt. Aktuell ist ausschließlich **GCCS** freigegeben; die drei nummerierten Aktionen werden aus dem ausgewählten Standardkatalog bezogen, statt fest in der View verdrahtet zu sein. Dadurch kann ein weiterer Standard später mit einer eigenen, testbaren Stufenfolge ergänzt werden. **Was wird gemacht?** und die Tooltips nennen Voraussetzungen und Wirkung jeder Stufe.
+
+**Generierte L5X öffnen** übergibt die Datei an die in Windows registrierte L5X-Anwendung. Bei installierter und korrekt registrierter Studio-5000-Version startet dadurch Logix Designer mit dem Importdialog. Die Funktion automatisiert den Studio-5000-Import nicht und meldet eine fehlende Dateizuordnung als Fehler.
+
 Die Umsetzung verwendet `XDocument`, stabile Namen und atomisches Speichern. Vorhandene Elemente werden nicht dupliziert. Anders als der Referenzcode überschreibt sie nie die Quelldatei und zerlegt XML nicht anhand von Zeilenpositionen.
 
 Ohne reales Studio-5000-Projekt konnte nur die XML-Transformation mit synthetischen Standard-/Safety-Programmen automatisch geprüft werden. Direkte Safety-Moduladressen werden derzeit mit einem sichtbaren Prüfhinweis auf `NOP()` gesetzt; die Referenz versucht hierfür gerätespezifische Safety-Tags aus Modul-XML abzuleiten. Eine belastbare automatische Abbildung benötigt mindestens einen repräsentativen L5X-Export pro verwendeter GuardLogix-/Modulfamilie und einen Importtest in der eingesetzten Studio-5000-Version.

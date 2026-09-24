@@ -46,51 +46,12 @@
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel>
-            <GroupBox Header="Projektübersicht" Margin="0,0,0,10">
-        <Grid Height="420" Margin="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="16" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-
-            <GroupBox Grid.Column="0" Header="Programmbausteine und Datentypen">
-                <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <StackPanel Grid.Row="0" Margin="0,0,0,8" Orientation="Horizontal">
-                        <Button MinWidth="150"
-                                Content="Bausteine laden"
-                                Command="{Binding LoadBlocksCommand}" />
-                        <Button MinWidth="150"
-                                Margin="8,0,0,0"
-                                Content="Datentypen laden"
-                                Command="{Binding LoadDataTypesCommand}" />
-                    </StackPanel>
-
-                    <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding ProgramItems}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="True"
-                              EnableRowVirtualization="True"
-                              EnableColumnVirtualization="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name" Binding="{Binding Name, Mode=OneWay}" Width="240" />
-                            <DataGridTextColumn Header="Ordner" Binding="{Binding FolderPath, Mode=OneWay}" Width="*" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </GroupBox>
-
-            <GroupBox Grid.Column="2" Header="Simulationsachsen">
+            <GroupBox Header="Simulationsachsen" Margin="0,0,0,10">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
+                        <RowDefinition Height="360" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
@@ -104,6 +65,11 @@
                                 Content="Auswahl konfigurieren"
                                 ToolTip="Setzt ausschließlich bei den ausgewählten Achsen die dokumentierten Simulationsparameter."
                                 Command="{Binding ConfigureAxesCommand}" />
+                        <Button MinWidth="245"
+                                Margin="8,0,0,0"
+                                Content="Konfigurieren + AxisDB/AxisFC erzeugen"
+                                ToolTip="Konfiguriert die ausgewählten Achsen und legt AxisDB.xml/AxisFC.xml im unten gewählten ViCo-Bibliotheksordner ab. Import und Projektspeicherung erfolgen nicht automatisch."
+                                Command="{Binding ConfigureAxesAndCreateFilesCommand}" />
                         <Button MinWidth="65" Margin="8,0,0,0" Content="Alle" Command="{Binding SelectAllAxesCommand}" />
                         <Button MinWidth="65" Margin="8,0,0,0" Content="Keine" Command="{Binding SelectNoAxesCommand}" />
                         <Button MinWidth="145" Margin="8,0,0,0" Content="Was wird geändert?"
@@ -118,30 +84,44 @@
                         </StackPanel>
                     </Border>
 
-                    <DataGrid Grid.Row="2"
-                              ItemsSource="{Binding Axes}"
-                              AutoGenerateColumns="False"
-                              IsReadOnly="False"
-                              EnableRowVirtualization="True">
-                        <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="Ändern" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="65" />
-                            <DataGridTextColumn Header="Achse" Binding="{Binding Name, Mode=OneWay}" Width="140" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupPath, Mode=OneWay}" Width="*" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Typ" Binding="{Binding TechnologyType, Mode=OneWay}" Width="140" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Ergebnis" Binding="{Binding Result, Mode=OneWay}" Width="190" IsReadOnly="True" />
-                        </DataGrid.Columns>
-                    </DataGrid>
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <GroupBox Header="1. Gefundene Achsen (nur gelesen)">
+                            <DataGrid ItemsSource="{Binding FoundAxes}" AutoGenerateColumns="False"
+                                      IsReadOnly="False" EnableRowVirtualization="True">
+                                <DataGrid.Columns>
+                                    <DataGridCheckBoxColumn Header="Ändern" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="65" />
+                                    <DataGridTextColumn Header="Achse" Binding="{Binding Name, Mode=OneWay}" Width="140" IsReadOnly="True" />
+                                    <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupPath, Mode=OneWay}" Width="*" IsReadOnly="True" />
+                                    <DataGridTextColumn Header="Typ" Binding="{Binding TechnologyType, Mode=OneWay}" Width="140" IsReadOnly="True" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </GroupBox>
+                        <GroupBox Grid.Column="2" Header="2. Erfolgreich konfigurierte Achsen">
+                            <DataGrid ItemsSource="{Binding ConfiguredAxes}" AutoGenerateColumns="False"
+                                      IsReadOnly="True" EnableRowVirtualization="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Achse" Binding="{Binding Name, Mode=OneWay}" Width="140" />
+                                    <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupPath, Mode=OneWay}" Width="*" />
+                                    <DataGridTextColumn Header="Ergebnis" Binding="{Binding Result, Mode=OneWay}" Width="190" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </GroupBox>
+                    </Grid>
 
-                    <Button Grid.Row="3"
-                            MinWidth="150"
-                            Margin="0,8,0,0"
-                            HorizontalAlignment="Right"
-                            Content="Gesamtes TIA-Projekt speichern"
-                            ToolTip="Ruft Project.Save() auf und speichert alle derzeit offenen Projektänderungen. Nur erforderlich, wenn diese dauerhaft erhalten bleiben sollen."
-                            Command="{Binding SaveCommand}" />
+                    <DockPanel Grid.Row="3" Margin="0,8,0,0">
+                        <ProgressBar Width="250" Height="8" Minimum="0" Maximum="100"
+                                     VerticalAlignment="Center" Value="{Binding OperationProgress, Mode=OneWay}" />
+                        <Button MinWidth="190" Margin="8,0,0,0" HorizontalAlignment="Right"
+                                Content="Gesamtes TIA-Projekt speichern"
+                                ToolTip="Ruft Project.Save() auf und speichert alle derzeit offenen Projektänderungen. Nur erforderlich, wenn diese dauerhaft erhalten bleiben sollen."
+                                Command="{Binding SaveCommand}" />
+                    </DockPanel>
                 </Grid>
-            </GroupBox>
-        </Grid>
             </GroupBox>
 
             <GroupBox Header="ViCo-Bibliothek" Margin="0,0,0,10">
@@ -169,44 +149,37 @@
                         <TextBlock Text="{Binding LibraryOperationInfo}" TextWrapping="Wrap" />
                     </Border>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="Importordner" />
-                    <TextBox Grid.Row="2" Grid.Column="1" Margin="8,4" Text="{Binding LibraryPath}" />
-                    <Button Grid.Row="2" Grid.Column="2" MinWidth="110" Content="Durchsuchen" ToolTip="Ordner mit den Unterordnern _Programm und _Datatype auswählen." Command="{Binding BrowseImportCommand}" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Text="1. Exportordner" />
+                    <TextBox Grid.Row="2" Grid.Column="1" Margin="8,4" Text="{Binding ExportPath}" />
+                    <Button Grid.Row="2" Grid.Column="2" MinWidth="110" Content="Durchsuchen" Command="{Binding BrowseExportCommand}" />
 
-                    <CheckBox Grid.Row="3"
-                              Grid.Column="1"
-                              Margin="8,8"
-                              Content="Achsen konfigurieren und AxisDB/AxisFC erzeugen"
-                              ToolTip="Konfiguriert beim Import alle gefundenen Achsen und erzeugt viCo_Axes_DB sowie viCo_AxisConnect_FC. Für eine Auswahl zuerst die Projektübersicht verwenden."
-                              IsChecked="{Binding ConfigureAxesDuringImport}" />
+                    <StackPanel Grid.Row="3" Grid.Column="1" Margin="8,8">
+                        <TextBlock Text="TIA-Bibliotheksordner" />
+                        <TextBox Margin="0,4,0,0" Text="{Binding LibraryName}" />
+                    </StackPanel>
                     <Button Grid.Row="3"
                             Grid.Column="2"
                             MinWidth="150"
-                            Content="Bibliothek importieren"
-                            Command="{Binding ImportLibraryCommand}" />
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="Exportordner" />
-                    <TextBox Grid.Row="4" Grid.Column="1" Margin="8,4" Text="{Binding ExportPath}" />
-                    <Button Grid.Row="4" Grid.Column="2" MinWidth="110" Content="Durchsuchen" Command="{Binding BrowseExportCommand}" />
-
-                    <StackPanel Grid.Row="5" Grid.Column="1" Margin="8,16,8,0">
-                        <TextBlock Text="TIA-Bibliotheksordner" />
-                        <TextBox Margin="0,4,0,12" Text="{Binding LibraryName}" />
-                        <ProgressBar Height="8" Minimum="0" Maximum="100" Value="{Binding OperationProgress, Mode=OneWay}" />
-                    </StackPanel>
-                    <Button Grid.Row="5"
-                            Grid.Column="2"
-                            MinWidth="150"
-                            Margin="0,16,0,0"
-                            VerticalAlignment="Top"
                             Content="Bibliothek exportieren"
                             Command="{Binding ExportLibraryCommand}" />
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" VerticalAlignment="Center" Text="2. Importordner" />
+                    <TextBox Grid.Row="4" Grid.Column="1" Margin="8,4" Text="{Binding LibraryPath}" />
+                    <Button Grid.Row="4" Grid.Column="2" MinWidth="110" Content="Durchsuchen"
+                            ToolTip="Ordner mit den Unterordnern _Programm und _Datatype auswählen."
+                            Command="{Binding BrowseImportCommand}" />
+
+                    <ProgressBar Grid.Row="5" Grid.Column="1" Height="8" Margin="8,12"
+                                 Minimum="0" Maximum="100" Value="{Binding OperationProgress, Mode=OneWay}" />
+                    <Button Grid.Row="5" Grid.Column="2" MinWidth="150"
+                            Content="Bibliothek importieren" Command="{Binding ImportLibraryCommand}" />
                 </Grid>
             </GroupBox>
 
             <GroupBox Header="Achsen-Austausch (TiaBridge Rev23)">
                 <Grid Margin="8">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -222,10 +195,20 @@
                     <Button Grid.Row="0" Grid.Column="2" MinWidth="110" Content="Durchsuchen"
                             Command="{Binding BrowseAxisExchangeCommand}" />
 
-                    <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8"
-                               Text="{Binding AxisExchangeInfo}" TextWrapping="Wrap" />
+                    <DockPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8">
+                        <Button DockPanel.Dock="Right" MinWidth="155" Content="Was wird gemacht?"
+                                Command="{Binding ToggleAxisExchangeInfoCommand}" />
+                        <TextBlock Margin="0,0,12,0" Text="Export, Import und Schnittstellendatei für Technologieachsen"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
 
-                    <WrapPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" HorizontalAlignment="Right">
+                    <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,8" Padding="8"
+                            Background="#FFF3F5F7" CornerRadius="3"
+                            Visibility="{Binding IsAxisExchangeInfoVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Text="{Binding AxisExchangeInfo}" TextWrapping="Wrap" />
+                    </Border>
+
+                    <WrapPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" HorizontalAlignment="Right">
                         <Button MinWidth="185" Content="TO-Konfiguration exportieren"
                                 ToolTip="Liest alle Achsenparameter und schreibt sie in den Austauschordner."
                                 Command="{Binding ExportAxisConfigurationsCommand}" />
@@ -236,6 +219,23 @@
                                 ToolTip="Erzeugt AxisValueTags.xlsx; das TIA-Projekt bleibt unverändert."
                                 Command="{Binding ExportAxisInterfaceCommand}" />
                     </WrapPanel>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="Programmbausteine und Datentypen" Margin="0,10,0,0">
+                <Grid Height="230" Margin="8">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <StackPanel Margin="0,0,0,8" Orientation="Horizontal">
+                        <Button MinWidth="150" Content="Bausteine laden" Command="{Binding LoadBlocksCommand}" />
+                        <Button MinWidth="150" Margin="8,0,0,0" Content="Datentypen laden" Command="{Binding LoadDataTypesCommand}" />
+                    </StackPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding ProgramItems}" AutoGenerateColumns="False"
+                              IsReadOnly="True" EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name, Mode=OneWay}" Width="240" />
+                            <DataGridTextColumn Header="Ordner" Binding="{Binding FolderPath, Mode=OneWay}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </Grid>
             </GroupBox>
           </StackPanel>

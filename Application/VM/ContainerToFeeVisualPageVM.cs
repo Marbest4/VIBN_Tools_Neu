@@ -9,6 +9,7 @@ using VIBN_Tools.Application.Behaviors;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.Core.Collections;
+using VIBN_Tools.Core.Diagnostics;
 using VIBN_Tools.SharedWpf.Commands;
 using VIBN_Tools.Settings;
 
@@ -28,12 +29,16 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private readonly ApplicationLogService _log;
     private readonly FeeConnectionService _connection;
     private CancellationTokenSource? _operationCancellation;
+    private Task? _cancelledOperationFinishing;
     private ContainerToFeeVisualTreeNodeVM? _selectedTreeNode;
     private ContainerToFeeVisualTargetVM? _selectedTarget;
     private ContainerToFeeVisualFeeInterfaceVM? _selectedExistingInterface;
     private string _treeFilter = string.Empty;
     private string _feeObjectFilter = string.Empty;
     private string _feeSignalFilter = string.Empty;
+    private VisualStatusFilterOption _selectedTreeStatusFilter = VisualStatusFilterOption.All;
+    private VisualStatusFilterOption _selectedFeeObjectStatusFilter = VisualStatusFilterOption.All;
+    private VisualStatusFilterOption _selectedFeeSignalStatusFilter = VisualStatusFilterOption.All;
     private bool _showOnlyCompatibleFeeObjects;
     private bool _isBusy;
     private string _statusText = "Container-XML öffnen, um eine Vorschau zu erstellen.";
@@ -159,6 +164,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public ICollectionView FeeObjectsView { get; }
     public ICollectionView FeeSignalsView { get; }
+
+    public IReadOnlyList<VisualStatusFilterOption> TreeStatusFilters { get; } =
+        VisualStatusFilterOption.TreeOptions;
+    public IReadOnlyList<VisualStatusFilterOption> FeeObjectStatusFilters { get; } =
+        VisualStatusFilterOption.AssignmentOptions;
+    public IReadOnlyList<VisualStatusFilterOption> FeeSignalStatusFilters { get; } =
+        VisualStatusFilterOption.SignalOptions;
 
     public ICommand OpenXmlCommand { get; }
 
@@ -971,6 +983,45 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             });
     }
 
+    public VisualStatusFilterOption SelectedTreeStatusFilter
+    {
+        get => _selectedTreeStatusFilter;
+        set
+        {
+            if (ReferenceEquals(_selectedTreeStatusFilter, value) || value is null)
+                return;
+            _selectedTreeStatusFilter = value;
+            OnPropertyChanged();
+            ApplyTreeFilter();
+        }
+    }
+
+    public VisualStatusFilterOption SelectedFeeObjectStatusFilter
+    {
+        get => _selectedFeeObjectStatusFilter;
+        set
+        {
+            if (ReferenceEquals(_selectedFeeObjectStatusFilter, value) || value is null)
+                return;
+            _selectedFeeObjectStatusFilter = value;
+            OnPropertyChanged();
+            FeeObjectsView.Refresh();
+        }
+    }
+
+    public VisualStatusFilterOption SelectedFeeSignalStatusFilter
+    {
+        get => _selectedFeeSignalStatusFilter;
+        set
+        {
+            if (ReferenceEquals(_selectedFeeSignalStatusFilter, value) || value is null)
+                return;
+            _selectedFeeSignalStatusFilter = value;
+            OnPropertyChanged();
+            FeeSignalsView.Refresh();
+        }
+    }
+
     private static string? TryGetFeeSignalGuid(object source) => source switch
     {
         ContainerToFeeVisualFeeSignalVM signal => signal.GuidString,
@@ -1206,8 +1257,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private void CancelOperation()
     {
-        _operationCancellation?.Cancel();
-        StatusText = "Vorgang wird abgebrochen …";
+        if (_operationCancellation is null || _operationCancellation.IsCancellationRequested)
+            return;
+        _operationCancellation.Cancel();
+        GenerationProgressText = "Abbruch angefordert. Der aktuelle FEE-SDK-Aufruf wird noch sauber verlassen …";
+        StatusText = "Vorgang wird abgebrochen; die Oberfläche wird freigegeben …";
         _log.Information(LogArea, StatusText);
     }
 
@@ -1215,29 +1269,69 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         if (IsBusy)
             return;
+        if (_cancelledOperationFinishing is { IsCompleted: false })
+        {
+            StatusText = "Der zuvor abgebrochene FEE-SDK-Aufruf wird noch beendet. Bitte kurz warten.";
+            return;
+        }
 
-        _operationCancellation = new CancellationTokenSource();
+        CancellationTokenSource? cancellation = new CancellationTokenSource();
+        _operationCancellation = cancellation;
         IsBusy = true;
         StatusText = status;
+        Task operationTask = Task.CompletedTask;
+        using var measurement = PerformanceMeasurementService.Instance.Start(LogArea, status);
         try
         {
-            await operation(_operationCancellation.Token);
+            operationTask = operation(cancellation.Token);
+            await operationTask.WaitAsync(cancellation.Token);
         }
         catch (OperationCanceledException)
         {
+            measurement.MarkFailed();
             StatusText = "Vorgang abgebrochen.";
+            GenerationProgressText = "Abgebrochen";
             _log.Information(LogArea, StatusText);
+            if (!operationTask.IsCompleted)
+            {
+                _operationCancellation = null;
+                _cancelledOperationFinishing = ObserveCancelledOperationAsync(operationTask, cancellation);
+                cancellation = null;
+            }
         }
         catch (Exception exception)
         {
+            measurement.MarkFailed();
             StatusText = "Vorgang fehlgeschlagen. Details stehen im Protokoll.";
             _log.Error(LogArea, StatusText, exception);
         }
         finally
         {
-            _operationCancellation.Dispose();
-            _operationCancellation = null;
+            if (ReferenceEquals(_operationCancellation, cancellation))
+                _operationCancellation = null;
+            cancellation?.Dispose();
             IsBusy = false;
+        }
+    }
+
+    private async Task ObserveCancelledOperationAsync(Task operationTask, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await operationTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected: the SDK call returned and the next cancellation checkpoint stopped the workflow.
+        }
+        catch (Exception exception)
+        {
+            _log.Error(LogArea, "Der im Hintergrund auslaufende abgebrochene Vorgang ist fehlgeschlagen.", exception);
+        }
+        finally
+        {
+            cancellation.Dispose();
+            _cancelledOperationFinishing = null;
         }
     }
 
@@ -1691,8 +1785,20 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private void ApplyTreeFilter()
     {
         foreach (ContainerToFeeVisualTreeNodeVM root in TreeRoots)
-            root.ApplyFilter(TreeFilter);
+            root.ApplyFilter(TreeFilter, MatchesTreeStatus);
     }
+
+    private bool MatchesTreeStatus(ContainerToFeeVisualTreeNodeVM node) =>
+        SelectedTreeStatusFilter.Key switch
+        {
+            VisualStatusFilterKey.Verified => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Verified,
+            VisualStatusFilterKey.LinkMissing => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked,
+            VisualStatusFilterKey.Unassigned => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.None,
+            VisualStatusFilterKey.Planned => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Planned,
+            VisualStatusFilterKey.Error => node.HasValidationError ||
+                                           node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Missing,
+            _ => true,
+        };
 
     private bool FilterFeeObject(object item)
     {
@@ -1705,6 +1811,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             !feeObject.TypeName.Contains(FeeObjectFilter, StringComparison.OrdinalIgnoreCase))
             return false;
 
+        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.Assigned && !feeObject.IsAssigned)
+            return false;
+        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.Unassigned && feeObject.IsAssigned)
+            return false;
+
         return !ShowOnlyCompatibleFeeObjects ||
                SelectedTarget is null ||
                SelectedTarget.Model.CanAssign(feeObject.Model);
@@ -1714,11 +1825,20 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         if (item is not ContainerToFeeVisualFeeSignalVM signal)
             return false;
+
         if (SelectedExistingInterface?.Model is not { } selectedInterface ||
             !string.Equals(
                 signal.Model.InterfaceGuidString,
                 selectedInterface.GuidString,
                 StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (SelectedFeeSignalStatusFilter.Key == VisualStatusFilterKey.Assigned && !signal.IsAssigned)
+            return false;
+        if (SelectedFeeSignalStatusFilter.Key == VisualStatusFilterKey.Unassigned && signal.IsAssigned)
+            return false;
+        if (SelectedFeeSignalStatusFilter.Key == VisualStatusFilterKey.Error && !signal.HasError)
+            return false;
+        if (SelectedFeeSignalStatusFilter.Key == VisualStatusFilterKey.Valid && signal.HasError)
             return false;
         if (string.IsNullOrWhiteSpace(FeeSignalFilter))
             return true;
@@ -1907,6 +2027,46 @@ internal sealed record FeeRefreshSnapshot(
     int AutomaticAssignmentCount,
     int VerifiedContainerCount);
 
+public enum VisualStatusFilterKey
+{
+    All,
+    Verified,
+    LinkMissing,
+    Assigned,
+    Unassigned,
+    Planned,
+    Error,
+    Valid,
+}
+
+public sealed record VisualStatusFilterOption(VisualStatusFilterKey Key, string DisplayName)
+{
+    public static VisualStatusFilterOption All { get; } = new(VisualStatusFilterKey.All, "Alle");
+    public static IReadOnlyList<VisualStatusFilterOption> TreeOptions { get; } =
+    [
+        All,
+        new(VisualStatusFilterKey.Verified, "Vollständig verknüpft"),
+        new(VisualStatusFilterKey.LinkMissing, "Verknüpfung fehlt"),
+        new(VisualStatusFilterKey.Unassigned, "Nicht zugewiesen"),
+        new(VisualStatusFilterKey.Planned, "Wird erzeugt"),
+        new(VisualStatusFilterKey.Error, "Fehler / unklar"),
+    ];
+    public static IReadOnlyList<VisualStatusFilterOption> AssignmentOptions { get; } =
+    [
+        All,
+        new(VisualStatusFilterKey.Assigned, "Zugewiesen"),
+        new(VisualStatusFilterKey.Unassigned, "Nicht zugewiesen"),
+    ];
+    public static IReadOnlyList<VisualStatusFilterOption> SignalOptions { get; } =
+    [
+        All,
+        new(VisualStatusFilterKey.Assigned, "Zugewiesen"),
+        new(VisualStatusFilterKey.Unassigned, "Nicht zugewiesen"),
+        new(VisualStatusFilterKey.Error, "Fehler / Duplikat"),
+        new(VisualStatusFilterKey.Valid, "Ohne Fehler"),
+    ];
+}
+
 public enum ContainerToFeeVisualNodeStateKind
 {
     None,
@@ -2087,15 +2247,20 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
             yield return descendant;
     }
 
-    public bool ApplyFilter(string filter)
+    public bool ApplyFilter(
+        string filter,
+        Func<ContainerToFeeVisualTreeNodeVM, bool>? statusPredicate = null)
     {
-        bool childMatches = Children.Aggregate(false, (match, child) => child.ApplyFilter(filter) || match);
+        bool childMatches = Children.Aggregate(
+            false,
+            (match, child) => child.ApplyFilter(filter, statusPredicate) || match);
         bool selfMatches = string.IsNullOrWhiteSpace(filter) ||
                            Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                            TypeName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                            Slot.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                            SourceLocation.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                            LinkedObjectDescription.Contains(filter, StringComparison.OrdinalIgnoreCase);
+        selfMatches = selfMatches && (statusPredicate?.Invoke(this) ?? true);
         IsVisible = selfMatches || childMatches;
         if (!string.IsNullOrWhiteSpace(filter) && childMatches)
             IsExpanded = true;

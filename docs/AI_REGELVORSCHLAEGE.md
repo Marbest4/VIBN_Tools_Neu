@@ -38,4 +38,18 @@ Mit **XML-Vorschau** wird anschließend eine AutoCreate-Datei ausgewählt. Der W
 
 Die exakte Regel wird als isolierte Override-Komponente geschrieben. Bestehende Definitionen des Komponententyps erhalten für genau dieses vollständige Signal eine Exclusion; die Override-Komponente ordnet es genau einem Zielslot zu. Dadurch erzeugt die bisherige Eindeutigkeitsprüfung keinen Mehrfachtreffer. Eine spätere Änderung desselben Vorschlags ersetzt den alten generierten Override statt eine konkurrierende Regel zu hinterlassen.
 
-Weiterhin offen sind fachlich generalisierte Regex-Regeln und Vorschläge für vollständig neue Komponententypen. Dafür reichen einzelne Bedienaktionen nicht als belastbare Datenbasis; solche Regeln dürfen erst nach separater Evaluation und fachlicher Freigabe entstehen.
+## Vorschläge für neue Container
+
+Der Unterreiter **Container-Vorschläge** wertet wiederkehrende `Add`-, `Move`- und `ContainerAndSlot`-Aktionen aus. Er schlägt einen neuen Containertyp nur vor, wenn mindestens zwei unterschiedliche Quell-/Zielcontainer-Fälle vorliegen. Ein Slot gilt als wiederkehrend, wenn er in mindestens 60 Prozent dieser Fälle vorkommt. Konfidenz, Fallzahl, Aktionszahl, Beispielcontainer und vorgeschlagene Slots bleiben in der Oberfläche sichtbar.
+
+Auch ein angenommener Vorschlag erzeugt oder ändert keine Requirements-XML und startet keine FEE-Generierung. Annahme und Ablehnung werden getrennt in `container_suggestion_reviews.json` gespeichert. Erst eine fachliche Freigabe und eine explizite Implementierung im gemeinsamen Containerkatalog dürfen einen neuen Typ produktiv aktivieren. Generalisierte Regex-Regeln bleiben aus demselben Grund bewusst offen.
+
+## Automatische Abdeckungsmatrix
+
+Der Unterreiter **Abdeckungsmatrix** vergleicht eine ausgewählte Requirements-XML mit dem gemeinsamen Metadatenkatalog des Vorwärtsgenerators und dem Typkatalog der FEE2Container-Rekonstruktion. Angezeigt werden unter anderem Requirements-Komponente, Laufzeitklasse, deklarierte/unterstützte Slots, unbekannte beziehungsweise fehlende Slots und die Unterstützung beider Richtungen. Die Matrix findet strukturelle Lücken früh, ersetzt aber keinen Live-Test der FEE-SDK-Verknüpfungen.
+
+## Messbarer Performance-Modus
+
+Der Performance-Modus ist standardmäßig ausgeschaltet. Nach Aktivierung misst er die Gesamtdauer und den Erfolg der instrumentierten Abläufe ContainerGeneration, Container2FEE Visual, TIA und Rockwell. Messungen werden als JSONL unter `%LOCALAPPDATA%\VIBN_Tools\diagnostics\performance` gespeichert; die Oberfläche zeigt Anzahl, Mittelwert, Maximum, letzte Dauer und Fehlerzahl pro Vorgang. **Sitzung leeren** entfernt nur die im Arbeitsspeicher angezeigte Zusammenfassung; bereits geschriebene JSONL-Messdateien bleiben für Vergleiche erhalten.
+
+Die Messung ist bewusst opt-in und enthält Vorgangsname, Dauer, Erfolg und einen knappen Status, aber keine API-Schlüssel oder Passwörter. Sie liefert eine reproduzierbare Ausgangsbasis für Optimierungen; feste Grenzwerte müssen erst anhand repräsentativer Kundenprojekte festgelegt werden.

@@ -6,6 +6,9 @@
              xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
              mc:Ignorable="d" d:DesignHeight="700" d:DesignWidth="1100">
     <UserControl.DataContext><vm:RockwellPageVM /></UserControl.DataContext>
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -20,14 +23,34 @@
                        Text="Bearbeitet L5X-Exporte gestuft und idempotent. Die Quelldatei bleibt unverändert; erst der Speichern-Schritt erzeugt eine neue Datei." />
         </StackPanel>
         <Grid Grid.Row="1" Margin="0,16,0,8">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-            <Button MinWidth="150" MinHeight="34" Content="L5X auswählen" Command="{Binding OpenCommand}" />
-            <TextBox Grid.Column="1" Margin="8,0,0,0" Padding="7,4" IsReadOnly="True"
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" Text="Standard" />
+            <ComboBox Grid.Column="1" Margin="8,0" ItemsSource="{Binding Standards}"
+                      SelectedItem="{Binding SelectedStandard}" DisplayMemberPath="DisplayName"
+                      ToolTip="Nur Standards aus diesem Katalog werden angewendet. Derzeit ist GCCS verifiziert." />
+            <Button Grid.Column="2" MinWidth="150" MinHeight="34" Content="L5X auswählen"
+                    Command="{Binding OpenCommand}"
+                    ToolTip="Lädt einen Studio-5000-L5X-Export. Die Quelldatei wird nie überschrieben." />
+            <TextBox Grid.Column="3" Margin="8,0,0,0" Padding="7,4" IsReadOnly="True"
                      Text="{Binding SourcePath, Mode=OneWay}" />
+            <Button Grid.Column="4" MinWidth="145" Margin="8,0,0,0" Content="Was wird gemacht?"
+                    Command="{Binding ToggleHelpCommand}" />
         </Grid>
-        <Border Grid.Row="2" Margin="0,0,0,10" Padding="10" Background="#FFF3F5F7" CornerRadius="4">
-            <TextBlock Text="{Binding ProjectSummary}" TextWrapping="Wrap" />
-        </Border>
+        <StackPanel Grid.Row="2" Margin="0,0,0,10">
+            <Border Padding="10" Background="#FFF3F5F7" CornerRadius="4">
+                <TextBlock Text="{Binding ProjectSummary}" TextWrapping="Wrap" />
+            </Border>
+            <Border Margin="0,6,0,0" Padding="10" Background="#FFFFF2CC" CornerRadius="4"
+                    Visibility="{Binding IsHelpVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock Text="{Binding WorkflowHelp}" TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
         <Grid Grid.Row="3">
             <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <StackPanel>
@@ -43,9 +66,11 @@
                         ToolTip="Erzeugt s_A001_Simulation in erkannten Safety-Programmen. Direkte Moduladressen werden als Prüfhinweis sicher auf NOP gesetzt." />
                 <Separator Margin="0,6" />
                 <Button MinHeight="38" Margin="0,0,0,7" Content="Generierte L5X speichern"
-                        Command="{Binding SaveGeneratedCommand}" IsEnabled="{Binding CanEdit}" />
+                        Command="{Binding SaveGeneratedCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Schreibt den aktuellen Änderungsstand in eine neue L5X-Datei; die Quelle bleibt unverändert." />
                 <Button MinHeight="38" Content="Generierte L5X öffnen"
-                        Command="{Binding OpenGeneratedCommand}" IsEnabled="{Binding CanOpenGenerated}" />
+                        Command="{Binding OpenGeneratedCommand}" IsEnabled="{Binding CanOpenGenerated}"
+                        ToolTip="Erfordert Studio 5000 Logix Designer und eine registrierte L5X-Dateizuordnung. Übergibt die generierte Datei an Studio 5000." />
             </StackPanel>
             <GroupBox Grid.Column="2" Header="Änderungen und Prüfhinweise">
                 <ListBox ItemsSource="{Binding Messages}" ScrollViewer.VerticalScrollBarVisibility="Auto">

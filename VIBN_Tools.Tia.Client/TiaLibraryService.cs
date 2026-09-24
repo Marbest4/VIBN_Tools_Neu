@@ -5,6 +5,12 @@ namespace VIBN_Tools.Tia.Client;
 
 public sealed record TiaLibraryProgress(int Completed, int Total, string Operation);
 
+public sealed record TiaAxisArtifactResult(
+    string OutputFolder,
+    string DataBlockPath,
+    string FunctionPath,
+    int AxisCount);
+
 public interface ITiaLibraryService
 {
     Task ImportAsync(
@@ -19,6 +25,12 @@ public interface ITiaLibraryService
         string destinationRoot,
         string tiaVersion,
         IProgress<TiaLibraryProgress>? progress = null,
+        CancellationToken cancellationToken = default);
+
+    Task<TiaAxisArtifactResult> CreateAxisArtifactsAsync(
+        string libraryPath,
+        IReadOnlyCollection<string> axisNames,
+        string tiaVersion,
         CancellationToken cancellationToken = default);
 }
 
@@ -127,6 +139,38 @@ public sealed class TiaLibraryService : ITiaLibraryService
         }
 
         return exportRoot;
+    }
+
+    public Task<TiaAxisArtifactResult> CreateAxisArtifactsAsync(
+        string libraryPath,
+        IReadOnlyCollection<string> axisNames,
+        string tiaVersion,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(libraryPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(tiaVersion);
+        if (axisNames.Count == 0)
+            throw new InvalidOperationException("At least one configured axis is required.");
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var programRoot = Path.Combine(libraryPath, "_Programm");
+        var axisFolder = ResolveAxisFolder(programRoot);
+        Directory.CreateDirectory(axisFolder);
+        var dataBlockPath = Path.Combine(axisFolder, "AxisDB.xml");
+        var functionPath = Path.Combine(axisFolder, "AxisFC.xml");
+        var distinctAxes = axisNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        TiaAxisXmlGenerator.CreateGlobalDataBlock(distinctAxes, dataBlockPath, tiaVersion);
+        cancellationToken.ThrowIfCancellationRequested();
+        TiaAxisXmlGenerator.CreateConnectionFunction(distinctAxes, functionPath, tiaVersion);
+        return Task.FromResult(new TiaAxisArtifactResult(
+            axisFolder,
+            dataBlockPath,
+            functionPath,
+            distinctAxes.Length));
     }
 
     private async Task<int> ImportSectionAsync(

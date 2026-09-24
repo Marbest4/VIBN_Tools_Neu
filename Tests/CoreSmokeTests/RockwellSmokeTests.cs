@@ -37,11 +37,13 @@ internal static class RockwellSmokeTests
 
         var original = await File.ReadAllTextAsync(source);
         var editor = RockwellProjectEditor.Load(source);
-        var basics = editor.EnsureSimulationBasics();
+        var gccs = RockwellStandardCatalog.All.Single();
+        Assert(gccs.Id == "GCCS", "The verified Rockwell standard catalog should expose GCCS explicitly.");
+        var basics = gccs.ApplyStage(editor, 1);
         Assert(basics.AddedItems == 4, "Rockwell basic integration should add data type, AOI and both controller tags.");
         Assert(editor.EnsureSimulationBasics().AddedItems == 0, "Rockwell basic integration must be idempotent.");
-        var standard = editor.EnsureInputSimulation(safety: false);
-        var safety = editor.EnsureInputSimulation(safety: true);
+        var standard = gccs.ApplyStage(editor, 2);
+        var safety = gccs.ApplyStage(editor, 3);
         Assert(standard.Changed && safety.Changed, "Rockwell standard and safety routines should be generated.");
         Assert(!editor.EnsureInputSimulation(safety: false).Changed, "Rockwell A001 generation must be idempotent.");
 

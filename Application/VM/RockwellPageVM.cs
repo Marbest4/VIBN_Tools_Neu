@@ -5,6 +5,7 @@ using System.Windows.Input;
 using Microsoft.Win32;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.Rockwell;
+using VIBN_Tools.Core.Diagnostics;
 
 namespace VIBN_Tools.Application.VM;
 
@@ -18,18 +19,25 @@ public sealed class RockwellPageVM : MvvmBase
     private string _statusText = "Eine Studio-5000-L5X-Datei auswählen.";
     private string _projectSummary = "Kein Projekt geladen.";
     private bool _isBusy;
+    private bool _isHelpVisible;
+    private RockwellStandardDefinition? _selectedStandard;
 
     public RockwellPageVM()
     {
+        foreach (var standard in RockwellStandardCatalog.All)
+            Standards.Add(standard);
+        _selectedStandard = Standards.FirstOrDefault();
         OpenCommand = GetCommandBinding(Open);
-        AddBasicsCommand = GetCommandBinding(() => Apply(editor => editor.EnsureSimulationBasics()));
-        AddStandardSimulationCommand = GetCommandBinding(() => Apply(editor => editor.EnsureInputSimulation(safety: false)));
-        AddSafetySimulationCommand = GetCommandBinding(() => Apply(editor => editor.EnsureInputSimulation(safety: true)));
+        AddBasicsCommand = GetCommandBinding(() => ApplyStage(1));
+        AddStandardSimulationCommand = GetCommandBinding(() => ApplyStage(2));
+        AddSafetySimulationCommand = GetCommandBinding(() => ApplyStage(3));
         SaveGeneratedCommand = GetCommandBinding(SaveGenerated);
         OpenGeneratedCommand = GetCommandBinding(OpenGenerated);
+        ToggleHelpCommand = GetCommandBinding(() => IsHelpVisible = !IsHelpVisible);
     }
 
     public ObservableCollection<string> Messages { get; } = [];
+    public ObservableCollection<RockwellStandardDefinition> Standards { get; } = [];
 
     public ICommand OpenCommand { get; }
     public ICommand AddBasicsCommand { get; }
@@ -37,6 +45,38 @@ public sealed class RockwellPageVM : MvvmBase
     public ICommand AddSafetySimulationCommand { get; }
     public ICommand SaveGeneratedCommand { get; }
     public ICommand OpenGeneratedCommand { get; }
+    public ICommand ToggleHelpCommand { get; }
+
+    public RockwellStandardDefinition? SelectedStandard
+    {
+        get => _selectedStandard;
+        set
+        {
+            if (ReferenceEquals(_selectedStandard, value))
+                return;
+            _selectedStandard = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanEdit));
+            StatusText = value is null
+                ? "Bitte einen Rockwell-Standard auswählen."
+                : $"Standard '{value.DisplayName}' ausgewählt. Nun L5X laden und die Schritte 1 bis 3 ausführen.";
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+
+    public bool IsHelpVisible
+    {
+        get => _isHelpVisible;
+        private set { _isHelpVisible = value; OnPropertyChanged(); }
+    }
+
+    public string WorkflowHelp =>
+        "Voraussetzung: ein L5X-Export des Studio-5000-Projekts. Zuerst den Standard auswählen und die " +
+        "L5X laden. Schritt 1 ergänzt nur fehlende GCCS-Basisobjekte. Schritt 2 erzeugt die Standard-A001-" +
+        "Simulation, Schritt 3 die Safety-A001-Simulation. Jeder Schritt ist idempotent und ändert nur " +
+        "das Arbeitsmodell; geschrieben wird erst mit 'Generierte L5X speichern'. 'Generierte L5X öffnen' " +
+        "übergibt die Datei an die Windows-L5X-Zuordnung. Dafür muss Studio 5000 Logix Designer installiert " +
+        "und für L5X registriert sein; Studio 5000 zeigt anschließend seinen Importdialog.";
 
     public string SourcePath
     {
@@ -80,7 +120,7 @@ public sealed class RockwellPageVM : MvvmBase
         }
     }
 
-    public bool CanEdit => _editor is not null && !IsBusy;
+    public bool CanEdit => _editor is not null && SelectedStandard is not null && !IsBusy;
 
     public bool CanOpenGenerated => !string.IsNullOrWhiteSpace(GeneratedPath) && File.Exists(GeneratedPath);
 
@@ -130,6 +170,16 @@ public sealed class RockwellPageVM : MvvmBase
         }, "Rockwell-Projekt konnte nicht geändert werden");
     }
 
+    private void ApplyStage(int stage)
+    {
+        if (SelectedStandard is null)
+        {
+            StatusText = "Bitte zuerst einen Rockwell-Standard auswählen.";
+            return;
+        }
+        Apply(editor => SelectedStandard.ApplyStage(editor, stage));
+    }
+
     private void SaveGenerated()
     {
         if (_editor is null)
@@ -168,8 +218,15 @@ public sealed class RockwellPageVM : MvvmBase
             StatusText = "Es wurde noch keine generierte L5X gespeichert.";
             return;
         }
-        Run(() => Process.Start(new ProcessStartInfo(GeneratedPath) { UseShellExecute = true }),
-            "Generierte L5X konnte nicht geöffnet werden");
+        Run(() =>
+        {
+            var process = Process.Start(new ProcessStartInfo(GeneratedPath) { UseShellExecute = true });
+            if (process is null)
+                throw new InvalidOperationException(
+                    "Windows konnte keine Anwendung für L5X starten. Ist Studio 5000 Logix Designer installiert und die L5X-Dateizuordnung vorhanden?");
+            StatusText = "Generierte L5X wurde an Studio 5000 übergeben. Den Importdialog in Studio 5000 bestätigen.";
+            ApplicationLogService.Instance.Information(LogArea, StatusText);
+        }, "Generierte L5X konnte nicht in Studio 5000 geöffnet werden");
     }
 
     private void Run(Action action, string errorPrefix)
@@ -177,12 +234,14 @@ public sealed class RockwellPageVM : MvvmBase
         if (IsBusy)
             return;
         IsBusy = true;
+        using var measurement = PerformanceMeasurementService.Instance.Start(LogArea, errorPrefix);
         try
         {
             action();
         }
         catch (Exception exception)
         {
+            measurement.MarkFailed();
             StatusText = $"{errorPrefix}: {exception.Message}";
             ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
         }
