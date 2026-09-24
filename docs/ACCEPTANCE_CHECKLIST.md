@@ -131,4 +131,6 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Diagnoseprotokoll enthält keine sensiblen Werte.
 - [ ] Anwenderhandbuch und Screenshots sind Bestandteil des Releasepakets.
 - [ ] `scripts/Publish-IbnRemote.ps1` erzeugt nur `VIBN_Tools_IBN.exe`; die EXE startet auf einem sauberen Windows-x64-PC ohne .NET-, FEE- oder TIA-Installation und enthält keine Volltool-Reiter.
+- [ ] Ohne Zugangsdatenparameter fragt `Publish-IbnRemote.ps1` API-Key und RDP-Passwort verdeckt in der Konsole ab; die Werte erscheinen weder im Shell-Verlauf noch in der `dotnet publish`-Befehlszeile. Die Auslesbarkeit aus der fertigen EXE ist als Sicherheitsgrenze dokumentiert.
+- [ ] Das Prüfstatus-Dropdown der ContainerGeneration filtert nur die Haupt-Containerliste; **Unassigned Data** und **Filtered Data** behalten unabhängig davon alle Treffer ihres jeweiligen Textfilters.
 - [ ] Bekannte externe SDK-Warnungen bzw. Abhängigkeiten sind dokumentiert und keine neue funktionale Warnung aus den geänderten Integrationsmodulen offen.

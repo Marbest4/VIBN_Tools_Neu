@@ -14,6 +14,8 @@ using VIBN_Tools.Application.VM;
 using VIBN_Tools.Core.Kanbanize;
 using VIBN_Tools.Core.ViCo;
 using VIBN_Tools.ContainerGeneration.AI;
+using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
+using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerGeneration.Utils;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.GlobalClasses;
@@ -128,6 +130,7 @@ internal static class Program
                 throw new InvalidOperationException("Load Data must require a loaded Requirements XML.");
             if (containerGenerationViewModel.CanCompareContainerFile)
                 throw new InvalidOperationException("ContainerFile comparison must require an active workspace.");
+            VerifyContainerReviewFilterScope(containerGenerationViewModel);
 
             var rockwellPage = new RockwellPage();
             if (rockwellPage.DataContext is not RockwellPageVM)
@@ -764,6 +767,61 @@ internal static class Program
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+    }
+
+    private static void VerifyContainerReviewFilterScope(ContainerGenerationPageVM viewModel)
+    {
+        var mainNeedsReview = new ContainerData
+        {
+            Id = "review",
+            Component = "Review",
+            Type = "Sensor",
+            IsValid = false,
+        };
+        var mainRegular = new ContainerData
+        {
+            Id = "regular",
+            Component = "Regular",
+            Type = "Sensor",
+            IsValid = true,
+        };
+        viewModel.ContainerList.Add(mainNeedsReview);
+        viewModel.ContainerList.Add(mainRegular);
+        viewModel.UnassignedEntries.Add(new ContainerEntry
+        {
+            Signal = "UnassignedReview",
+            ReviewState = ContainerEntryReviewState.NeedsReview,
+        });
+        viewModel.UnassignedEntries.Add(new ContainerEntry { Signal = "UnassignedRegular" });
+        viewModel.FilteredEntries.Add(new ContainerEntry
+        {
+            Signal = "FilteredReview",
+            ReviewState = ContainerEntryReviewState.NeedsReview,
+        });
+        viewModel.FilteredEntries.Add(new ContainerEntry { Signal = "FilteredRegular" });
+
+        viewModel.SelectedReviewFilter = viewModel.ReviewFilterOptions.Single(option =>
+            option.Value == WorkspaceReviewFilter.NeedsReview);
+
+        var mainView = CollectionViewSource.GetDefaultView(viewModel.ContainerList);
+        var unassignedView = CollectionViewSource.GetDefaultView(viewModel.UnassignedEntries);
+        var filteredView = CollectionViewSource.GetDefaultView(viewModel.FilteredEntries);
+        var mainFilter = mainView.Filter;
+        if (mainFilter is null ||
+            !mainFilter(mainNeedsReview) ||
+            mainFilter(mainRegular) ||
+            unassignedView.Filter is not null ||
+            filteredView.Filter is not null)
+        {
+            throw new InvalidOperationException(
+                "The review dropdown must filter only the main container grid, not Unassigned or Filtered Data.");
+        }
+
+        viewModel.SelectedReviewFilter = viewModel.ReviewFilterOptions.Single(option =>
+            option.Value == WorkspaceReviewFilter.All);
+        viewModel.ContainerList.Clear();
+        viewModel.UnassignedEntries.Clear();
+        viewModel.FilteredEntries.Clear();
     }
 
     private static void VerifyVisualSimObjectColorAggregation()

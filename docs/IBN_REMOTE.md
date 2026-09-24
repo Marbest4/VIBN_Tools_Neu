@@ -18,6 +18,12 @@ Nicht enthalten sind FEE-SDK, TIA-Bridge, Container-/CAD-/Modellfunktionen, Admi
 Auf dem Buildrechner genügt:
 
 ```powershell
+.\scripts\Publish-IbnRemote.ps1
+```
+
+Das Skript fragt nacheinander den festen Filter, den Kanbanize-/Businessmap-API-Key und das gemeinsame RDP-Passwort ab. API-Key und Passwort werden bei der Eingabe nicht angezeigt. Für einen automatisierten Testlauf können alle Werte weiterhin ausdrücklich als Parameter übergeben werden:
+
+```powershell
 .\scripts\Publish-IbnRemote.ps1 -InWorkFilter 'GM7283' -ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'
 ```
 
@@ -31,9 +37,9 @@ Die Datei ist `win-x64`, self-contained und single-file. Auf dem Ziel-PC sind we
 
 ## Vorkonfigurierte Testwerte
 
-Der feste Filter wird mit `-InWorkFilter` beim Publish gesetzt. `-ApiKey` und `-RemoteDesktopPassword` überschreiben die Standardplatzhalter `12345` und `67890`; damit lassen sich beispielsweise die vom Anwender genannten Werte `abcde` und `fghijk` einbetten. Eine Konfigurationsoberfläche gibt es nicht. Der API-Key wird für den read-only Kanbanize-Abruf verwendet. Beim RDP-Start wird das konfigurierte Passwort kurzzeitig als `TERMSRV/<PC>`-Eintrag angelegt und nach 20 Sekunden wieder entfernt. Logs liegen unter `%LOCALAPPDATA%\GROB\VIBN_Tools_IBN\Logs` und enthalten die Werte nicht.
+Der feste Filter sowie API-Key und RDP-Passwort werden beim Publish gesetzt. Nicht übergebene Werte fragt das Skript über die Konsole ab. Die beiden verdeckt eingegebenen Zugangswerte werden nur für den untergeordneten Buildprozess als temporäre Prozess-Umgebungsvariablen gesetzt und danach wieder entfernt; sie stehen damit nicht in der von `dotnet publish` gestarteten Befehlszeile. Eine Konfigurationsoberfläche gibt es nicht. Der API-Key wird für den read-only Kanbanize-Abruf verwendet. Beim RDP-Start wird das konfigurierte Passwort kurzzeitig als `TERMSRV/<PC>`-Eintrag angelegt und nach 20 Sekunden wieder entfernt. Logs liegen unter `%LOCALAPPDATA%\GROB\VIBN_Tools_IBN\Logs` und enthalten die Werte nicht.
 
-Die eingebetteten Zeichenfolgen sind mit üblichen .NET-Werkzeugen aus der EXE auslesbar; auch der Publish-Prozess kann sie in seiner Befehlszeile sichtbar machen. Das Skript warnt deshalb ausdrücklich bei Werten außerhalb der Testplatzhalter. Technisch ist das Überschreiben möglich, sicherheitstechnisch sind echte Zugangsdaten in dieser Form aber kein Geheimnis. Ein produktiver Rollout benötigt einen Windows-/gerätegebundenen Secret-Speicher oder ein freigegebenes Unternehmens-Secretsystem.
+Die eingebetteten Zeichenfolgen sind weiterhin mit üblichen .NET-Werkzeugen aus der EXE auslesbar. Das Skript warnt deshalb ausdrücklich bei Werten außerhalb der Testplatzhalter `12345`/`67890`. Die verdeckte Konsoleneingabe schützt nur Bildschirm, Shell-Verlauf und Publish-Befehlszeile; sie macht die erzeugte EXE nicht zu einem Secret-Speicher. Ein produktiver Rollout benötigt einen Windows-/gerätegebundenen Secret-Speicher oder ein freigegebenes Unternehmens-Secretsystem.
 
 ## Technische Grenze
 

@@ -429,7 +429,7 @@ namespace VIBN_Tools.Application.VM
 
                 _selectedReviewFilter = value;
                 OnPropertyChanged();
-                RefreshAllWorkspaceFilters();
+                FilterContainerGrid();
             }
         }
 
@@ -1978,16 +1978,13 @@ namespace VIBN_Tools.Application.VM
         {
             var viewUnassigned = CollectionViewSource.GetDefaultView(UnassignedEntries);
             var search = SearchTextUnassignedEntries?.Trim() ?? string.Empty;
-            var reviewFilter = SelectedReviewFilter?.Value ?? WorkspaceReviewFilter.All;
             ApplyWorkspaceFilter(
                 viewUnassigned,
-                string.IsNullOrEmpty(search) && reviewFilter == WorkspaceReviewFilter.All
+                string.IsNullOrEmpty(search)
                     ? null
                     : item =>
                         item is ContainerEntry entry &&
-                        (string.IsNullOrEmpty(search) ||
-                         ContainerWorkspaceSearch.Matches(entry, search)) &&
-                        MatchesReviewFilter(entry, reviewFilter),
+                        ContainerWorkspaceSearch.Matches(entry, search),
                 "nicht zugeordnete Signale");
 
         }
@@ -2005,16 +2002,13 @@ namespace VIBN_Tools.Application.VM
         {
             var viewFiltered = CollectionViewSource.GetDefaultView(FilteredEntries);
             var search = SearchTextFilteredEntries?.Trim() ?? string.Empty;
-            var reviewFilter = SelectedReviewFilter?.Value ?? WorkspaceReviewFilter.All;
             ApplyWorkspaceFilter(
                 viewFiltered,
-                string.IsNullOrEmpty(search) && reviewFilter == WorkspaceReviewFilter.All
+                string.IsNullOrEmpty(search)
                     ? null
                     : item =>
                         item is ContainerEntry entry &&
-                        (string.IsNullOrEmpty(search) ||
-                         ContainerWorkspaceSearch.Matches(entry, search)) &&
-                        MatchesReviewFilter(entry, reviewFilter),
+                        ContainerWorkspaceSearch.Matches(entry, search),
                 "gefilterte Signale");
         }
 
@@ -2041,30 +2035,6 @@ namespace VIBN_Tools.Application.VM
                     !container.ManuallyChecked &&
                     (!container.IsValid || container.HasDetectedChanges),
                 WorkspaceReviewFilter.Invalid => !container.IsValid,
-                _ => true
-            };
-
-        private static bool MatchesReviewFilter(
-            ContainerEntry entry,
-            WorkspaceReviewFilter filter) =>
-            filter switch
-            {
-                WorkspaceReviewFilter.NeedsReview =>
-                    entry.ReviewState is ContainerEntryReviewState.NeedsReview or
-                        ContainerEntryReviewState.SourceChanged or
-                        ContainerEntryReviewState.NewFromSource or
-                        ContainerEntryReviewState.NewlyRecognized ||
-                    string.IsNullOrWhiteSpace(entry.Signal),
-                WorkspaceReviewFilter.Changed =>
-                    entry.ReviewState is not ContainerEntryReviewState.None and
-                        not ContainerEntryReviewState.Preserved,
-                WorkspaceReviewFilter.ManuallyEdited => entry.IsManuallyEdited,
-                WorkspaceReviewFilter.Unchecked =>
-                    entry.ReviewState is ContainerEntryReviewState.NeedsReview or
-                        ContainerEntryReviewState.SourceChanged or
-                        ContainerEntryReviewState.NewFromSource or
-                        ContainerEntryReviewState.NewlyRecognized,
-                WorkspaceReviewFilter.Invalid => string.IsNullOrWhiteSpace(entry.Signal),
                 _ => true
             };
 

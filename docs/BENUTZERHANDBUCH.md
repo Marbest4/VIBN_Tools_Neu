@@ -235,7 +235,7 @@ Zuli-Datei wählen, die angezeigten Optionen prüfen und **Create Interface File
 1. **Open Interface File** wählen und die Zuli-/Interface-Datei laden.
 2. **Open Req. XML** wählen und die Requirements-Datei laden.
 3. Optional unter **Grouping Settings** die Gruppierung und Ersetzungsregel prüfen.
-4. In der Containerliste Filter und Prüfstatus verwenden. Orange oder anders markierte Einträge erfordern eine fachliche Entscheidung.
+4. In der Containerliste Filter und Prüfstatus verwenden. Das Dropdown **Prüfstatus** wirkt ausschließlich auf das Hauptfenster mit den Containern. **Unassigned Data** und **Filtered Data** werden davon nicht ausgeblendet und besitzen jeweils nur ihren eigenen Textfilter. Orange oder anders markierte Einträge erfordern eine fachliche Entscheidung.
 5. Bei erneut importierten Daten den **Reimport-Vergleich** prüfen, einzelne Änderungen übernehmen oder verwerfen.
 6. Erst danach die Generierung starten und Status/Zuordnungen kontrollieren.
 

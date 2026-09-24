@@ -46,10 +46,10 @@ Setup-EXE mit installiertem Inno Setup 6:
 Separate IBN-Remote-Einzeldatei (kein FEE-SDK und kein Inno Setup erforderlich):
 
 ```powershell
-.\scripts\Publish-IbnRemote.ps1 -InWorkFilter 'GM7283'
+.\scripts\Publish-IbnRemote.ps1
 ```
 
-Die Buildwerte können bewusst überschrieben werden, zum Beispiel mit `-ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'`. Diese Werte stehen danach auslesbar in der EXE und können zusätzlich in der Prozessbefehlszeile des Publish-Laufs erscheinen; das ist eine Konfigurationsmöglichkeit, kein Secret-Speicher.
+Das Skript fragt Filter, API-Key und RDP-Passwort in der Konsole ab; die beiden Zugangswerte werden verdeckt eingegeben. Alternativ können die Buildwerte für automatisierte Testläufe bewusst als Parameter übergeben werden, zum Beispiel mit `-InWorkFilter 'GM7283' -ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'`. Bei der interaktiven Eingabe gelangen die Werte nicht in Shell-Verlauf oder `dotnet`-Befehlszeile, stehen danach aber weiterhin auslesbar in der EXE. Das ist eine Konfigurationsmöglichkeit, kein Secret-Speicher.
 
 Das Skript schreibt den Filter als Assembly-Metadatum in die erzeugte EXE. Auf ausdrücklichen Wunsch enthält die IBN-EXE außerdem die **absichtlich ungültigen Testplatzhalter** `12345` als Kanbanize-API-Key und `67890` als RDP-Passwort. Dadurch kann das Verhalten einer vollständig vorkonfigurierten Einzeldatei getestet werden, ohne echte Zugangsdaten einzuchecken. Zur Laufzeit hält der Prozess den API-Key nur im Arbeitsspeicher. Das RDP-Passwort wird unmittelbar vor dem RDP-Start temporär über `cmdkey` hinterlegt und anschließend wieder entfernt.
 
