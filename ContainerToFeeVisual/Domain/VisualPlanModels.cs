@@ -323,6 +323,7 @@ public sealed class VisualPlan
     private readonly List<VisualSignalAssignment> _signalAssignments;
     private readonly List<VisualAddedSignal> _addedSignals;
     private readonly List<VisualSlotOverride> _slotOverrides;
+    private readonly HashSet<string> _removedSignalNodeIds;
     private readonly List<VisualEdge> _edges;
     private readonly List<VisualNode> _nodes;
     private readonly HashSet<string> _sourceNodeIds;
@@ -342,6 +343,7 @@ public sealed class VisualPlan
         IReadOnlyList<VisualSignalAssignment>? signalAssignments,
         IReadOnlyList<VisualAddedSignal>? addedSignals,
         IReadOnlyList<VisualSlotOverride>? slotOverrides,
+        IReadOnlyList<string>? removedSignalNodeIds,
         VisualExistingInterfaceSelection? existingInterfaceSelection,
         IReadOnlyList<VisualIssue> issues)
     {
@@ -360,6 +362,9 @@ public sealed class VisualPlan
         _signalAssignments = signalAssignments is null ? [] : [.. signalAssignments];
         _addedSignals = [];
         _slotOverrides = slotOverrides is null ? [] : [.. slotOverrides];
+        _removedSignalNodeIds = removedSignalNodeIds is null
+            ? new(StringComparer.Ordinal)
+            : new(removedSignalNodeIds, StringComparer.Ordinal);
         ReplaceAddedSignals(addedSignals ?? []);
         ExistingInterfaceSelection = existingInterfaceSelection;
         Issues = issues;
@@ -394,6 +399,8 @@ public sealed class VisualPlan
 
     public IReadOnlyList<VisualSlotOverride> SlotOverrides => _slotOverrides;
 
+    public IReadOnlySet<string> RemovedSignalNodeIds => _removedSignalNodeIds;
+
     public VisualExistingInterfaceSelection? ExistingInterfaceSelection { get; private set; }
 
     public IReadOnlyList<VisualIssue> Issues { get; }
@@ -403,6 +410,8 @@ public sealed class VisualPlan
 
     public bool IsAddedSignal(string nodeId) =>
         _addedSignals.Any(item => string.Equals(item.NodeId, nodeId, StringComparison.Ordinal));
+
+    public bool IsSignalRemoved(string nodeId) => _removedSignalNodeIds.Contains(nodeId);
 
     public VisualSimObjectTarget? FindTarget(string id) =>
         Targets.FirstOrDefault(target => string.Equals(target.Id, id, StringComparison.Ordinal));
@@ -489,6 +498,15 @@ public sealed class VisualPlan
         var replacement = overrides.ToArray();
         _slotOverrides.Clear();
         _slotOverrides.AddRange(replacement);
+    }
+
+    internal void ReplaceRemovedSignalNodeIds(IEnumerable<string> nodeIds)
+    {
+        _removedSignalNodeIds.Clear();
+        foreach (var nodeId in nodeIds.Where(nodeId =>
+                     _sourceNodeIds.Contains(nodeId) &&
+                     FindNode(nodeId)?.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
+            _removedSignalNodeIds.Add(nodeId);
     }
 
     internal void SetExistingInterfaceSelection(VisualExistingInterfaceSelection? selection) =>

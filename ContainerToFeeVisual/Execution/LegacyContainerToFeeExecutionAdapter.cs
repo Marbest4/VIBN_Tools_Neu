@@ -215,6 +215,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
             // resolved GUIDs and therefore cannot duplicate the variables.
             foreach (var missing in signalPlan.MissingSignals)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!await missing.Signal.CreateSignalAsync(generationInterface))
                 {
                     return Failure(
@@ -223,6 +224,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                         "GENERATED_SIGNAL_NOT_AVAILABLE",
                         missing.ContainerId);
                 }
+                cancellationToken.ThrowIfCancellationRequested();
             }
             signalPlan.ApplyCreatedBindings(generationInterface);
             progress?.Report(new VisualGenerationProgress(40, "Signale wurden wiederverwendet oder erzeugt."));
@@ -277,6 +279,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                     PersistentTags = persistentTags,
                 };
                 await basicFrame.CreateAsync();
+                cancellationToken.ThrowIfCancellationRequested();
                 await basicFrame.SendAndWaitAsync();
                 if (!string.IsNullOrWhiteSpace(basicFrame.PersistentTagWarning))
                 {
@@ -301,6 +304,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                         .ToArray();
                     for (var index = 0; index < persistedErrors.Length; index++)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         var error = persistedErrors[index];
                         var errorText = $"[{error.Code}] {error.Message}";
                         var errorFrame = new FeeBasicFrame
@@ -315,7 +319,9 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                             },
                         };
                         await errorFrame.CreateAsync();
+                        cancellationToken.ThrowIfCancellationRequested();
                         await errorFrame.SendAndWaitAsync();
+                        cancellationToken.ThrowIfCancellationRequested();
                         if (!string.IsNullOrWhiteSpace(errorFrame.PersistentTagWarning))
                         {
                             logger.Warning(
@@ -350,6 +356,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     await signal.CreateSignalAsync(generationInterface);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
             }
 
@@ -414,6 +421,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
         var candidate = plan.Nodes
             .Where(node => node.ContainerId == containerId &&
                            node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                           !plan.IsSignalRemoved(node.Id) &&
                            !usedNodeIds.Contains(node.Id))
             .OrderByDescending(node => string.Equals(node.Name, identity, StringComparison.OrdinalIgnoreCase))
             .ThenByDescending(node => string.Equals(node.TypeName, signal.IOTypeString, StringComparison.OrdinalIgnoreCase))

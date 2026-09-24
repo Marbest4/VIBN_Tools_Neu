@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows;
@@ -75,6 +76,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         OpenXmlCommand = new AsyncRelayCommand(OpenXmlAsync, () => !IsBusy);
         LoadPlanCommand = new AsyncRelayCommand(LoadPlanAsync, () => !IsBusy);
         SavePlanCommand = new AsyncRelayCommand(SavePlanAsync, () => HasPlan && !IsBusy);
+        SaveContainerXmlCommand = new AsyncRelayCommand(SaveContainerXmlAsync, () => HasPlan && !IsBusy);
         RefreshFeeObjectsCommand = new AsyncRelayCommand(
             RefreshFeeObjectsAsync,
             () => HasPlan && Connection.CanUseFeeFeatures && !IsBusy);
@@ -117,6 +119,15 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         RemoveAssignmentCommand = new RelayCommand<ContainerToFeeVisualAssignmentVM>(
             RemoveAssignment,
             assignment => assignment is not null && !IsBusy);
+        RemoveSignalCommand = new RelayCommand<ContainerToFeeVisualSignalEntryVM>(
+            RemoveSignal,
+            signal => signal is not null && !IsBusy);
+        DeleteTreeNodeCommand = new RelayCommand<ContainerToFeeVisualTreeNodeVM>(
+            DeleteTreeNode,
+            node => node is not null && !IsBusy && CanDeleteTreeNode(node));
+        ToggleTreeNodeGenerationCommand = new RelayCommand<ContainerToFeeVisualTreeNodeVM>(
+            ToggleTreeNodeGeneration,
+            node => node?.ContainerId is not null && !IsBusy);
 
         _planService.PlanChanged += OnPlanChanged;
         _connection.PropertyChanged += OnConnectionPropertyChanged;
@@ -133,6 +144,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     public ObservableCollection<ContainerToFeeVisualTreeNodeVM> TreeRoots { get; } = new();
 
     public ObservableCollection<ContainerToFeeVisualTargetVM> Targets { get; } = new();
+
+    public ObservableCollection<ContainerToFeeVisualSignalEntryVM> SelectedContainerSignals { get; } = new();
 
     public ObservableCollection<ContainerToFeeVisualEdgeVM> VisibleEdges { get; } = new();
 
@@ -152,6 +165,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     public ICommand LoadPlanCommand { get; }
 
     public ICommand SavePlanCommand { get; }
+
+    public ICommand SaveContainerXmlCommand { get; }
 
     public ICommand RefreshFeeObjectsCommand { get; }
 
@@ -183,6 +198,12 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     public ICommand DropCommand { get; }
 
     public ICommand RemoveAssignmentCommand { get; }
+
+    public ICommand RemoveSignalCommand { get; }
+
+    public ICommand DeleteTreeNodeCommand { get; }
+
+    public ICommand ToggleTreeNodeGenerationCommand { get; }
 
     public bool HasPlan => _planService.CurrentPlan is not null;
 
@@ -760,6 +781,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             ? selectedItems
             : request?.Source is null ? [] : [request.Source];
 
+        if (request?.Target is ContainerToFeeVisualTreeNodeVM dropNode)
+        {
+            // The selected item is the scroll anchor used after the immutable
+            // tree projection is rebuilt by the plan mutation.
+            SelectedTreeNode = dropNode;
+        }
+
         if (request?.Target is ContainerToFeeVisualTreeNodeVM signalGroup &&
             signalGroup.Kind == VisualNodeKind.Group &&
             signalGroup.Id.EndsWith(":signals", StringComparison.Ordinal) &&
@@ -816,6 +844,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             ContainerToFeeVisualTargetVM targetVm => targetVm,
             ContainerToFeeVisualTreeNodeVM treeNode when treeNode.Kind == VisualNodeKind.SimObjectTarget =>
                 CreateTargetVm(treeNode.Id),
+            ContainerToFeeVisualTreeNodeVM treeNode when treeNode.Kind == VisualNodeKind.Group &&
+                                                            treeNode.Id.EndsWith(":simobjects", StringComparison.Ordinal) =>
+                ResolveCompatibleTarget(treeNode, sources),
             _ => null,
         };
         if (target is null)
@@ -880,6 +911,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             ContainerToFeeVisualTargetVM targetVm => targetVm,
             ContainerToFeeVisualTreeNodeVM treeNode when treeNode.Kind == VisualNodeKind.SimObjectTarget =>
                 CreateTargetVm(treeNode.Id),
+            ContainerToFeeVisualTreeNodeVM treeNode when treeNode.Kind == VisualNodeKind.Group &&
+                                                            treeNode.Id.EndsWith(":simobjects", StringComparison.Ordinal) =>
+                ResolveCompatibleTarget(treeNode, sources),
             _ => null,
         };
         if (target is null || (!target.Model.AllowMultiSelect && sources.Count > 1))
@@ -895,6 +929,30 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             });
     }
 
+    private async Task SaveContainerXmlAsync()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Bearbeitetes ContainerFile speichern",
+            Filter = "Container XML (*.xml)|*.xml|Alle Dateien (*.*)|*.*",
+            FileName = string.IsNullOrWhiteSpace(SourceXmlPath)
+                ? "Container.container.xml"
+                : $"{Path.GetFileNameWithoutExtension(SourceXmlPath)}.bearbeitet.container.xml",
+            DefaultExt = ".xml",
+            AddExtension = true,
+            OverwritePrompt = true,
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        await RunBusyAsync("Bearbeitetes ContainerFile wird gespeichert …", async cancellationToken =>
+        {
+            await _planService.SaveEffectiveContainerXmlAsync(dialog.FileName, cancellationToken);
+            StatusText = $"ContainerFile mit Slotkorrekturen, zusätzlichen Signalen und der aktuellen Containerauswahl gespeichert: {dialog.FileName}";
+            _log.Information(LogArea, StatusText);
+        });
+    }
+
     private ContainerToFeeVisualTargetVM? CreateTargetVm(string targetId)
     {
         var plan = _planService.CurrentPlan;
@@ -906,6 +964,33 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 plan.Assignments.Where(item => item.TargetId == target.Id),
                 plan.IsCreationRequested(target.ContainerId),
                 Issues.Where(issue => issue.NodeId == target.Id));
+    }
+
+    private ContainerToFeeVisualTargetVM? ResolveCompatibleTarget(
+        ContainerToFeeVisualTreeNodeVM group,
+        IReadOnlyList<object> sources)
+    {
+        var plan = _planService.CurrentPlan;
+        if (plan is null || group.ContainerId is null)
+            return null;
+        var objects = sources.Select(source => source switch
+            {
+                ContainerToFeeVisualFeeObjectVM item => item.Model,
+                ContainerToFeeVisualAssignmentVM item => _planService.DiscoveredFeeObjects.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Id, item.FeeObjectId, StringComparison.Ordinal)),
+                _ => null,
+            })
+            .Where(item => item is not null)
+            .Cast<VisualFeeObject>()
+            .ToArray();
+        if (objects.Length != sources.Count)
+            return null;
+        var compatible = plan.Targets
+            .Where(target => string.Equals(target.ContainerId, group.ContainerId, StringComparison.Ordinal))
+            .Where(target => objects.All(target.CanAssign))
+            .Where(target => target.AllowMultiSelect || objects.Length == 1)
+            .ToArray();
+        return compatible.Length == 1 ? CreateTargetVm(compatible[0].Id) : null;
     }
 
     private IReadOnlyList<ContainerToFeeVisualTreeNodeVM> ResolveSignalDropTargets(
@@ -944,6 +1029,71 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         StatusText = result.Message;
         _log.Information(LogArea, result.Message);
+    }
+
+    private void RemoveSignal(ContainerToFeeVisualSignalEntryVM? signal)
+    {
+        if (signal is null)
+            return;
+        var result = _planService.RemoveSignal(signal.NodeId);
+        PublishIssues(result.Issues);
+        if (!result.Success)
+        {
+            Reject(result.Message);
+            return;
+        }
+        StatusText = result.Message;
+        _log.Information(LogArea, result.Message);
+    }
+
+    private static bool CanDeleteTreeNode(ContainerToFeeVisualTreeNodeVM node) =>
+        node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal or
+            VisualNodeKind.SimObject or VisualNodeKind.SimObjectTarget or VisualNodeKind.Container;
+
+    private void DeleteTreeNode(ContainerToFeeVisualTreeNodeVM? node)
+    {
+        if (node is null)
+            return;
+        var plan = _planService.CurrentPlan;
+        if (plan is null)
+            return;
+        if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
+        {
+            RemoveSignal(new ContainerToFeeVisualSignalEntryVM(node.Model, plan));
+            return;
+        }
+        if (node.Kind == VisualNodeKind.SimObject)
+        {
+            var assignment = plan.Assignments.FirstOrDefault(item => string.Equals(
+                $"{item.TargetId}:assigned:{StableId.Encode(item.FeeObjectId)}",
+                node.Id,
+                StringComparison.Ordinal));
+            if (assignment is not null)
+                RemoveAssignment(new ContainerToFeeVisualAssignmentVM(
+                    assignment,
+                    plan.FindTarget(assignment.TargetId)?.AllowedTypeName ?? assignment.FeeObjectTypeName));
+            return;
+        }
+        if (node.Kind == VisualNodeKind.SimObjectTarget)
+        {
+            foreach (var assignment in plan.Assignments
+                         .Where(item => string.Equals(item.TargetId, node.Id, StringComparison.Ordinal))
+                         .ToArray())
+                _planService.RemoveAssignment(assignment.TargetId, assignment.FeeObjectId);
+            StatusText = "Alle SimObject-Zuordnungen des ausgewählten Ziels wurden entfernt.";
+            return;
+        }
+        if (node.Kind == VisualNodeKind.Container)
+            SetGenerationSelected(node.Id, false);
+    }
+
+    private void ToggleTreeNodeGeneration(ContainerToFeeVisualTreeNodeVM? node)
+    {
+        var plan = _planService.CurrentPlan;
+        var containerId = node?.Kind == VisualNodeKind.Container ? node.Id : node?.ContainerId;
+        if (plan is null || containerId is null)
+            return;
+        SetGenerationSelected(containerId, !plan.IsGenerationSelected(containerId));
     }
 
     private void Undo()
@@ -1093,6 +1243,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
 
         var childModels = node.Children
+            .Where(child => !plan.IsSignalRemoved(child.Id))
             .Concat(plan.AddedSignals
                 .Where(added => string.Equals(added.SignalGroupId, node.Id, StringComparison.Ordinal))
                 .Select(added => plan.FindNode(added.NodeId))
@@ -1165,7 +1316,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         {
             var assigned = plan.Assignments.Any(assignment => assignment.TargetId == node.Id);
             return assigned
-                ? ContainerToFeeVisualNodeState.Verified
+                ? ContainerToFeeVisualNodeState.FoundUnlinked
                 : plan.IsCreationRequested(node.ContainerId ?? string.Empty)
                     ? ContainerToFeeVisualNodeState.Planned
                     : ContainerToFeeVisualNodeState.Missing;
@@ -1176,7 +1327,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
             plan.SignalAssignments.Any(assignment => assignment.SignalNodeId == node.Id))
-            return ContainerToFeeVisualNodeState.Verified;
+            return ContainerToFeeVisualNodeState.FoundUnlinked;
 
         if (node.Kind == VisualNodeKind.UnknownSignal)
             return ContainerToFeeVisualNodeState.Planned;
@@ -1205,6 +1356,17 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private static string GetNodeConnectionDescription(VisualNode node, VisualPlan plan)
     {
+        if (node.Kind == VisualNodeKind.Container)
+        {
+            var children = plan.Nodes.Where(item =>
+                string.Equals(item.ContainerId, node.Id, StringComparison.Ordinal)).ToArray();
+            if (children.Any(item => item.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal) &&
+                children.All(item => item.Kind is not (VisualNodeKind.Logic or VisualNodeKind.SimObjectTarget or VisualNodeKind.TechnicalHelper)))
+            {
+                return "Signal-only-Container: Es werden Interface-Signale verarbeitet, aber keine FEE-Szenenobjekte oder Objektverknüpfungen erzeugt.";
+            }
+        }
+
         if (node.Kind == VisualNodeKind.SimObjectTarget)
         {
             var assignments = plan.Assignments
@@ -1257,7 +1419,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 node.ApplyExecutionState(
                     node.Kind == VisualNodeKind.UnknownSignal
                         ? ContainerToFeeVisualNodeState.Planned
-                        : ContainerToFeeVisualNodeState.Verified,
+                        : ContainerToFeeVisualNodeState.FoundUnlinked,
                     node.LinkedObjectDescription);
                 continue;
             }
@@ -1275,7 +1437,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             var state = (matches.Length, exactMatches.Length) switch
             {
                 (0, _) => ContainerToFeeVisualNodeState.Planned,
-                (_, 1) => ContainerToFeeVisualNodeState.Verified,
+                (_, 1) => ContainerToFeeVisualNodeState.FoundUnlinked,
                 _ => ContainerToFeeVisualNodeState.Ambiguous,
             };
             var connection = exactMatches.Length == 1
@@ -1359,6 +1521,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private void RefreshSelectionProjection()
     {
         Targets.Clear();
+        SelectedContainerSignals.Clear();
         VisibleEdges.Clear();
 
         VisualPlan? plan = _planService.CurrentPlan;
@@ -1378,6 +1541,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 plan.IsCreationRequested(containerId),
                 Issues.Where(issue => string.Equals(issue.NodeId, target.Id, StringComparison.Ordinal))));
         }
+
+        foreach (var signal in plan.Nodes
+                     .Where(node => string.Equals(node.ContainerId, containerId, StringComparison.Ordinal) &&
+                                    node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                                    !plan.IsSignalRemoved(node.Id))
+                     .OrderBy(node => plan.GetEffectiveSlot(node), StringComparer.OrdinalIgnoreCase)
+                     .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase))
+            SelectedContainerSignals.Add(new ContainerToFeeVisualSignalEntryVM(signal, plan));
 
         HashSet<string> nodeIds = plan.Nodes
             .Where(node => node.ContainerId == containerId)
@@ -1558,10 +1729,24 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             return node.EffectiveState;
         }
 
+        if (node.Kind == VisualNodeKind.Container)
+        {
+            var descendants = node.SelfAndDescendants().Skip(1).ToArray();
+            var isSignalOnly = descendants.Any(child => child.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal) &&
+                               descendants.All(child => child.Kind is not (VisualNodeKind.Logic or VisualNodeKind.SimObjectTarget or VisualNodeKind.TechnicalHelper));
+            if (isSignalOnly)
+            {
+                node.ApplyExecutionState(ContainerToFeeVisualNodeState.Planned);
+                return node.EffectiveState;
+            }
+        }
+
         var aggregate = childStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.Missing)
             ? ContainerToFeeVisualNodeState.Missing
             : childStates.Any(state => state.Kind is ContainerToFeeVisualNodeStateKind.Planned or ContainerToFeeVisualNodeStateKind.None)
                 ? ContainerToFeeVisualNodeState.Planned
+                : childStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked)
+                    ? ContainerToFeeVisualNodeState.FoundUnlinked
                 : ContainerToFeeVisualNodeState.Verified;
         node.ApplyExecutionState(aggregate);
         return node.EffectiveState;
@@ -1576,6 +1761,7 @@ public enum ContainerToFeeVisualNodeStateKind
 {
     None,
     Verified,
+    FoundUnlinked,
     Planned,
     Missing,
 }
@@ -1589,6 +1775,8 @@ public sealed record ContainerToFeeVisualNodeState(
         new(ContainerToFeeVisualNodeStateKind.None, "Transparent", string.Empty);
     public static ContainerToFeeVisualNodeState Verified { get; } =
         new(ContainerToFeeVisualNodeStateKind.Verified, "#FFC6EFCE", "In FEE eindeutig gefunden oder in dieser Sitzung erfolgreich erzeugt.");
+    public static ContainerToFeeVisualNodeState FoundUnlinked { get; } =
+        new(ContainerToFeeVisualNodeStateKind.FoundUnlinked, "#FFE8D9F3", "In FEE gefunden beziehungsweise ausgewählt, aber die erforderliche Verknüpfung ist noch nicht als ausgeführt bestätigt.");
     public static ContainerToFeeVisualNodeState Planned { get; } =
         new(ContainerToFeeVisualNodeStateKind.Planned, "#FFFFF2CC", "Wird bei der nächsten Generierung erzeugt oder vervollständigt.");
     public static ContainerToFeeVisualNodeState Missing { get; } =
@@ -1970,6 +2158,32 @@ public sealed class ContainerToFeeVisualAssignmentVM
     public string FeeObjectName => Model.FeeObjectName;
     public string FeeObjectTypeName => Model.FeeObjectTypeName;
     public string FeeType { get; }
+}
+
+public sealed class ContainerToFeeVisualSignalEntryVM
+{
+    public ContainerToFeeVisualSignalEntryVM(VisualNode model, VisualPlan plan)
+    {
+        Model = model;
+        Slot = plan.GetEffectiveSlot(model);
+        IsAdded = plan.IsAddedSignal(model.Id);
+        var assignment = plan.SignalAssignments.LastOrDefault(item =>
+            string.Equals(item.SignalNodeId, model.Id, StringComparison.Ordinal));
+        AssignedFeeSignal = assignment is null
+            ? "Keine vorhandene FEE-Zuordnung"
+            : $"{assignment.FeeSignalTag} · {assignment.FeeInterfaceName}";
+    }
+
+    public VisualNode Model { get; }
+    public string NodeId => Model.Id;
+    public string Name => Model.Name;
+    public string Slot { get; }
+    public string SourceLocation => Model.SourceLocation;
+    public bool IsAdded { get; }
+    public string AssignedFeeSignal { get; }
+    public string RemoveToolTip => IsAdded
+        ? "Zusätzliches Signal vollständig aus dem bearbeiteten ContainerFile entfernen"
+        : "Signal aus dem wirksamen ContainerFile entfernen; die Quelldatei bleibt unverändert und Rückgängig stellt es wieder her";
 }
 
 /// <summary>Readable presentation of one technical plan edge without exposing internal IDs.</summary>

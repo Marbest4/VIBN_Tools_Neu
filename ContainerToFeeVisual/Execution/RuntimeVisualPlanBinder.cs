@@ -129,7 +129,7 @@ internal static class RuntimeVisualPlanBinder
         for (var containerIndex = 0; containerIndex < supportedContainers.Length; containerIndex++)
         {
             var entries = supportedContainers[containerIndex].Descendants("Entry").ToArray();
-            var signalNodes = plan.Nodes
+            var sourceSignalNodes = plan.Nodes
                 .Where(node => string.Equals(
                                    node.ContainerId,
                                    containerNodes[containerIndex].Id,
@@ -137,13 +137,18 @@ internal static class RuntimeVisualPlanBinder
                                node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
                                !plan.IsAddedSignal(node.Id))
                 .ToArray();
-            if (entries.Length != signalNodes.Length)
+            if (entries.Length != sourceSignalNodes.Length)
                 continue;
             for (var entryIndex = 0; entryIndex < entries.Length; entryIndex++)
             {
                 var slotElement = entries[entryIndex].Element("Slot");
                 if (slotElement is not null)
-                    slotElement.Value = plan.GetEffectiveSlot(signalNodes[entryIndex]);
+                    slotElement.Value = plan.GetEffectiveSlot(sourceSignalNodes[entryIndex]);
+            }
+            for (var entryIndex = entries.Length - 1; entryIndex >= 0; entryIndex--)
+            {
+                if (plan.IsSignalRemoved(sourceSignalNodes[entryIndex].Id))
+                    entries[entryIndex].Remove();
             }
 
             var dataList = supportedContainers[containerIndex].Descendants("DataList").FirstOrDefault();

@@ -26,6 +26,8 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 
 ## Project Settings und ViCo
 
+- [ ] Der Hauptreiter heißt **Rechnerübersicht**; **Administration** ist der letzte Hauptreiter und bleibt Level9-geschützt.
+
 - [ ] Project Settings zeigt nur erreichbare PCs und der Filter wirkt sofort.
 - [ ] Ein fehlgeschlagener FEE-Connect zeigt nicht fälschlich „verbunden“.
 - [ ] **Connect** ruft die FEE-SDK genau einmal auf und lässt einen laufenden SDK-Handshake ohne anwendungsseitigen Timeout oder automatisches Disconnect bestehen; **Disconnect** bleibt eine bewusste Benutzeraktion.
@@ -75,6 +77,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] **Auswahl konfigurieren** verarbeitet einen statischen Auswahlsatz ohne Dynamic-Binder-Ausnahme; **Was wird geändert?** zeigt alle zehn Parameter und die Linear-/Rotatorikregel.
 - [ ] **Gesamtes TIA-Projekt speichern** ist von der Konfiguration getrennt und weist darauf hin, dass `Project.Save()` alle offenen Projektänderungen persistiert.
 - [ ] **ViCo-Bibliothek → Was wird gemacht?** beschreibt Voraussetzungen sowie Überschreiben/Speichern beim Import, Achsen-/AxisXML-Option und read-only TIA-Export vollständig.
+- [ ] TIA-Projektübersicht und ViCo-Bibliothek sind auf einer gemeinsamen scrollbaren Seite bedienbar.
 - [ ] Die einzige Hardwareansicht unter SpecialDevices2FEE gruppiert gleiche Gerätenamen und zeigt Hardware-ID, GSDML, IP, Modultyp, Firmware, E-/A-Bereich und -Länge, Präfix, Logik und Status; #, Tiefe, Modul, Parent, Slot/Subslot, Pfad und Objektklasse sind ausgeblendet.
 - [ ] Die Logikauswahl bietet **Keine Logik**; eine entsprechend gesetzte Zeile gelangt auch mit aktivem Übernehmen-Haken nicht in die Warteschlange.
 - [ ] Nach vollständig erfolgreicher SpecialDevices2FEE-Erzeugung ist der Root in FEE2SpecialDevices sichtbar; ein absichtlich fehlgeschlagener Teilvorgang ist nicht als gültige Quelle markiert.
@@ -97,11 +100,14 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Container Generation lädt nach einer Requirements-XML ein bestehendes ContainerFile als aktiven Arbeitsstand; ohne aktiven Stand ist der Vergleich deaktiviert.
 - [ ] **Aktiven Stand vergleichen** fragt nur einen Kandidaten ab und zeigt feldgenaue Unterschiede zum sichtbaren Workspace; **Arbeitsstand laden** lädt weiterhin ausschließlich das interne Workspaceformat.
 - [ ] Der bestehende Container2Fee-Reiter arbeitet unverändert.
-- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 6, erlaubt nur kompatible Drag-and-drop-Ziele und beschränkt Slot-Overrides auf die Runtime-Slots des Containertyps.
+- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 8, erlaubt nur kompatible Mehrfach-Drag-and-drop-Ziele und beschränkt Slot-Overrides auf die Runtime-Slots des Containertyps.
+- [ ] `Entf`, Kontextmenü und die mittlere Signalliste entfernen Signale nur aus dem wirksamen Plan; Rückgängig stellt sie wieder her und **Container.xml speichern** schreibt genau den bearbeiteten Stand.
+- [ ] Auswahl, Aufklappzustand und Scrollposition der Containerstruktur bleiben nach Drag-and-drop erhalten; helllila kennzeichnet gefundene, aber noch nicht bestätigt verknüpfte Elemente.
 - [ ] Gefundene FEE-Signale lassen sich auf Signal-Knoten ziehen; die bestätigte GUID bleibt nach erneutem Öffnen erhalten und löst einen dokumentierten Tag-/Adresskonflikt eindeutig auf.
 - [ ] Rot, Gelb und Grün kennzeichnen fehlende/mehrdeutige, geplante und vollständig gefundene beziehungsweise erfolgreich erzeugte Baumknoten bis hinunter zu Signal und Logikobjekt.
 - [ ] Eine ausdrücklich bestätigte Best-Effort-Generierung kennzeichnet den erzeugten Root und legt pro akzeptiertem Fehler genau einen untergeordneten Fehler-BasicFrame an; der Fortschritt endet mit einer Fertigmeldung.
 - [ ] FEE2Container exportiert einen erkannten älteren Container ohne Signalverknüpfung mit einem `FEE-UNASSIGNED-*`-Prüfeintrag statt ihn auszublenden.
+- [ ] FEE2Container zeigt Container, Signalzuordnungen und nicht containerrelevante Objekte getrennt; ein Signal markiert per Auswahl seinen Container und alle Exportkorrekturen wirken auf die gespeicherte Datei.
 - [ ] FEE2SpecialDevices findet bekannte Gerätelogiken auch in verschachtelten BasicFrames und unterdrückt doppelte Treffer desselben Geräts.
 - [ ] SpecialDevices2FEE zeigt den Gerätefortschritt und entfernt ein vollständig vorhandenes, eindeutig erkanntes Gerät ohne erneute Erzeugung aus der Warteschlange.
 - [ ] ViCo liest den Projektstart aus Custom-Field 508, ordnet Start und Deadline mit Kartentitel sowie Karten-ID zu und zeigt Planung/In Arbeit für `Angelegt (Tool)` ausklappbar an.

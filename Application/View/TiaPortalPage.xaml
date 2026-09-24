@@ -44,9 +44,10 @@
                     Command="{Binding SelectPlcCommand}" />
         </StackPanel>
 
-        <TabControl Grid.Row="2">
-            <TabItem Header="Projektübersicht">
-        <Grid>
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <GroupBox Header="Projektübersicht" Margin="0,0,0,10">
+        <Grid Height="420" Margin="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*" />
                 <ColumnDefinition Width="16" />
@@ -141,10 +142,10 @@
                 </Grid>
             </GroupBox>
         </Grid>
-            </TabItem>
+            </GroupBox>
 
-            <TabItem Header="ViCo-Bibliothek">
-                <Grid Margin="8">
+            <GroupBox Header="ViCo-Bibliothek">
+                <Grid Margin="8" MinHeight="260">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -201,8 +202,9 @@
                             Content="Bibliothek exportieren"
                             Command="{Binding ExportLibraryCommand}" />
                 </Grid>
-            </TabItem>
-        </TabControl>
+            </GroupBox>
+          </StackPanel>
+        </ScrollViewer>
 
         <DockPanel Grid.Row="3" Margin="0,12,0,0">
             <ProgressBar DockPanel.Dock="Right"

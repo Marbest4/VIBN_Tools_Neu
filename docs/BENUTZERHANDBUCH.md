@@ -12,7 +12,7 @@ Die Anwendung arbeitet defensiv: externe Aktionen werden erst nach einer bewusst
 | --- | --- | --- |
 | Project Settings | Online-FEE-PC wählen, Verbindung prüfen, Projektbasis anlegen | alle |
 | Kanbanize Karten | VIBN-Karten ins Arbeitsplätze-Board synchronisieren; eigene Karten erstellen | Level8 |
-| ViCo | PC-/Projektsuche sowie Projekte und Favoriten | alle |
+| Rechnerübersicht | PC-/Projektsuche sowie Projekte und Favoriten | alle |
 | Transfer | Dateien und Ordner zwischen Projektpfaden übertragen | alle |
 | TIA Portal | PLC-, Bibliotheks- und Achsenfunktionen über die isolierte TIA-Bridge | alle |
 | Administration | Rollen, Termine und verfügbare Versionen verwalten | Level9 |
@@ -37,7 +37,7 @@ Mit **Navigation einklappen** im Kopfbereich wird die linke Navigation auf eine 
 ## Empfohlener Arbeitsablauf
 
 1. In **Project Settings** den gewünschten Online-PC filtern, auswählen und die FEE-Verbindung aufbauen.
-2. In **ViCo → PC-/Projektsuche** den Arbeitsplatz oder das Projekt suchen und Kanbanize-Daten aktualisieren, falls notwendig.
+2. In **Rechnerübersicht → PC-/Projektsuche** den Arbeitsplatz oder das Projekt suchen und Kanbanize-Daten aktualisieren, falls notwendig.
 3. Falls eine Karte benötigt wird, im Hauptreiter **Kanbanize Karten** zuerst die Vorschau ausführen und erst danach bewusst synchronisieren.
 4. Für TIA-nahe Schritte den Hauptreiter **TIA Portal** oder den TIA-Hardwarebereich auf der gemeinsamen Seite **SpecialDevices2FEE** verwenden.
 5. Änderungen, Fehler und externe Zugriffe am unteren Rand im Diagnoseprotokoll nachvollziehen.
@@ -61,7 +61,7 @@ Im Bereich **Geschützte Zugangsdaten** werden FEE-Benutzer/-Passwort, API-Key u
 
 Beim Programmstart wird die bewährte gemeinsame FEE-API-Instanz vorbereitet, aber weder eine Verbindung aufgebaut noch eine Interface-Liste abgefragt. Interfaces und Signale werden erst nach bestätigter Verbindung und einem ausdrücklichen Ladebefehl abgefragt. Ein Rechner ohne FEE-Verbindung startet deshalb ohne entsprechende Verbindungs- oder Interface-Fehlermeldung. `localhost` bleibt als lokales Ziel erhalten; die dynamische Online-PC-Liste wird ausschließlich auf dem UI-Thread aktualisiert.
 
-## ViCo
+## Rechnerübersicht
 
 ### PC-/Projektsuche
 
@@ -128,6 +128,8 @@ Bei vorhandener Karte Werte bearbeiten und **Speichern** drücken oder im Wertef
 Der eigene Hauptreiter **Transfer** kopiert ausgewählte Dateien/Ordner mit begrenzter Parallelität. Diese Begrenzung hält die Desktop-Oberfläche auch bei größeren Übertragungen reaktionsfähig.
 
 ## TIA Portal
+
+Projektübersicht und ViCo-Bibliothek stehen auf derselben scrollbaren Seite untereinander. PLC-Auswahl und TIA-Verbindung gelten dadurch ohne Reiterwechsel für beide Bereiche.
 
 1. lokale TIA-Version wählen;
 2. **Verbinden** drücken und die gefundene PLC auswählen;

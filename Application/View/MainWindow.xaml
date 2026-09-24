@@ -106,7 +106,7 @@
                         <p:KanbanizeCardPage/>
                     </TabItem>
 
-                    <TabItem Header="ViCo" ux:Icon.Kind="TaskListAssigned">
+                    <TabItem Header="Rechnerübersicht" ux:Icon.Kind="TaskListAssigned">
                         <p:ViCoWorkspacePage/>
                     </TabItem>
 
@@ -118,12 +118,6 @@
                         <p:TiaPortalPage />
                     </TabItem>
 
-                    <TabItem Header="Administration"
-                             ux:Icon.Kind="Settings"
-                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <p:ViCoAdministrationPage />
-                    </TabItem>
-                    
                     <TabItem Header="CAD Wizard"
                              ux:Icon.Kind="Cad"
                              Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -194,6 +188,12 @@
                              ux:Icon.Kind="Magazines"
                              Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:AITrainingTestPage/>
+                    </TabItem>
+
+                    <TabItem Header="Administration"
+                             ux:Icon.Kind="Settings"
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ViCoAdministrationPage />
                     </TabItem>
 
                 </ux:NavigationBar>

@@ -29,11 +29,18 @@ public sealed record FeeContainerReconstructionIssue(
     Guid? ObjectGuid,
     string Message);
 
+public sealed record FeeContainerUnmappedObject(
+    Guid Guid,
+    string Name,
+    string FeeType,
+    string Reason);
+
 public sealed record FeeContainerReconstructionResult(
     FeeContainerProvenanceSnapshot Snapshot,
     int InspectedObjectCount,
     int IgnoredObjectCount,
-    IReadOnlyList<FeeContainerReconstructionIssue> Issues);
+    IReadOnlyList<FeeContainerReconstructionIssue> Issues,
+    IReadOnlyList<FeeContainerUnmappedObject> UnmappedObjects);
 
 /// <summary>
 /// Reconstructs the container schema from a bounded FEE subtree. Exact
@@ -72,12 +79,14 @@ public static class FeeContainerLiveReconstructor
             .ToDictionary(group => group.Key, group => group.ToArray());
         var issues = new List<FeeContainerReconstructionIssue>();
         var candidates = new List<ContainerCandidate>();
+        var relevantObjectGuids = new HashSet<Guid>();
 
         foreach (var item in sourceObjects)
         {
             if (!TryCreateCandidate(item, out var candidate, out var ambiguity))
                 continue;
             candidates.Add(candidate!);
+            relevantObjectGuids.Add(item.Guid);
             if (!string.IsNullOrWhiteSpace(ambiguity))
                 issues.Add(new FeeContainerReconstructionIssue(item.Guid, ambiguity));
         }
@@ -190,11 +199,22 @@ public static class FeeContainerLiveReconstructor
             containerElements.Count,
             bindings.Count,
             string.Empty);
+        var unmapped = sourceObjects
+            .Where(item => !relevantObjectGuids.Contains(item.Guid))
+            .Select(item => new FeeContainerUnmappedObject(
+                item.Guid,
+                item.Name,
+                item.FeeType,
+                "Kein eindeutiger Containerbezug aus Typ, Logikdefinition oder Provenienz erkennbar."))
+            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.FeeType, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         return new FeeContainerReconstructionResult(
             snapshot,
             sourceObjects.Length,
-            sourceObjects.Length - containerElements.Count,
-            issues);
+            unmapped.Length,
+            issues,
+            unmapped);
     }
 
     private static bool TryCreateCandidate(

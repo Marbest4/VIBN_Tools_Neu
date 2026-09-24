@@ -1,4 +1,5 @@
 using VIBN_Tools.ContainerToFee.GrobStandard;
+using VIBN_Tools.GlobalClasses.FeeObjects;
 
 namespace VIBN_Tools.ContainerToFee;
 
@@ -29,7 +30,7 @@ public static class ContainerModelValidationPreflight
         switch (container)
         {
             case GrobBeltControl_Container belt:
-                Require(belt.Signal_BeltControlState is not null, "BELT_STATE_MISSING",
+                Require(Has(belt, belt.Signal_BeltControlState, nameof(belt.Signal_BeltControlState)), "BELT_STATE_MISSING",
                     "PLC_IN_BeltControlState fehlt.", issues);
                 issues.Add(Warning(
                     "BELT_AXIS_LINK_MANUAL",
@@ -40,15 +41,15 @@ public static class ContainerModelValidationPreflight
             case GrobClamping_Container clamping:
                 Require(clamping.Signal_ReleaseClamping is not null, "CLAMPING_CONTROL_MISSING",
                     "PLC_OUT_ReleaseClamping fehlt.", issues);
-                Require(clamping.Signal_ClampingReleased is not null, "CLAMPING_STATUS_MISSING",
+                Require(Has(clamping, clamping.Signal_ClampingReleased, nameof(clamping.Signal_ClampingReleased)), "CLAMPING_STATUS_MISSING",
                     "PLC_IN_ClampingReleased fehlt.", issues);
                 break;
 
             case GrobConveyor_Container conveyor:
-                var discreteControl = conveyor.Signal_Clockwise is not null &&
-                                      conveyor.Signal_CounterClockwise is not null;
-                var wordControl = conveyor.Signal_ControlWord is not null &&
-                                  conveyor.Signal_StatusWord is not null;
+                var discreteControl = Has(conveyor, conveyor.Signal_Clockwise, nameof(conveyor.Signal_Clockwise)) &&
+                                      Has(conveyor, conveyor.Signal_CounterClockwise, nameof(conveyor.Signal_CounterClockwise));
+                var wordControl = Has(conveyor, conveyor.Signal_ControlWord, nameof(conveyor.Signal_ControlWord)) &&
+                                  Has(conveyor, conveyor.Signal_StatusWord, nameof(conveyor.Signal_StatusWord));
                 Require(discreteControl || wordControl, "CONVEYOR_CONTROL_INCOMPLETE",
                     "Es wird entweder Clockwise und CounterClockwise oder ControlWord und StatusWord benötigt.", issues);
                 Require(conveyor.Surfaces_Conveyor.Count > 0 || conveyor.IsCreationRequested,
@@ -94,7 +95,9 @@ public static class ContainerModelValidationPreflight
                 Require(lift.Signal_ToHomePos is not null && lift.Signal_ToWorkPos is not null,
                     "LIFT_CONTROL_INCOMPLETE",
                     "ToHomePos und ToWorkPos werden beide benötigt.", issues);
-                Require(lift.Signal_InHomePos is not null && lift.Signal_InWorkPos is not null,
+                Require(
+                    Has(lift, lift.Signal_InHomePos, nameof(lift.Signal_InHomePos)) &&
+                    Has(lift, lift.Signal_InWorkPos, nameof(lift.Signal_InWorkPos)),
                     "LIFT_STATUS_INCOMPLETE",
                     "InHomePos und InWorkPos werden beide benötigt.", issues);
                 Require(lift.Joints_LiftUnit.Count > 0 || lift.IsCreationRequested,
@@ -105,15 +108,17 @@ public static class ContainerModelValidationPreflight
             case GrobSafetyDoor_Container door:
                 Require(door.Signal_Unlock is not null, "SAFETY_DOOR_UNLOCK_MISSING",
                     "PLC_OUT_Unlock fehlt.", issues);
-                Require(door.Signal_Unlocked is not null, "SAFETY_DOOR_UNLOCKED_MISSING",
+                Require(Has(door, door.Signal_Unlocked, nameof(door.Signal_Unlocked)), "SAFETY_DOOR_UNLOCKED_MISSING",
                     "PLC_IN_Unlocked fehlt.", issues);
-                Require(door.Signal_Closed_Ch1 is not null || door.Signal_Closed_Ch2 is not null,
+                Require(
+                    Has(door, door.Signal_Closed_Ch1, nameof(door.Signal_Closed_Ch1)) ||
+                    Has(door, door.Signal_Closed_Ch2, nameof(door.Signal_Closed_Ch2)),
                     "SAFETY_DOOR_CLOSED_MISSING",
                     "Mindestens ein Closed-Kanal fehlt.", issues);
                 Require(
-                    door.Signal_ClosedAndLocked is not null ||
-                    door.Signal_ClosedAndLocked_Ch1 is not null ||
-                    door.Signal_ClosedAndLocked_Ch2 is not null,
+                    Has(door, door.Signal_ClosedAndLocked, nameof(door.Signal_ClosedAndLocked)) ||
+                    Has(door, door.Signal_ClosedAndLocked_Ch1, nameof(door.Signal_ClosedAndLocked_Ch1)) ||
+                    Has(door, door.Signal_ClosedAndLocked_Ch2, nameof(door.Signal_ClosedAndLocked_Ch2)),
                     "SAFETY_DOOR_LOCKED_MISSING",
                     "Mindestens eine ClosedAndLocked-Rückmeldung fehlt.", issues);
                 break;
@@ -128,7 +133,9 @@ public static class ContainerModelValidationPreflight
                 Require(stop.Signal_Open is not null || stop.Signal_Close is not null,
                     "STOP_CONTROL_MISSING",
                     "Mindestens Open oder Close fehlt.", issues);
-                Require(stop.Signal_Opened is not null || stop.Signal_Closed is not null,
+                Require(
+                    Has(stop, stop.Signal_Opened, nameof(stop.Signal_Opened)) ||
+                    Has(stop, stop.Signal_Closed, nameof(stop.Signal_Closed)),
                     "STOP_STATUS_MISSING",
                     "Mindestens Opened oder Closed fehlt.", issues);
                 Require(stop.Floors_Stop.Count > 0 || stop.IsCreationRequested,
@@ -141,6 +148,12 @@ public static class ContainerModelValidationPreflight
     }
 
     private static bool HasAny<T>(IEnumerable<T>? values) => values?.Any() == true;
+
+    private static bool Has(
+        ContainerBaseClass container,
+        FeeInterfaceSignal? signal,
+        string propertyName) =>
+        signal is not null || container.HasAssignedSignalsForProperty(propertyName);
 
     private static void Require(
         bool condition,

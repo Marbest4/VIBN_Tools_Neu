@@ -53,9 +53,20 @@
         <HierarchicalDataTemplate DataType="{x:Type vm:ContainerToFeeVisualTreeNodeVM}"
                                   ItemsSource="{Binding Children}">
             <Grid Margin="2" Background="{Binding StateBackground}"
+                  Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                   behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
                   behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
                   behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Löschen"
+                                  Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                        <MenuItem Header="Generieren / nicht generieren"
+                                  Command="{Binding PlacementTarget.Tag.ToggleTreeNodeGenerationCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                    </ContextMenu>
+                </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -124,6 +135,9 @@
                             Command="{Binding LoadPlanCommand}" />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Plan speichern"
                             Command="{Binding SavePlanCommand}" />
+                    <Button Style="{StaticResource VisualToolbarButton}" Content="Container.xml speichern"
+                            Command="{Binding SaveContainerXmlCommand}"
+                            ToolTip="Speichert den für die Generierung wirksamen Stand mit Slotkorrekturen, ergänzten Signalen und aktuell ausgewählten Containern." />
                 </StackPanel>
 
                 <WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
@@ -216,6 +230,7 @@
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
+                              behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
                 </Grid>
             </Border>
@@ -347,7 +362,36 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <Expander Grid.Row="3" Grid.RowSpan="2" Margin="0,8,0,0"
+                    <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,8,0,4"
+                               Text="Signale des ausgewählten Containers" />
+                    <ListBox Grid.Row="4" ItemsSource="{Binding SelectedContainerSignals}"
+                             BorderThickness="0" ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             VirtualizingPanel.IsVirtualizing="True">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,2" Padding="7,4" BorderBrush="#D3D3D3" BorderThickness="1" CornerRadius="3">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="10" Foreground="#666666">
+                                                <Run Text="{Binding Slot, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding AssignedFeeSignal, Mode=OneWay}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" MinWidth="26" MinHeight="24" Margin="6,0,0,0"
+                                                Content="×" ToolTip="{Binding RemoveToolTip}"
+                                                Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                CommandParameter="{Binding}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Expander Grid.Row="5" Grid.RowSpan="2" Margin="0,8,0,0"
                               Header="Technische Verknüpfungen (Details)" IsExpanded="False">
                         <DataGrid ItemsSource="{Binding VisibleEdges}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"

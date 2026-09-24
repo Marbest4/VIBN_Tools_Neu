@@ -19,7 +19,8 @@ public sealed record Fee2ContainerRoot(
     bool UsesExactProvenance = true,
     int InspectedObjectCount = 0,
     int IgnoredObjectCount = 0,
-    IReadOnlyList<FeeContainerReconstructionIssue>? ReconstructionIssues = null)
+    IReadOnlyList<FeeContainerReconstructionIssue>? ReconstructionIssues = null,
+    IReadOnlyList<FeeContainerUnmappedObject>? NonContainerObjects = null)
 {
     public bool HasProvenance => Provenance is not null && UsesExactProvenance;
     public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : "FEE-Struktur (rekonstruiert)";
@@ -485,7 +486,7 @@ public sealed class Fee2ContainerService
                 roots.Length == 0 ? 90 : 15 + index * 75 / roots.Length,
                 $"Root {index + 1} von {roots.Length} wird rekonstruiert: {root.Name}"));
             var scoped = allObjects
-                .Where(item => item is not FeeInterface && IsWithinRoot(item, root))
+                .Where(item => item is not FeeInterface && item.Guid != root.Guid && IsWithinRoot(item, root))
                 .ToArray();
             var assignments = scoped
                 .Where(item => item.Slots is not null)
@@ -499,6 +500,16 @@ public sealed class Fee2ContainerService
                 var tags = await ReadOptionalTagsAsync(root.Guid);
                 if (FeeContainerProvenanceCodec.TryRead(tags, out var provenance, out var provenanceError))
                 {
+                    var exactObjectProperties = await ReadContainerObjectPropertiesAsync(scoped, cancellationToken);
+                    var exactLiveObjects = scoped
+                        .Select(item => ToLiveObject(item, exactObjectProperties.GetValueOrDefault(item.Guid)))
+                        .ToArray();
+                    var classification = FeeContainerLiveReconstructor.Reconstruct(
+                        root.Guid,
+                        root.Name,
+                        exactLiveObjects,
+                        liveVariables,
+                        assignments);
                     var slots = ResolveSlotsFromSnapshot(provenance!, assignments);
                     var projection = FeeContainerVariableProjector.Apply(provenance!, variableStates, slots);
                     resultRoots.Add(new Fee2ContainerRoot(
@@ -512,7 +523,8 @@ public sealed class Fee2ContainerService
                         UsesExactProvenance: true,
                         scoped.Length,
                         0,
-                        []));
+                        [],
+                        classification.UnmappedObjects));
                     continue;
                 }
 
@@ -549,7 +561,8 @@ public sealed class Fee2ContainerService
                     UsesExactProvenance: false,
                     reconstructed.InspectedObjectCount,
                     reconstructed.IgnoredObjectCount,
-                    reconstructed.Issues));
+                    reconstructed.Issues,
+                    reconstructed.UnmappedObjects));
                 resultIssues.AddRange(reconstructed.Issues.Select(issue =>
                     new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, root.Name, issue.Message)));
             }

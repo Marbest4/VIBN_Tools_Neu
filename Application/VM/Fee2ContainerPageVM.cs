@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
+using System.Xml.Linq;
 using Microsoft.Win32;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.Core.Collections;
@@ -20,6 +21,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private bool _isBusy;
     private int _progressValue;
     private string _statusText = "FEE verbinden und Hauptknoten einlesen.";
+    private Fee2ContainerFoundContainerVM? _selectedFoundContainer;
+    private Fee2ContainerFoundSignalVM? _selectedFoundSignal;
 
     public Fee2ContainerPageVM()
         : this(new Fee2ContainerService(), Services.Connection ?? new FeeConnectionService()) { }
@@ -31,6 +34,15 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => CanRefresh);
         ExportCommand = new AsyncRelayCommand(ExportAsync, () => CanExport);
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
+        RemoveContainerCommand = new RelayCommand<Fee2ContainerFoundContainerVM>(
+            RemoveContainer,
+            item => item is not null && !IsBusy);
+        RemoveSignalCommand = new RelayCommand<Fee2ContainerFoundSignalVM>(
+            RemoveSignal,
+            item => item is not null && !IsBusy);
+        AddObjectAsContainerCommand = new RelayCommand<Fee2ContainerUnmappedObjectVM>(
+            AddObjectAsContainer,
+            item => item is { CanAdd: true } && !IsBusy);
         _connection.PropertyChanged += OnConnectionPropertyChanged;
     }
 
@@ -38,10 +50,36 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     public ObservableCollection<string> Issues { get; } = new();
     public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; } = new();
     public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; } = new();
+    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new();
     public ICommand RefreshCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand CancelCommand { get; }
+    public ICommand RemoveContainerCommand { get; }
+    public ICommand RemoveSignalCommand { get; }
+    public ICommand AddObjectAsContainerCommand { get; }
     public FeeConnectionService Connection => _connection;
+
+    public IReadOnlyList<string> SupportedContainerTypes =>
+        FeeContainerLiveReconstructor.SupportedContainerTypes;
+
+    public Fee2ContainerFoundContainerVM? SelectedFoundContainer
+    {
+        get => _selectedFoundContainer;
+        set { _selectedFoundContainer = value; OnPropertyChanged(); }
+    }
+
+    public Fee2ContainerFoundSignalVM? SelectedFoundSignal
+    {
+        get => _selectedFoundSignal;
+        set
+        {
+            _selectedFoundSignal = value;
+            OnPropertyChanged();
+            if (value is not null)
+                SelectedFoundContainer = FoundContainers.FirstOrDefault(container =>
+                    string.Equals(container.Id, value.ContainerId, StringComparison.Ordinal));
+        }
+    }
 
     public Fee2ContainerRootSelectionVM? SelectedRoot
     {
@@ -154,7 +192,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
 
     private async Task ExportAsync()
     {
-        var selectedRoots = Roots.Where(root => root.IsSelected).Select(root => root.Root).ToArray();
+        var selectedRoots = Roots.Where(root => root.IsSelected).Select(root => root.CreateEditedRoot()).ToArray();
         if (!CanExport || selectedRoots.Length == 0) { StatusText = ExportUnavailableReason; return; }
         var sourceName = selectedRoots.Length == 1 ? selectedRoots[0].Name : $"{selectedRoots.Length}-FEE-Roots";
         var dialog = new SaveFileDialog
@@ -246,38 +284,61 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     {
         FoundContainers.Clear();
         FoundSignals.Clear();
-        var document = SelectedRoot?.Root.Provenance?.ContainerDocument;
-        if (document is null) return;
-        foreach (var container in document.Descendants("Container"))
-        {
-            var component = container.Element("Component")?.Value ?? string.Empty;
-            var type = container.Element("Type")?.Value ?? string.Empty;
-            var entries = container.Descendants("Entry").ToArray();
-            FoundContainers.Add(new Fee2ContainerFoundContainerVM(
-                container.Attribute("id")?.Value ?? string.Empty,
-                component,
-                type,
-                entries.Count(entry => !string.IsNullOrWhiteSpace(entry.Element("Signal")?.Value))));
-            foreach (var entry in entries)
-            {
-                var signal = entry.Element("Signal")?.Value ?? string.Empty;
-                var slot = entry.Element("Slot")?.Value ?? string.Empty;
-                FoundSignals.Add(new Fee2ContainerFoundSignalVM(
-                    component, type, signal, slot,
-                    entry.Element("Address")?.Value ?? string.Empty,
-                    entry.Element("DataType")?.Value ?? string.Empty,
-                    !string.IsNullOrWhiteSpace(signal) && !string.IsNullOrWhiteSpace(slot),
-                    entry.Element("Note")?.Value ?? string.Empty));
-            }
-        }
+        NonContainerObjects.Clear();
+        SelectedFoundContainer = null;
+        SelectedFoundSignal = null;
+        if (SelectedRoot?.Editor is not { } editor)
+            return;
+        foreach (var container in editor.Containers)
+            FoundContainers.Add(container);
+        foreach (var signal in editor.Signals)
+            FoundSignals.Add(signal);
+        foreach (var item in editor.NonContainerObjects)
+            NonContainerObjects.Add(item);
+        SelectedFoundContainer = FoundContainers.FirstOrDefault(item => item.IsIncluded);
+    }
+
+    private void RemoveContainer(Fee2ContainerFoundContainerVM? container)
+    {
+        if (container is null)
+            return;
+        container.IsIncluded = false;
+        StatusText = $"Container '{container.Component}' ist für den Export deaktiviert. Die Änderung kann über die Checkbox rückgängig gemacht werden.";
+    }
+
+    private void RemoveSignal(Fee2ContainerFoundSignalVM? signal)
+    {
+        if (signal is null)
+            return;
+        signal.IsIncluded = false;
+        StatusText = $"Signal '{signal.Signal}' ist für den Export deaktiviert.";
+    }
+
+    private void AddObjectAsContainer(Fee2ContainerUnmappedObjectVM? item)
+    {
+        if (item is null || SelectedRoot?.Editor is not { } editor || !item.CanAdd)
+            return;
+        var container = editor.AddObjectAsContainer(item);
+        if (!FoundContainers.Contains(container))
+            FoundContainers.Add(container);
+        item.AddedAsContainer = true;
+        editor.NonContainerObjects.Remove(item);
+        NonContainerObjects.Remove(item);
+        SelectedFoundContainer = container;
+        StatusText = $"FEE-Objekt '{item.Name}' wurde als prüfbarer Container '{item.TargetContainerType}' ergänzt. Slot- und Signalzuordnungen müssen manuell vervollständigt werden.";
     }
 }
 
 public sealed class Fee2ContainerRootSelectionVM : NotifyBase
 {
     private bool _isSelected;
-    public Fee2ContainerRootSelectionVM(Fee2ContainerRoot root) => Root = root;
+    public Fee2ContainerRootSelectionVM(Fee2ContainerRoot root)
+    {
+        Root = root;
+        Editor = new Fee2ContainerRootEditor(root);
+    }
     public Fee2ContainerRoot Root { get; }
+    public Fee2ContainerRootEditor Editor { get; }
     public bool IsSelected { get => _isSelected; set => SetPropertyChange(ref _isSelected, value); }
     public Guid Guid => Root.Guid;
     public string Name => Root.Name;
@@ -289,13 +350,233 @@ public sealed class Fee2ContainerRootSelectionVM : NotifyBase
     public int UpdatedSlotCount => Root.UpdatedSlotCount;
     public int UnresolvedSlotCount => Root.UnresolvedSlotCount;
     public FeeContainerProvenanceSnapshot? Provenance => Root.Provenance;
+    public Fee2ContainerRoot CreateEditedRoot() => Root with { Provenance = Editor.CreateSnapshot() };
 }
 
-public sealed record Fee2ContainerFoundContainerVM(string Id, string Component, string Type, int AssignedSignalCount);
-
-public sealed record Fee2ContainerFoundSignalVM(
-    string Container, string ContainerType, string Signal, string Slot,
-    string Address, string DataType, bool IsAssigned, string Note)
+public sealed class Fee2ContainerRootEditor
 {
-    public string AssignmentState => IsAssigned ? "Zugeordnet" : "Keine rücklesbare Zuordnung";
+    private readonly Fee2ContainerRoot _root;
+
+    public Fee2ContainerRootEditor(Fee2ContainerRoot root)
+    {
+        _root = root;
+        var document = root.Provenance?.ContainerDocument;
+        if (document is not null)
+        {
+            var bindings = root.Provenance!.SignalBindings
+                .ToDictionary(item => (item.ContainerIndex, item.EntryIndex), item => item.VariableGuid);
+            foreach (var (container, containerIndex) in document.Descendants("Container").Select((item, index) => (item, index)))
+            {
+                var id = container.Attribute("id")?.Value ?? $"container-{containerIndex}";
+                var component = container.Element("Component")?.Value ?? string.Empty;
+                var type = container.Element("Type")?.Value ?? string.Empty;
+                var entries = container.Descendants("Entry").ToArray();
+                Containers.Add(new Fee2ContainerFoundContainerVM(id, component, type, entries.Length));
+                foreach (var (entry, entryIndex) in entries.Select((item, index) => (item, index)))
+                {
+                    bindings.TryGetValue((containerIndex, entryIndex), out var variableGuid);
+                    Signals.Add(new Fee2ContainerFoundSignalVM(
+                        id,
+                        component,
+                        type,
+                        entry.Element("Signal")?.Value ?? string.Empty,
+                        entry.Element("Slot")?.Value ?? string.Empty,
+                        entry.Element("Address")?.Value ?? string.Empty,
+                        entry.Element("DataType")?.Value ?? string.Empty,
+                        entry.Element("ID")?.Value ?? string.Empty,
+                        entry.Element("Note")?.Value ?? string.Empty,
+                        variableGuid == Guid.Empty ? null : variableGuid));
+                }
+            }
+        }
+        foreach (var item in root.NonContainerObjects ?? [])
+            NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
+    }
+
+    public ObservableCollection<Fee2ContainerFoundContainerVM> Containers { get; } = new();
+    public ObservableCollection<Fee2ContainerFoundSignalVM> Signals { get; } = new();
+    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new();
+
+    public Fee2ContainerFoundContainerVM AddObjectAsContainer(Fee2ContainerUnmappedObjectVM item)
+    {
+        var id = $"manual:{item.Guid:D}";
+        var existing = Containers.FirstOrDefault(container =>
+            string.Equals(container.Id, id, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            existing.IsIncluded = true;
+            existing.Component = item.TargetComponent;
+            existing.Type = item.TargetContainerType;
+            return existing;
+        }
+        var added = new Fee2ContainerFoundContainerVM(
+            id,
+            item.TargetComponent,
+            item.TargetContainerType,
+            0);
+        Containers.Add(added);
+        return added;
+    }
+
+    public FeeContainerProvenanceSnapshot CreateSnapshot()
+    {
+        var containerElements = new List<XElement>();
+        var bindings = new List<FeeContainerSignalBinding>();
+        var signalCount = 0;
+        foreach (var container in Containers.Where(item => item.IsIncluded))
+        {
+            var dataList = new XElement("DataList");
+            var containerIndex = containerElements.Count;
+            var includedSignals = Signals.Where(item => item.IsIncluded &&
+                string.Equals(item.ContainerId, container.Id, StringComparison.Ordinal)).ToArray();
+            foreach (var signal in includedSignals)
+            {
+                var entryIndex = dataList.Elements("Entry").Count();
+                dataList.Add(new XElement("Entry",
+                    new XElement("ID", signal.SignalId),
+                    new XElement("Address", signal.Address),
+                    new XElement("DataType", signal.DataType),
+                    new XElement("Signal", signal.Signal),
+                    new XElement("Slot", signal.Slot),
+                    new XElement("Note", signal.Note)));
+                if (signal.VariableGuid is Guid variableGuid)
+                    bindings.Add(new FeeContainerSignalBinding(containerIndex, entryIndex, variableGuid));
+                if (!string.IsNullOrWhiteSpace(signal.Signal))
+                    signalCount++;
+            }
+            if (!dataList.Elements("Entry").Any())
+            {
+                dataList.Add(new XElement("Entry",
+                    new XElement("ID", $"FEE-UNASSIGNED-{container.Id}"),
+                    new XElement("Address", string.Empty),
+                    new XElement("DataType", string.Empty),
+                    new XElement("Signal", string.Empty),
+                    new XElement("Slot", string.Empty),
+                    new XElement("Note", "PRÜFEN: Manuell in FEE2Container ergänzt oder ohne aktive Signalzuordnung.")));
+            }
+            containerElements.Add(new XElement("Container",
+                new XAttribute("id", container.Id),
+                new XElement("Component", container.Component),
+                new XElement("Type", container.Type),
+                dataList));
+        }
+
+        var document = new XDocument(
+            new XDeclaration("1.0", "utf-8", null),
+            new XElement("CAAMergeResult",
+                new XAttribute("version", "1.0.0.0"),
+                new XAttribute("createdAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
+                new XAttribute("autoCreateFile", string.Empty),
+                new XAttribute("zuli", string.Empty),
+                new XElement("ContainerList", containerElements)));
+        return new FeeContainerProvenanceSnapshot(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            document,
+            bindings,
+            containerElements.Count,
+            signalCount,
+            _root.Provenance?.SourceFingerprint ?? string.Empty);
+    }
+}
+
+public sealed class Fee2ContainerFoundContainerVM : NotifyBase
+{
+    private string _component;
+    private string _type;
+    private bool _isIncluded = true;
+
+    public Fee2ContainerFoundContainerVM(string id, string component, string type, int originalSignalCount)
+    {
+        Id = id;
+        _component = component;
+        _type = type;
+        OriginalSignalCount = originalSignalCount;
+    }
+
+    public string Id { get; }
+    public string Component { get => _component; set => SetPropertyChange(ref _component, value); }
+    public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
+    public int OriginalSignalCount { get; }
+    public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
+}
+
+public sealed class Fee2ContainerFoundSignalVM : NotifyBase
+{
+    private string _container;
+    private string _containerType;
+    private string _signal;
+    private string _slot;
+    private string _address;
+    private string _dataType;
+    private string _signalId;
+    private string _note;
+    private bool _isIncluded = true;
+
+    public Fee2ContainerFoundSignalVM(
+        string containerId, string container, string containerType, string signal, string slot,
+        string address, string dataType, string signalId, string note, Guid? variableGuid)
+    {
+        ContainerId = containerId;
+        _container = container;
+        _containerType = containerType;
+        _signal = signal;
+        _slot = slot;
+        _address = address;
+        _dataType = dataType;
+        _signalId = signalId;
+        _note = note;
+        VariableGuid = variableGuid;
+    }
+
+    public string ContainerId { get; }
+    public string Container { get => _container; set => SetPropertyChange(ref _container, value); }
+    public string ContainerType { get => _containerType; set => SetPropertyChange(ref _containerType, value); }
+    public string Signal { get => _signal; set { if (SetPropertyChange(ref _signal, value)) NotifyAssignment(); } }
+    public string Slot { get => _slot; set { if (SetPropertyChange(ref _slot, value)) NotifyAssignment(); } }
+    public string Address { get => _address; set => SetPropertyChange(ref _address, value); }
+    public string DataType { get => _dataType; set => SetPropertyChange(ref _dataType, value); }
+    public string SignalId { get => _signalId; set => SetPropertyChange(ref _signalId, value); }
+    public string Note { get => _note; set => SetPropertyChange(ref _note, value); }
+    public Guid? VariableGuid { get; }
+    public bool IsIncluded { get => _isIncluded; set { if (SetPropertyChange(ref _isIncluded, value)) NotifyAssignment(); } }
+    public bool IsAssigned => IsIncluded && !string.IsNullOrWhiteSpace(Signal) && !string.IsNullOrWhiteSpace(Slot);
+    public string AssignmentState => IsAssigned ? "Zugeordnet" : IsIncluded ? "Zuordnung unvollständig" : "Vom Export ausgeschlossen";
+
+    private void NotifyAssignment()
+    {
+        OnPropertyChanged(nameof(IsAssigned));
+        OnPropertyChanged(nameof(AssignmentState));
+    }
+}
+
+public sealed class Fee2ContainerUnmappedObjectVM : NotifyBase
+{
+    private string _targetContainerType;
+    private string _targetComponent;
+    private bool _addedAsContainer;
+
+    public Fee2ContainerUnmappedObjectVM(FeeContainerUnmappedObject model)
+    {
+        Model = model;
+        _targetContainerType = FeeContainerLiveReconstructor.SupportedContainerTypes.FirstOrDefault() ?? string.Empty;
+        _targetComponent = model.Name;
+    }
+
+    public FeeContainerUnmappedObject Model { get; }
+    public Guid Guid => Model.Guid;
+    public string Name => Model.Name;
+    public string FeeType => Model.FeeType;
+    public string Reason => Model.Reason;
+    public string TargetContainerType
+    {
+        get => _targetContainerType;
+        set { if (SetPropertyChange(ref _targetContainerType, value)) OnPropertyChanged(nameof(CanAdd)); }
+    }
+    public string TargetComponent
+    {
+        get => _targetComponent;
+        set { if (SetPropertyChange(ref _targetComponent, value)) OnPropertyChanged(nameof(CanAdd)); }
+    }
+    public bool AddedAsContainer { get => _addedAsContainer; set => SetPropertyChange(ref _addedAsContainer, value); }
+    public bool CanAdd => !string.IsNullOrWhiteSpace(TargetContainerType) && !string.IsNullOrWhiteSpace(TargetComponent);
 }

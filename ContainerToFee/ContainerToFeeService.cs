@@ -75,7 +75,7 @@ namespace VIBN_Tools.ContainerToFee
                         continue;
                     var name = container.ComponentName ?? container.GetType().Name;
                     progress?.Invoke(completed + 1, allContainers.Count, $"Wird erstellt: {name}");
-                    await factory.CreateContainerAsync(container, targetInterface, parentObject);
+                    await factory.CreateContainerAsync(container, targetInterface, parentObject, cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
                     completed++;
                     progress?.Invoke(completed, allContainers.Count, name);

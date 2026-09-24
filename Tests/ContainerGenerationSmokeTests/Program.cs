@@ -441,6 +441,9 @@ internal static class Program
         var containers = result.Snapshot.ContainerDocument.Descendants("Container").ToArray();
         if (result.Snapshot.ContainerCount != 6 || result.Snapshot.SignalCount != 6 ||
             result.IgnoredObjectCount != 1 || result.Issues.Count != 2 ||
+            result.UnmappedObjects.Count != 1 ||
+            result.UnmappedObjects.Single().Guid != ignoredGuid ||
+            result.UnmappedObjects.Single().Name != "Unrelated" ||
             containers.Single(item => item.Element("Type")?.Value == "Sensor")
                 .Descendants("Entry").Count() != 2 ||
             containers.Single(item => item.Element("Type")?.Value == "Button")
@@ -466,6 +469,37 @@ internal static class Program
             root.Attribute("source") is not null || root.Attribute("feeRootGuid") is not null)
         {
             throw new InvalidOperationException("Reconstructed ContainerFile does not match the production CAAResult schema attributes.");
+        }
+
+        var editableRoot = new Fee2ContainerRoot(
+            rootGuid,
+            "Editable",
+            result.Snapshot,
+            0,
+            0,
+            0,
+            0,
+            UsesExactProvenance: false,
+            result.InspectedObjectCount,
+            result.IgnoredObjectCount,
+            result.Issues,
+            result.UnmappedObjects);
+        var editor = new Fee2ContainerRootEditor(editableRoot);
+        editor.Containers[0].IsIncluded = false;
+        var unmapped = editor.NonContainerObjects.Single();
+        unmapped.TargetComponent = "ManuallyReviewed";
+        unmapped.TargetContainerType = "Sensor";
+        var manualContainer = editor.AddObjectAsContainer(unmapped);
+        var editedSnapshot = editor.CreateSnapshot();
+        if (!manualContainer.Id.StartsWith("manual:", StringComparison.Ordinal) ||
+            editedSnapshot.ContainerCount != result.Snapshot.ContainerCount ||
+            !editedSnapshot.ContainerDocument.Descendants("Component")
+                .Any(item => item.Value == "ManuallyReviewed") ||
+            editedSnapshot.ContainerDocument.Descendants("Container")
+                .Any(item => item.Attribute("id")?.Value == editor.Containers[0].Id))
+        {
+            throw new InvalidOperationException(
+                "FEE2Container review edits were not projected into the exported snapshot.");
         }
 
         var versionedId = "container:versioned-sensor";
@@ -666,6 +700,37 @@ internal static class Program
                     "The added signal did not become valid after selecting an allowed PLC_IN slot.");
             }
 
+            var effectivePath = Path.Combine(directory, "effective.container.xml");
+            await service.SaveEffectiveContainerXmlAsync(effectivePath);
+            var effectiveDocument = XDocument.Load(effectivePath);
+            if (!effectiveDocument.Descendants("Signal").Any(item => item.Value == "Added"))
+                throw new InvalidOperationException("Effective Container.xml export lost a dynamically added signal.");
+            if (!service.RemoveSignal(addedNode.Id).Success || loaded.Plan.AddedSignals.Count != 0 ||
+                loaded.Plan.FindNode(addedNode.Id) is not null)
+            {
+                throw new InvalidOperationException("Removing a dynamically added signal left stale plan state behind.");
+            }
+            if (!service.RemoveSignal(signalNodes[0].Id).Success ||
+                !loaded.Plan.IsSignalRemoved(signalNodes[0].Id))
+            {
+                throw new InvalidOperationException("Removing an imported signal did not persist the effective deletion.");
+            }
+            await service.SaveEffectiveContainerXmlAsync(effectivePath);
+            effectiveDocument = XDocument.Load(effectivePath);
+            if (effectiveDocument.Descendants("Signal").Any(item => item.Value == signalNodes[0].Name))
+                throw new InvalidOperationException("Effective Container.xml export still contains a removed imported signal.");
+            var sidecarPath = Path.Combine(directory, "removed-signals.visual.json");
+            await service.SaveSidecarAsync(sidecarPath);
+            var reloadedService = new ContainerToFeeVisualPlanService();
+            var reloaded = await reloadedService.LoadSidecarAsync(sidecarPath);
+            if (!reloaded.Success || reloaded.Plan is null ||
+                !reloaded.Plan.IsSignalRemoved(signalNodes[0].Id))
+            {
+                throw new InvalidOperationException("Sidecar schema did not restore an imported signal deletion.");
+            }
+            if (!service.Undo() || loaded.Plan.IsSignalRemoved(signalNodes[0].Id))
+                throw new InvalidOperationException("Undo did not restore an imported signal removed from the visual plan.");
+
             var warning = FeeTagPropertyWriteResult.Unconfirmed(new InvalidOperationException("test"));
             if (warning.Confirmed || !warning.Warning.Contains("fortgesetzt", StringComparison.OrdinalIgnoreCase))
             {
@@ -832,6 +897,34 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     "Existing PLC_IN list mapping must keep both signals without a duplicate fan-in pass.");
+            }
+
+            File.WriteAllText(path, """
+                <ContainerFile>
+                  <Container id="1">
+                    <Component>FanInCylinderBothPositions</Component>
+                    <Type>Cylinder</Type>
+                    <DataList>
+                      <Entry><ID>1</ID><Address>%Q0.0</Address><DataType>Bool</DataType><Signal>ToHome</Signal><Slot>PLC_OUT_ToHomePos</Slot></Entry>
+                      <Entry><ID>2</ID><Address>%Q0.1</Address><DataType>Bool</DataType><Signal>ToWork</Signal><Slot>PLC_OUT_ToWorkPos</Slot></Entry>
+                      <Entry><ID>3</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>HomeA</Signal><Slot>PLC_IN_InHomePos</Slot></Entry>
+                      <Entry><ID>4</ID><Address>%I0.1</Address><DataType>Bool</DataType><Signal>HomeB</Signal><Slot>PLC_IN_InHomePos</Slot></Entry>
+                      <Entry><ID>5</ID><Address>%I0.2</Address><DataType>Bool</DataType><Signal>WorkA</Signal><Slot>PLC_IN_InWorkPos</Slot></Entry>
+                      <Entry><ID>6</ID><Address>%I0.3</Address><DataType>Bool</DataType><Signal>WorkB</Signal><Slot>PLC_IN_InWorkPos</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var (completeCylinderContainers, _) = ContainerToFeeService.ReadInContainerXmlData(path);
+            var completeCylinder = (GrobCylinder_Container)completeCylinderContainers.Single();
+            completeCylinder.IsCreationRequested = true;
+            var preflight = ContainerModelValidationPreflight.Validate(completeCylinder);
+            if (preflight.Any(issue => issue.Code == "CYLINDER_STATUS_MISSING") ||
+                completeCylinder.Signals_InHomePos.Count != 2 ||
+                completeCylinder.Signals_InWorkPos.Count != 2)
+            {
+                throw new InvalidOperationException(
+                    "Multiple InHomePos/InWorkPos inputs were incorrectly reported as an incomplete cylinder status mapping.");
             }
         }
         finally
