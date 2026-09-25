@@ -33,7 +33,11 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
             var forcedRun = acceptedValidationErrors.Any(issue => issue.Severity == VisualIssueSeverity.Error);
             var excludedContainerIds = new HashSet<string>(StringComparer.Ordinal);
 
-            var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects, excludedContainerIds);
+            var binding = RuntimeVisualPlanBinder.Bind(
+                plan,
+                runtimeObjects,
+                excludedContainerIds,
+                omitInvalidSlotEntries: forcedRun);
             if (!binding.Success)
                 return new VisualExecutionResult(false, binding.Issue!.Message, [binding.Issue]);
 
@@ -238,7 +242,9 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                         !ContainerMetadataCatalog.TryGet(node.TypeName, out _))
                     .Select(node => node.Id)
                     .ToHashSet(StringComparer.Ordinal);
-                var sourceDocument = RuntimeVisualPlanBinder.CreateEffectiveDocument(plan);
+                var sourceDocument = RuntimeVisualPlanBinder.CreateEffectiveDocument(
+                    plan,
+                    omitInvalidSlotEntries: forcedRun);
                 var signalSources = selectedBindings.ToDictionary(
                     item => item.PlanNode.Id,
                     item => (IReadOnlyList<FeeContainerSignalSource>)item.RuntimeContainer

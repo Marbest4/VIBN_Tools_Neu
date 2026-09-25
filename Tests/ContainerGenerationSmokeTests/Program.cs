@@ -54,6 +54,7 @@ internal static class Program
         await ValidateContainerToFeeModelContractsAsync();
         await ValidateVisualMotionJointReuseAsync();
         await ValidateVisualFeeSignalStatusAsync();
+        await ValidateForcedUnknownSlotProjectionAsync();
         ValidateFee2ContainerSelectionHighlighting();
         ValidatePlcInputFanInParsing();
         ValidateContainerFileComparison();
@@ -875,6 +876,54 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     "An unconfirmed TagComponent write no longer explicitly permits generation to continue.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task ValidateForcedUnknownSlotProjectionAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-forced-slot-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "invalid-slot.container.xml");
+            await File.WriteAllTextAsync(path, """
+                <ContainerFile>
+                  <Container id="sensor-invalid">
+                    <Component>Sensor_Invalid</Component><Type>Sensor</Type><DataList>
+                      <Entry><ID>OK</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>Detected</Signal><Slot>PLC_IN_PartPresent_Ch1</Slot></Entry>
+                      <Entry><ID>OLD</ID><Address>%I0.1</Address><DataType>Bool</DataType><Signal>Legacy</Signal><Slot>PLC_IN_REMOVED_SLOT</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var loaded = await service.LoadXmlAsync(path);
+            if (loaded.Plan is null ||
+                !loaded.Plan.Issues.Any(issue => issue.Code == "SIGNAL_SLOT_UNKNOWN"))
+            {
+                throw new InvalidOperationException("The invalid-slot plan did not preserve its explicit validation error.");
+            }
+
+            var binderType = typeof(ContainerToFeeVisualPlanService).Assembly.GetType(
+                "VIBN_Tools.ContainerToFeeVisual.RuntimeVisualPlanBinder",
+                throwOnError: true)!;
+            var createDocument = binderType.GetMethod(
+                "CreateEffectiveDocument",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var normal = (XDocument)createDocument.Invoke(null, [loaded.Plan, false])!;
+            var forced = (XDocument)createDocument.Invoke(null, [loaded.Plan, true])!;
+            if (!normal.Descendants("Slot").Any(slot => slot.Value == "PLC_IN_REMOVED_SLOT") ||
+                forced.Descendants("Slot").Any(slot => slot.Value == "PLC_IN_REMOVED_SLOT") ||
+                !forced.Descendants("Slot").Any(slot => slot.Value == "PLC_IN_PartPresent_Ch1"))
+            {
+                throw new InvalidOperationException(
+                    "A confirmed best-effort run must omit only unknown slot entries while retaining valid container data.");
             }
         }
         finally

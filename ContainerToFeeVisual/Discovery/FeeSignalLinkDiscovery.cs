@@ -24,10 +24,9 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
         if (candidates.Length == 0)
             return new VisualFeeSignalLinkDiscoveryResult([], 0);
 
-        using var throttle = new SemaphoreSlim(8, 8);
-        var reads = candidates.Select(async signal =>
+        var results = new List<SignalRead>(candidates.Length);
+        foreach (var signal in candidates)
         {
-            await throttle.WaitAsync(cancellationToken);
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -40,7 +39,8 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
                     logger.Warning(
                         $"Die FEE-API hat für Signal {signal.Tag} ({signal.GuidString}) keine " +
                         "Zuordnungsliste geliefert. Das Signal wird als unverknüpft behandelt.");
-                    return new SignalRead([], null);
+                    results.Add(new SignalRead([], null));
+                    continue;
                 }
                 foreach (var (objectGuid, slotNames) in assignments)
                 {
@@ -63,7 +63,7 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
                         }
                     }
                 }
-                return new SignalRead(endpoints, null);
+                results.Add(new SignalRead(endpoints, null));
             }
             catch (OperationCanceledException)
             {
@@ -71,15 +71,10 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
             }
             catch (Exception exception)
             {
-                return new SignalRead([], exception);
+                results.Add(new SignalRead([], exception));
             }
-            finally
-            {
-                throttle.Release();
-            }
-        });
+        }
 
-        var results = await Task.WhenAll(reads);
         cancellationToken.ThrowIfCancellationRequested();
         var rawLinks = results.SelectMany(result => result.Links).Distinct().ToArray();
         var types = await ReadObjectTypesAsync(

@@ -7,34 +7,76 @@
              mc:Ignorable="d" d:DesignHeight="850" d:DesignWidth="1500">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <Style x:Key="QualityField" TargetType="TextBox">
+            <Setter Property="Margin" Value="4" />
+            <Setter Property="MaxWidth" Value="760" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="RequiredLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#FF9C1C1C" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="ToolTip" Value="Pflichtfeld: Ohne diesen Wert kann das Projektprofil nicht belastbar identifiziert werden." />
+        </Style>
+        <Style x:Key="RecommendedLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#FF8A5A00" />
+            <Setter Property="ToolTip" Value="Empfohlen: Ohne diesen Wert wird die zugehörige Teilprüfung übersprungen oder nur eingeschränkt aussagekräftig." />
+        </Style>
+        <Style x:Key="OptionalLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#FF365E77" />
+            <Setter Property="ToolTip" Value="Optional: Nur für die zugehörige Plattform oder Zusatzregel erforderlich." />
+        </Style>
     </UserControl.Resources>
     <UserControl.DataContext>
         <vm:ProjectQualityPageVM />
     </UserControl.DataContext>
-    <Grid Margin="20">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+    <Grid Margin="20" MinWidth="820" MinHeight="590">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock FontSize="24" FontWeight="SemiBold" Text="Project Quality Gate" />
-        <DockPanel Grid.Row="1" Margin="0,12,0,10">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+
+        <Expander Grid.Row="1" Margin="0,10,0,4" Header="Anleitung und Aussagekraft des Tests" IsExpanded="False">
+            <Border Padding="10" Background="#FFF3F5F7" CornerRadius="4">
+                <StackPanel>
+                    <TextBlock FontWeight="SemiBold" Text="Vorgehen" />
+                    <TextBlock Margin="0,3,0,8" Text="{Binding TestInstructions}" TextWrapping="Wrap" />
+                    <TextBlock FontWeight="SemiBold" Text="Was das Ergebnis aussagt" />
+                    <TextBlock Margin="0,3,0,8" Text="{Binding TestMeaning}" TextWrapping="Wrap" />
+                    <WrapPanel>
+                        <TextBlock Margin="0,0,18,0" Foreground="#FF9C1C1C" FontWeight="SemiBold" Text="Rot: Pflichtfeld" />
+                        <TextBlock Margin="0,0,18,0" Foreground="#FF8A5A00" FontWeight="SemiBold" Text="Orange: empfohlen für belastbare Teilprüfung" />
+                        <TextBlock Foreground="#FF365E77" FontWeight="SemiBold" Text="Blau: optional/plattformspezifisch" />
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </Expander>
+
+        <DockPanel Grid.Row="2" Margin="0,8,0,10">
+            <WrapPanel DockPanel.Dock="Right" HorizontalAlignment="Right">
                 <Button MinWidth="120" Margin="6,0,0,0" Content="Neu" Command="{Binding NewProfileCommand}" />
                 <Button MinWidth="120" Margin="6,0,0,0" Content="Speichern" Command="{Binding SaveProfileCommand}" />
                 <Button MinWidth="120" Margin="6,0,0,0" Content="Löschen" Command="{Binding DeleteProfileCommand}" />
                 <Button MinWidth="160" Margin="18,0,0,0" Content="Quality Gate ausführen" Command="{Binding RunQualityGateCommand}" />
                 <Button MinWidth="150" Margin="6,0,0,0" Content="Bericht exportieren" Command="{Binding ExportReportCommand}" />
-            </StackPanel>
+            </WrapPanel>
             <ComboBox Width="330" ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}"
                       DisplayMemberPath="Name" />
         </DockPanel>
 
-        <TabControl Grid.Row="2">
+        <TabControl Grid.Row="3">
             <TabItem Header="Projektprofil">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <Grid Margin="12">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                    <Grid Margin="12" MinWidth="720" MaxWidth="1050" HorizontalAlignment="Left">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
@@ -44,22 +86,22 @@
                             <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" VerticalAlignment="Center" Text="Name"/><TextBox Grid.Row="0" Grid.Column="1" Margin="4" Text="{Binding Editor.Name, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Kunde"/><TextBox Grid.Row="1" Grid.Column="1" Margin="4" Text="{Binding Editor.Customer}"/>
-                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Projektwurzel"/><TextBox Grid.Row="2" Grid.Column="1" Margin="4" Text="{Binding Editor.ProjectRoot}"/><Button Grid.Row="2" Grid.Column="2" Content="…" Command="{Binding BrowseProjectRootCommand}"/>
-                        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Requirements.xml"/><TextBox Grid.Row="3" Grid.Column="1" Margin="4" Text="{Binding Editor.RequirementsPath}"/><Button Grid.Row="3" Grid.Column="2" Content="…" Command="{Binding BrowseRequirementsCommand}"/>
-                        <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Container.xml"/><TextBox Grid.Row="4" Grid.Column="1" Margin="4" Text="{Binding Editor.ContainerPath}"/><Button Grid.Row="4" Grid.Column="2" Content="…" Command="{Binding BrowseContainerCommand}"/>
-                        <TextBlock Grid.Row="5" VerticalAlignment="Center" Text="TIA-Version"/><TextBox Grid.Row="5" Grid.Column="1" Margin="4" Text="{Binding Editor.TiaVersion}"/>
-                        <TextBlock Grid.Row="6" VerticalAlignment="Center" Text="ViCo-Bibliothek"/><TextBox Grid.Row="6" Grid.Column="1" Margin="4" Text="{Binding Editor.VicoLibraryPath}"/><Button Grid.Row="6" Grid.Column="2" Content="…" Command="{Binding BrowseLibraryCommand}"/>
-                        <TextBlock Grid.Row="7" VerticalAlignment="Center" Text="Rockwell-Standard"/><TextBox Grid.Row="7" Grid.Column="1" Margin="4" Text="{Binding Editor.RockwellStandard}"/>
-                        <TextBlock Grid.Row="8" VerticalAlignment="Center" Text="Container-Typen (Komma)"/><TextBox Grid.Row="8" Grid.Column="1" Margin="4" Text="{Binding Editor.AllowedContainerTypes}"/>
-                        <TextBlock Grid.Row="9" VerticalAlignment="Center" Text="Namensregeln" ToolTip="Semikolon-getrennt, z. B. Container=^GM_; Signal=^[A-Z]"/><TextBox Grid.Row="9" Grid.Column="1" Margin="4" Text="{Binding Editor.NamingRules}"/>
-                        <TextBlock Grid.Row="10" VerticalAlignment="Center" Text="Adressbereiche (Komma)"/><TextBox Grid.Row="10" Grid.Column="1" Margin="4" Text="{Binding Editor.SignalAddressRanges}" ToolTip="Beispiel: E0-E127, A0-A127"/>
+                        <TextBlock Grid.Row="0" Style="{StaticResource RequiredLabel}" Text="Name *"/><TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.Name, UpdateSourceTrigger=PropertyChanged}"/>
+                        <TextBlock Grid.Row="1" Style="{StaticResource OptionalLabel}" Text="Kunde"/><TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.Customer}"/>
+                        <TextBlock Grid.Row="2" Style="{StaticResource RecommendedLabel}" Text="Projektwurzel"/><TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.ProjectRoot}"/><Button Grid.Row="2" Grid.Column="2" Content="…" Command="{Binding BrowseProjectRootCommand}"/>
+                        <TextBlock Grid.Row="3" Style="{StaticResource RecommendedLabel}" Text="Requirements.xml"/><TextBox Grid.Row="3" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.RequirementsPath}"/><Button Grid.Row="3" Grid.Column="2" Content="…" Command="{Binding BrowseRequirementsCommand}"/>
+                        <TextBlock Grid.Row="4" Style="{StaticResource RecommendedLabel}" Text="Container.xml"/><TextBox Grid.Row="4" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.ContainerPath}"/><Button Grid.Row="4" Grid.Column="2" Content="…" Command="{Binding BrowseContainerCommand}"/>
+                        <TextBlock Grid.Row="5" Style="{StaticResource OptionalLabel}" Text="TIA-Version"/><TextBox Grid.Row="5" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.TiaVersion}"/>
+                        <TextBlock Grid.Row="6" Style="{StaticResource OptionalLabel}" Text="ViCo-Bibliothek"/><TextBox Grid.Row="6" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.VicoLibraryPath}"/><Button Grid.Row="6" Grid.Column="2" Content="…" Command="{Binding BrowseLibraryCommand}"/>
+                        <TextBlock Grid.Row="7" Style="{StaticResource OptionalLabel}" Text="Rockwell-Standard"/><TextBox Grid.Row="7" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.RockwellStandard}"/>
+                        <TextBlock Grid.Row="8" Style="{StaticResource OptionalLabel}" Text="Container-Typen (Komma)"/><TextBox Grid.Row="8" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.AllowedContainerTypes}"/>
+                        <TextBlock Grid.Row="9" Style="{StaticResource OptionalLabel}" Text="Namensregeln" ToolTip="Optional; Semikolon-getrennt, z. B. Container=^GM_; Signal=^[A-Z]"/><TextBox Grid.Row="9" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.NamingRules}"/>
+                        <TextBlock Grid.Row="10" Style="{StaticResource OptionalLabel}" Text="Adressbereiche (Komma)"/><TextBox Grid.Row="10" Grid.Column="1" Style="{StaticResource QualityField}" Text="{Binding Editor.SignalAddressRanges}" ToolTip="Optional; Beispiel: E0-E127, A0-A127"/>
                         <CheckBox Grid.Row="11" Grid.Column="1" Margin="4" Content="fe.screen-sim/FEE prüfen" IsChecked="{Binding Editor.FeeEnabled}"/>
                         <CheckBox Grid.Row="12" Grid.Column="1" Margin="4" Content="Emulate3D-Bereitschaft prüfen" IsChecked="{Binding Editor.Emulate3DEnabled}"/>
-                        <TextBlock Grid.Row="13" Text="Emulate3D Installation/Projekt"/><StackPanel Grid.Row="13" Grid.Column="1"><TextBox Margin="4" Text="{Binding Editor.Emulate3DInstallationPath}"/><TextBox Margin="4" Text="{Binding Editor.Emulate3DProjectPath}"/></StackPanel>
+                        <TextBlock Grid.Row="13" Style="{StaticResource OptionalLabel}" Text="Emulate3D Installation/Projekt"/><StackPanel Grid.Row="13" Grid.Column="1"><TextBox Style="{StaticResource QualityField}" Text="{Binding Editor.Emulate3DInstallationPath}"/><TextBox Style="{StaticResource QualityField}" Text="{Binding Editor.Emulate3DProjectPath}"/></StackPanel>
                         <CheckBox Grid.Row="14" Grid.Column="1" Margin="4" Content="EKS-Bereitschaft prüfen" IsChecked="{Binding Editor.EksEnabled}"/>
-                        <TextBlock Grid.Row="15" Text="EKS Installation/Projekt"/><StackPanel Grid.Row="15" Grid.Column="1"><TextBox Margin="4" Text="{Binding Editor.EksInstallationPath}"/><TextBox Margin="4" Text="{Binding Editor.EksProjectPath}"/></StackPanel>
+                        <TextBlock Grid.Row="15" Style="{StaticResource OptionalLabel}" Text="EKS Installation/Projekt"/><StackPanel Grid.Row="15" Grid.Column="1"><TextBox Style="{StaticResource QualityField}" Text="{Binding Editor.EksInstallationPath}"/><TextBox Style="{StaticResource QualityField}" Text="{Binding Editor.EksProjectPath}"/></StackPanel>
                     </Grid>
                 </ScrollViewer>
             </TabItem>
@@ -117,10 +159,11 @@
                 </Grid>
             </TabItem>
         </TabControl>
-        <DockPanel Grid.Row="3" Margin="0,10,0,0">
+        <DockPanel Grid.Row="4" Margin="0,10,0,0">
             <ProgressBar DockPanel.Dock="Right" Width="170" Height="7" IsIndeterminate="True"
                          Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <StackPanel><TextBlock FontWeight="SemiBold" Text="{Binding StatusText}"/><TextBlock Margin="0,4,0,0" Foreground="#FF7A4E00" Text="{Binding Limitations}" TextWrapping="Wrap"/></StackPanel>
+            <StackPanel><TextBlock FontWeight="SemiBold" Text="{Binding StatusText}"/><TextBlock Margin="0,2,0,0" Foreground="#FF356A88" Text="{Binding LastRunText}"/><TextBlock Margin="0,4,0,0" Foreground="#FF7A4E00" Text="{Binding Limitations}" TextWrapping="Wrap"/></StackPanel>
         </DockPanel>
     </Grid>
+    </ScrollViewer>
 </UserControl>

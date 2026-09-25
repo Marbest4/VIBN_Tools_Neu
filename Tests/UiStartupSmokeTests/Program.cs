@@ -337,6 +337,7 @@ internal static class Program
             }
             if (!tiaPortalViewModel.AxisExchangeInfo.Contains("ToConfig", StringComparison.OrdinalIgnoreCase) ||
                 !tiaPortalViewModel.AxisExchangeInfo.Contains("AxisValueTags.xlsx", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.AxisConfigurationInfo.Contains("_Programm/Axis", StringComparison.OrdinalIgnoreCase) ||
                 !ReferenceEquals(tiaPortalViewModel.Axes, tiaPortalViewModel.FoundAxes))
             {
                 throw new InvalidOperationException("The TIA axis workflow or exchange help is incomplete.");
@@ -347,7 +348,9 @@ internal static class Program
 
             var projectQualityPage = new ProjectQualityPage();
             if (projectQualityPage.DataContext is not ProjectQualityPageVM projectQualityViewModel ||
-                !projectQualityViewModel.Limitations.Contains("fachliche Freigabe", StringComparison.OrdinalIgnoreCase))
+                !projectQualityViewModel.Limitations.Contains("fachliche Freigabe", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.TestInstructions.Contains("Requirements.xml", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.TestMeaning.Contains("Laufzeit", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("The Project Quality page does not disclose its live-verification boundary.");
             }

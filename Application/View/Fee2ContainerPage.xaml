@@ -11,7 +11,8 @@
         <vm:Fee2ContainerPageVM />
     </UserControl.DataContext>
 
-    <Grid Margin="20">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <Grid Margin="20" MinWidth="980" MinHeight="620">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -27,7 +28,7 @@
                        Text="Zeigt alle BasicFrames als auswählbare Hauptknoten. Container2FEE-Provenienz ermöglicht einen exakten Round-Trip; bestehende Modelle werden aus unterstützten Objekttypen sowie ihren Signal- und Slotzuordnungen rekonstruiert und mit Prüfhinweisen gekennzeichnet." />
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
+        <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
             <Button MinWidth="150" MinHeight="34"
                     Content="FEE-Roots einlesen"
                     Command="{Binding RefreshCommand}"
@@ -43,7 +44,7 @@
             <Button Margin="8,0,0,0" MinWidth="100" MinHeight="34"
                     Content="Abbrechen" Command="{Binding CancelCommand}" />
             <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
-        </StackPanel>
+        </WrapPanel>
 
         <DataGrid Grid.Row="2" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedRoot}"
                   AutoGenerateColumns="False" IsReadOnly="False"
@@ -213,4 +214,5 @@
             <TextBlock Margin="0,5,0,0" TextWrapping="Wrap" Text="{Binding StatusText}" />
         </StackPanel>
     </Grid>
+    </ScrollViewer>
 </UserControl>

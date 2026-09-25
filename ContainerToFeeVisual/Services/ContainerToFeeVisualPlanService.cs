@@ -1336,9 +1336,8 @@ public sealed class ContainerToFeeVisualPlanService
         // Always refresh before a write. A previous generation changes both
         // scene objects and variables; reusing the old snapshot caused the
         // second click to recreate objects/interfaces and eventually stall.
-        await Task.WhenAll(
-            DiscoverFeeObjectsAsync(cancellationToken),
-            DiscoverFeeInterfacesAsync(cancellationToken));
+        await DiscoverFeeObjectsAsync(cancellationToken);
+        await DiscoverFeeInterfacesAsync(cancellationToken);
         AutoAssignMatches();
 
         var validation = Validate();

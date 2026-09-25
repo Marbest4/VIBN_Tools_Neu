@@ -297,6 +297,13 @@ public sealed class KanbanizeRefreshService : IViCoOnlineRefreshService
             using var request = new HttpRequestMessage(HttpMethod.Get, ApiBase + relativeUrl);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             request.Headers.TryAddWithoutValidation("apikey", ResolveApiKey());
+            request.Headers.CacheControl = new CacheControlHeaderValue
+            {
+                NoCache = true,
+                NoStore = true,
+                MustRevalidate = true,
+            };
+            request.Headers.Pragma.ParseAdd("no-cache");
 
             HttpResponseMessage response;
             try

@@ -22,9 +22,10 @@ internal static class RuntimeVisualPlanBinder
     public static RuntimeVisualPlanBindingResult Bind(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
-        IReadOnlySet<string>? excludedContainerIds = null)
+        IReadOnlySet<string>? excludedContainerIds = null,
+        bool omitInvalidSlotEntries = false)
     {
-        var effectiveDocument = CreateEffectiveDocument(plan);
+        var effectiveDocument = CreateEffectiveDocument(plan, omitInvalidSlotEntries);
         var (containers, unknownSignals) =
             ContainerToFeeService.ReadInContainerXmlData(effectiveDocument);
         var containerNodes = plan.Nodes
@@ -110,7 +111,9 @@ internal static class RuntimeVisualPlanBinder
         return new RuntimeVisualPlanBindingResult(true, bound, unknownSignals, null);
     }
 
-    internal static XDocument CreateEffectiveDocument(VisualPlan plan)
+    internal static XDocument CreateEffectiveDocument(
+        VisualPlan plan,
+        bool omitInvalidSlotEntries = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var document = XDocument.Load(plan.SourceXmlPath, LoadOptions.None);
@@ -172,6 +175,20 @@ internal static class RuntimeVisualPlanBinder
                     new XElement("Signal", added.FeeSignalTag),
                     new XElement("Slot", plan.GetEffectiveSlot(addedNode)),
                     new XElement("Note", $"Bestehendes Signal aus Interface '{added.FeeInterfaceName}'")));
+            }
+
+            if (omitInvalidSlotEntries &&
+                ContainerMetadataCatalog.TryGet(containerNodes[containerIndex].TypeName, out var descriptor))
+            {
+                var validSlots = descriptor.Slots.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var invalidEntry in supportedContainers[containerIndex]
+                             .Descendants("Entry")
+                             .Where(entry => !validSlots.Contains(
+                                 entry.Element("Slot")?.Value?.Trim() ?? string.Empty))
+                             .ToArray())
+                {
+                    invalidEntry.Remove();
+                }
             }
         }
 

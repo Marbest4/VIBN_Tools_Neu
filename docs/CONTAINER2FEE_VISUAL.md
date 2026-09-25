@@ -21,6 +21,8 @@ Die visuelle Seite kann eine Container-XML bereits ohne FEE-Verbindung lesen und
 
 Technische Objekte sind im Baum standardmäßig eingeklappt. **Alles aufklappen/Alles zuklappen** wirkt auf die kombinierte Container- und Objektstruktur. Verfügbare FEE-SimObjects und gefundene FEE-Signale besitzen getrennte, unabhängig scrollbar und filterbar dargestellte Spalten. **Nur kompatible Objekte** bezieht sich auf das aktuell ausgewählte Ziel. Die früher schwer lesbare Kantenansicht ist als aufklappbares technisches Detail mit lesbaren Quell-/Zielnamen verfügbar.
 
+Der Baum kann nach **Containertyp** oder **Containername** sortiert werden. Der Statusfilter **Alles vorhanden (grün)** zeigt ausschließlich bestätigte Knoten samt notwendigem Hierarchiekontext. Bei schmalen Fenstern erhält die dreigeteilte Arbeitsfläche eine horizontale Scrollleiste, statt die rechte Signalansicht abzuschneiden.
+
 ## Sidecar-Datei
 
 Benutzeränderungen werden nicht in die Container-XML geschrieben. Standardmäßig entsteht daneben:
@@ -61,6 +63,8 @@ Dieser Link-only-Modus benötigt keine Interface-Auswahl, weil er weder Signale 
 
 Vor der vollständigen Erzeugung prüft Container2FEE Visual die aus dem ContainerFile eindeutig ableitbaren Pflichtbeziehungen der vorhandenen `ModelValidation`. Fehlt eine erforderliche Signal- oder SimObject-Beziehung, verlangt eine Best-Effort-Generierung eine eindringliche, standardmäßig verneinte Bestätigung. Bei **Ja** läuft derselbe Startvorgang unmittelbar weiter; ein zweiter Klick ist nicht erforderlich. Der erste erzeugte BasicFrame trägt den Zusatz **Trotz Validierungsfehlern erstellt**, hält die Fehler weiterhin als `vibn.validation.*`-Properties und erhält pro Fehler einen eigenen untergeordneten BasicFrame mit Code, Meldung und Knotenbezug. Nicht deterministische Laufzeitkonflikte wie mehrere widersprüchliche Signaltreffer bleiben gesperrt, bis sie eindeutig aufgelöst wurden.
 
+Ein nicht mehr existierender Slot bleibt dabei ein sichtbarer Fehler. Nach ausdrücklicher Bestätigung wird nur der nicht bindbare Signal-Eintrag aus dem temporären Laufzeitdokument ausgelassen; die übrigen validen Teile des Containers werden erzeugt und der Fehler wird in den Fehler-BasicFrames dokumentiert. Quelldatei und gespeicherter visueller Plan bleiben unverändert, damit die Slotzuordnung anschließend korrigiert werden kann.
+
 Alle geschriebenen Variablen- und Slotverknüpfungen werden über die FEE-API zurückgelesen. Eine nicht übernommene Verbindung gilt als Fehler. Beim Stopper wird `Floor.CollisionSlot` für neue und vorhandene Floors vor dem Verbinden aktiviert und ebenfalls zurückgelesen. Die Größen bleiben die Werte des bisherigen Container2FEE-Generators: Floor `0,01 × 0,2 × 0,05`, Sensor `0,01 × 0,03 × 0,01`, Surface `2 × 0,5 × 0,05`, MotionJoint/Button `0,5 × 0,5 × 0,5` und PickAndPlace `0,1 × 0,1 × 0,1`. Fehlende Bewegungsparameter erhalten prüfbare Startwerte.
 
 Nicht aus dem ContainerFile ableitbar sind reale Positionen, Pick-/Drop-Marks und die konkrete BeltControl-Achsbeziehung. Diese werden nicht erfunden. Nach deren fachlicher Festlegung ist **Model Validation → Update Objects** als Live-Abnahme auszuführen.
@@ -83,6 +87,8 @@ Nicht aus dem ContainerFile ableitbar sind reale Positionen, Pick-/Drop-Marks un
 Containerbaum, verfügbare FEE-SimObjects und gefundene FEE-Signale besitzen getrennte Statusfilter. Neben **Alle** stehen die für die jeweilige Ansicht sinnvollen Zustände wie vorhanden/zugewiesen, Verknüpfung fehlt, wird erzeugt, nicht zugewiesen und Fehler zur Auswahl. Beim Baum bleibt die Hierarchie erhalten: Trifft ein Kind den Filter, werden seine Eltern als Kontext weiterhin angezeigt.
 
 ## Bewusste technische Grenzen
+
+**FEE aktualisieren** verwendet denselben gebündelten Vollprojektsnapshot wie ModelValidation (`FeeObjectService.UpdateFeeDataAsync`) und leitet daraus SimObjects, Logiken, Cabinets, CabinetElements, Interfaces und bereits gelesene Slots ab. Objekt-, Interface-, Signal- und SimObject-Linkabfragen werden nicht mehr konkurrierend auf denselben zustandsbehafteten SDK-Client losgelassen. Der Abbruch gibt die WPF-Oberfläche an Cancellation-Checkpoints sofort frei. Ein bereits innerhalb eines nativen Herstelleraufrufs blockierter Call kann in derselben EXE technisch nicht sicher gewaltsam beendet werden; er läuft beobachtet im Hintergrund aus und weitere FEE-Schreibvorgänge bleiben bis dahin gesperrt. Dadurch muss nicht die gesamte VIBN-Anwendung hart beendet werden, es wird aber auch kein unsicherer paralleler Zweitzugriff gestartet.
 
 Jeder Generierungslauf erzeugt zusätzlich ein persistentes Vorher-/Nachher-Manifest mit Quellfingerabdruck. Es unterscheidet wiederverwendete, vervollständigte, neu verknüpfte, unveränderte, offene und fehlgeschlagene Knoten. **Letzten Lauf reparieren** lädt nur ein Manifest desselben ContainerFile-Fingerabdrucks und selektiert dessen offene Container erneut. Bereits ausgeführte FEE-Änderungen werden nicht zurückgerollt.
 

@@ -17,10 +17,12 @@ public sealed class ProjectQualityPageVM : MvvmBase
     private readonly ProjectQualityGateService _qualityGate;
     private readonly QualityGateReportWriter _reportWriter;
     private readonly IFolderSelectionService _folderSelection;
+    private readonly QualityEvidenceStore _evidenceStore;
     private ProjectProfile? _selectedProfile;
     private QualityGateReport? _lastReport;
     private bool _isBusy;
     private string _statusText = "Projektprofil auswählen oder neu anlegen.";
+    private string _lastRunText = "Noch nicht in dieser Sitzung ausgeführt.";
 
     public ProjectQualityPageVM()
         : this(
@@ -44,7 +46,8 @@ public sealed class ProjectQualityPageVM : MvvmBase
         ContainerSignalObservationReader signalReader,
         ProjectQualityGateService qualityGate,
         QualityGateReportWriter reportWriter,
-        IFolderSelectionService folderSelection)
+        IFolderSelectionService folderSelection,
+        QualityEvidenceStore? evidenceStore = null)
     {
         _profileStore = profileStore;
         _signalRegistry = signalRegistry;
@@ -52,6 +55,7 @@ public sealed class ProjectQualityPageVM : MvvmBase
         _qualityGate = qualityGate;
         _reportWriter = reportWriter;
         _folderSelection = folderSelection;
+        _evidenceStore = evidenceStore ?? QualityEvidenceStore.Instance;
         Editor = new ProjectProfileEditorVM();
 
         NewProfileCommand = GetCommandBinding(NewProfile);
@@ -65,6 +69,7 @@ public sealed class ProjectQualityPageVM : MvvmBase
         AnalyzeSignalsCommand = GetCommandBindingAsync(() => ReconcileSignalsAsync(false));
         ApplySignalRegistryCommand = GetCommandBindingAsync(() => ReconcileSignalsAsync(true));
         ExportReportCommand = GetCommandBinding(ExportReport);
+        _evidenceStore.EvidenceChanged += OnEvidenceChanged;
         LoadProfiles();
     }
 
@@ -119,6 +124,27 @@ public sealed class ProjectQualityPageVM : MvvmBase
         "TIA gilt erst nach erfolgreichem Compile als nachgewiesen. Emulate3D/EKS prüfen ohne Hersteller-SDK derzeit nur die lokale Bereitschaft. " +
         "Generierte Testszenarien benötigen vor einer Live-Ausführung eine fachliche Freigabe.";
 
+    public string TestInstructions =>
+        "1. Projektprofil anlegen und mindestens den Namen eintragen. 2. Für eine belastbare XML-Prüfung " +
+        "Requirements.xml und Container.xml auswählen; Projektwurzel, TIA-Version, Bibliothek und Simulatoren " +
+        "sind nur für die jeweils aktivierten Teilprüfungen erforderlich. 3. Profil speichern. 4. Externe " +
+        "Nachweise wie TIA-Compile oder Container2FEE-Generierung in deren Reitern frisch ausführen. " +
+        "5. 'Quality Gate ausführen' starten und Fehler/Warnungen im Prüfergebnis abarbeiten. " +
+        "6. Erst nach fachlicher Freigabe der Testszenarien einen Live-Simulationstest ausführen.";
+
+    public string TestMeaning =>
+        "Bestanden bedeutet: konfigurierte Dateien sind erreichbar und syntaktisch prüfbar, Profilregeln " +
+        "wurden eingehalten, aktivierte Adapter sind verfügbar und gespeicherte Nachweise enthalten keinen " +
+        "Fehler. Es beweist weder eine reale PLC/HMI-Laufzeit noch die physische Reaktion eines Modells. " +
+        "Warnung bedeutet fehlende optionale Angaben, veraltete Nachweise oder eine notwendige Fachprüfung; " +
+        "Fehlgeschlagen bedeutet einen reproduzierbaren Struktur-, Datei-, Regel- oder Compilefehler.";
+
+    public string LastRunText
+    {
+        get => _lastRunText;
+        private set { _lastRunText = value; OnPropertyChanged(); }
+    }
+
     private void LoadProfiles()
     {
         var collection = _profileStore.Load();
@@ -127,6 +153,7 @@ public sealed class ProjectQualityPageVM : MvvmBase
         if (SelectedProfile is null)
             NewProfile();
         SignalIdentities.ReplaceWith(_signalRegistry.Load());
+        Evidence.ReplaceWith(_evidenceStore.Load());
     }
 
     private void NewProfile()
@@ -197,9 +224,20 @@ public sealed class ProjectQualityPageVM : MvvmBase
             Evidence.ReplaceWith(result.Report.Evidence);
             Scenarios.ReplaceWith(result.Scenarios?.Scenarios ?? []);
             AdapterProbes.ReplaceWith(result.AdapterProbes);
+            LastRunText = $"Zuletzt vollständig aktualisiert: {result.Report.CreatedUtc.LocalDateTime:dd.MM.yyyy HH:mm:ss}";
             StatusText = $"Quality Gate: {result.Report.OverallStatus}; {result.Report.ErrorCount} Fehler, " +
                          $"{result.Report.WarningCount} Warnungen, {result.Report.GeneratedScenarioCount} Szenarien.";
         });
+    }
+
+    private void OnEvidenceChanged(object? sender, EventArgs args)
+    {
+        void Refresh() => Evidence.ReplaceWith(_evidenceStore.Load());
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+            Refresh();
+        else
+            dispatcher.BeginInvoke(Refresh);
     }
 
     private async Task ReconcileSignalsAsync(bool persist)

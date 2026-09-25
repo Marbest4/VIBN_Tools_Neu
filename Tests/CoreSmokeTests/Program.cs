@@ -916,6 +916,8 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
     Assert(handler.Requests.Any(url => url.Contains("expand=custom_fields", StringComparison.OrdinalIgnoreCase)) &&
            handler.Requests.Contains("/api/v2/cards/501/subtasks", StringComparer.Ordinal),
         "The workstation query must load project start fields while the authoritative card-level endpoint remains responsible for KONFIGURATION subtasks.");
+    Assert(handler.AllRequestsDisableCaching,
+        "A manual board refresh must bypass intermediary HTTP caches so changed Kanbanize cards are visible immediately.");
 
     using var cache = JsonDocument.Parse(await File.ReadAllTextAsync(
         Path.Combine(cacheRoot, "WorkstationBoardCache.json")));
@@ -1332,14 +1334,22 @@ static async Task VerifyProjectQualityAutomationAsync(string temporaryRoot)
         "External adapter readiness must never be presented as a live API test.");
 
     var evidenceStore = new QualityEvidenceStore(Path.Combine(qualityRoot, "evidence.json"));
+    var evidenceChanged = false;
+    evidenceStore.EvidenceChanged += (_, _) => evidenceChanged = true;
     evidenceStore.Upsert(new QualityEvidence("TIA Compile", "PLC_1", QualityStatus.Passed,
         "0 errors", DateTimeOffset.UtcNow, []));
+    Assert(evidenceChanged, "Quality evidence changes must be observable by an already open Quality Gate page.");
     var gate = new ProjectQualityGateService(adapters: [adapter], evidenceStore: evidenceStore);
     var gateResult = await gate.RunAsync(profile);
     Assert(gateResult.Report.OverallStatus == QualityStatus.Warning && gateResult.Report.GeneratedScenarioCount == 1 &&
            gateResult.Report.Evidence.Single().Area == "TIA Compile" &&
            gateResult.Report.Findings.Any(item => item.Code == "PROFILE_POLICY_PASSED"),
         "The central quality gate must combine structural checks, scenarios, adapters and evidence.");
+    evidenceStore.Upsert(new QualityEvidence("Alter Lauf", "PLC_OLD", QualityStatus.Passed,
+        "historical", DateTimeOffset.UtcNow.AddDays(-2), []));
+    var gateWithStaleEvidence = await gate.RunAsync(profile);
+    Assert(gateWithStaleEvidence.Report.Findings.Any(item => item.Code == "EVIDENCE_STALE"),
+        "Evidence older than 24 hours must be marked stale instead of being presented as current.");
     var reportPaths = new QualityGateReportWriter().Write(gateResult.Report, Path.Combine(qualityRoot, "reports"));
     Assert(File.Exists(reportPaths.JsonPath) && File.Exists(reportPaths.HtmlPath),
         "Quality Gate JSON and HTML reports must be written.");
@@ -1462,6 +1472,7 @@ sealed class RecordingHttpMessageHandler : HttpMessageHandler
 sealed class KanbanizeRefreshHttpMessageHandler(bool emptyWorkstationCards = false) : HttpMessageHandler
 {
     public List<string> Requests { get; } = new();
+    public bool AllRequestsDisableCaching { get; private set; } = true;
 
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -1470,6 +1481,10 @@ sealed class KanbanizeRefreshHttpMessageHandler(bool emptyWorkstationCards = fal
         cancellationToken.ThrowIfCancellationRequested();
         var url = request.RequestUri?.PathAndQuery ?? string.Empty;
         Requests.Add(url);
+        AllRequestsDisableCaching &= request.Headers.CacheControl?.NoCache == true &&
+                                     request.Headers.CacheControl.NoStore &&
+                                     request.Headers.Pragma.Any(value =>
+                                         string.Equals(value.Name, "no-cache", StringComparison.OrdinalIgnoreCase));
         var json = url switch
         {
             "/api/v2/boards/1541/lanes" => "{\"data\":[{\"lane_id\":28125,\"name\":\"GM12345 Tool PC\"}]}",

@@ -206,7 +206,10 @@
             </Border.Style>
         </Border>
 
-        <Grid Grid.Row="2" Margin="0,8,0,8">
+        <ScrollViewer Grid.Row="2" Margin="0,8,0,8"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Disabled">
+        <Grid MinWidth="1200">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="380" MinWidth="280" />
                 <ColumnDefinition Width="5" />
@@ -225,12 +228,19 @@
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Container- und Objektstruktur" />
                     <Grid Grid.Row="1" Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="180" /></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="175" />
+                            <ColumnDefinition Width="175" />
+                        </Grid.ColumnDefinitions>
                         <TextBox MinHeight="29" Text="{Binding TreeFilter, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Nach Name, Typ oder Slot filtern" />
                         <ComboBox Grid.Column="1" Margin="6,0,0,0" ItemsSource="{Binding TreeStatusFilters}"
                                   SelectedItem="{Binding SelectedTreeStatusFilter}" DisplayMemberPath="DisplayName"
                                   ToolTip="Containerbaum nach Ausführungs- und Verknüpfungszustand filtern" />
+                        <ComboBox Grid.Column="2" Margin="6,0,0,0" ItemsSource="{Binding TreeSortOptions}"
+                                  SelectedItem="{Binding SelectedTreeSort}" DisplayMemberPath="DisplayName"
+                                  ToolTip="Container nach Typ oder Name sortieren" />
                     </Grid>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,7">
                         <Button Content="Alles aufklappen" Command="{Binding ExpandAllCommand}" Padding="8,2" />
@@ -604,6 +614,7 @@
                 </Border>
             </Grid>
         </Grid>
+        </ScrollViewer>
 
         <Grid Grid.Row="3" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>

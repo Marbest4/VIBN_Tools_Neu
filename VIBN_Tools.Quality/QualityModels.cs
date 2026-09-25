@@ -59,6 +59,8 @@ public sealed class QualityEvidenceStore
 
     public static QualityEvidenceStore Instance { get; } = new();
 
+    public event EventHandler? EvidenceChanged;
+
     public IReadOnlyList<QualityEvidence> Load()
     {
         lock (_sync)
@@ -87,6 +89,7 @@ public sealed class QualityEvidenceStore
                 .ToArray();
             AtomicJsonFile.Write(_path, items, JsonOptions);
         }
+        EvidenceChanged?.Invoke(this, EventArgs.Empty);
     }
 }
 

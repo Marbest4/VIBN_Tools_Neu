@@ -46,7 +46,9 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         _remoteDesktop = new WindowsRemoteDesktopService(
             _options.WorkingDirectory,
             new WindowsTemporaryRemoteCredentialStore(_credentialConfiguration.GetRemoteDesktopPassword));
-        RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => !IsBusy);
+        RefreshCommand = new AsyncRelayCommand(
+            () => RefreshAsync(allowSharedCacheFallback: false),
+            () => !IsBusy);
         ConnectAutomaticCommand = new RelayCommand<IbnRemoteWorkstationRow>(
             Connect,
             row => row?.CanConnect == true && !IsBusy);
@@ -110,7 +112,7 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         if (_initialized)
             return;
         _initialized = true;
-        await RefreshAsync();
+        await RefreshAsync(allowSharedCacheFallback: true);
     }
 
     public void Dispose()
@@ -120,7 +122,7 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         _httpClient.Dispose();
     }
 
-    private async Task RefreshAsync()
+    private async Task RefreshAsync(bool allowSharedCacheFallback)
     {
         if (IsBusy)
             return;
@@ -129,7 +131,9 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         StatusText = "Arbeitsplatzdaten werden aktualisiert …";
         try
         {
-            var snapshot = await LoadBestAvailableSnapshotAsync(_lifetime.Token);
+            var snapshot = await LoadBestAvailableSnapshotAsync(
+                allowSharedCacheFallback,
+                _lifetime.Token);
             _allWorkstations = snapshot.Workstations;
             var selectedWorkstations = IbnRemoteWorkstationSelectionPolicy.Select(_allWorkstations, _inWorkFilter);
             SynchronizeRows(selectedWorkstations);
@@ -142,7 +146,8 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
 
             await RefreshAvailabilityAsync(_lifetime.Token);
             StatusText = $"{Results.Count} passende Arbeitsplätze; " +
-                         $"{_rowsByPc.Values.Count(row => row.IsOnline)} online.";
+                         $"{_rowsByPc.Values.Count(row => row.IsOnline)} online. " +
+                         $"Stand: {DateTime.Now:dd.MM.yyyy HH:mm:ss}.";
         }
         catch (OperationCanceledException)
         {
@@ -150,7 +155,9 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         }
         catch (Exception exception)
         {
-            StatusText = "Arbeitsplatzdaten konnten nicht geladen werden. Details stehen im IBN-Protokoll.";
+            StatusText = allowSharedCacheFallback
+                ? "Arbeitsplatzdaten konnten nicht geladen werden. Details stehen im IBN-Protokoll."
+                : $"Live-Aktualisierung fehlgeschlagen; die bisherige Anzeige bleibt erhalten: {exception.Message}";
             _log.Error("Datenquelle", StatusText, exception);
         }
         finally
@@ -160,6 +167,7 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
     }
 
     private async Task<ViCoWorkstationSnapshot> LoadBestAvailableSnapshotAsync(
+        bool allowSharedCacheFallback,
         CancellationToken cancellationToken)
     {
         var apiKey = _credentialConfiguration.GetKanbanizeApiKey();
@@ -177,17 +185,34 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
                 var onlineSnapshot = await new LegacyWorkstationCatalog(localCache).LoadAsync(cancellationToken);
                 if (onlineSnapshot.Workstations.Count > 0)
                 {
-                    SourceStatus = "Kanbanize (read-only)";
+                    SourceStatus = $"Kanbanize live (read-only), {DateTime.Now:dd.MM.yyyy HH:mm:ss}";
                     return onlineSnapshot;
                 }
+
+                throw new InvalidDataException(
+                    "Kanbanize lieferte nach der Aktualisierung keine verwendbaren Arbeitsplatzkarten.");
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                if (!allowSharedCacheFallback)
+                {
+                    SourceStatus = "Kanbanize-Liveaktualisierung fehlgeschlagen";
+                    throw new InvalidOperationException(
+                        "Das Board konnte nicht live aktualisiert werden. API-Key, Boardzugriff und Netzwerk prüfen.",
+                        exception);
+                }
                 _log.Warning(
                     "Kanbanize",
                     "Online-Aktualisierung fehlgeschlagen; gemeinsamer Lesecache wird verwendet.",
                     exception.Message);
             }
+        }
+
+        if (!allowSharedCacheFallback)
+        {
+            SourceStatus = "Kanbanize nicht konfiguriert";
+            throw new InvalidOperationException(
+                "Für die Live-Aktualisierung ist ein Kanbanize-API-Key erforderlich.");
         }
 
         SourceStatus = string.IsNullOrWhiteSpace(apiKey)

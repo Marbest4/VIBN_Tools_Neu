@@ -23,63 +23,50 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
             .ToArray();
         var links = new List<VisualFeeObjectLink>();
         var failures = 0;
-        using var throttle = new SemaphoreSlim(8, 8);
-        var reads = candidates.Select(async item =>
+        foreach (var item in candidates)
         {
-            await throttle.WaitAsync(cancellationToken);
-            try
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var direct in item.Slots ?? new Dictionary<string, Guid>())
             {
-                var localLinks = new List<VisualFeeObjectLink>();
-                foreach (var direct in item.Slots ?? new Dictionary<string, Guid>())
-                {
-                    if (direct.Value != Guid.Empty)
-                        localLinks.Add(new VisualFeeObjectLink(
-                            item.Guid.ToString("D"), direct.Key, direct.Value.ToString("D"), string.Empty));
-                }
+                if (direct.Value != Guid.Empty)
+                    links.Add(new VisualFeeObjectLink(
+                        item.Guid.ToString("D"), direct.Key, direct.Value.ToString("D"), string.Empty));
+            }
 
-                var slotNames = GetRelevantSlotNames(item).ToArray();
-                foreach (var slotName in slotNames)
+            foreach (var slotName in GetRelevantSlotNames(item))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    try
+                    var assignments = await Services.ApiInstance.Interface
+                        .GetSlotSlotAssignmentAsync(item.Guid, slotName);
+                    if (assignments is null)
+                        continue;
+                    foreach (var (linkedGuid, linkedSlots) in assignments)
                     {
-                        var assignments = await Services.ApiInstance.Interface
-                            .GetSlotSlotAssignmentAsync(item.Guid, slotName);
-                        if (assignments is null)
+                        if (!Guid.TryParse(linkedGuid, out var parsedGuid))
                             continue;
-                        foreach (var (linkedGuid, linkedSlots) in assignments)
+                        foreach (var linkedSlot in linkedSlots ?? [])
                         {
-                            if (!Guid.TryParse(linkedGuid, out var parsedGuid))
-                                continue;
-                            foreach (var linkedSlot in linkedSlots ?? [])
-                            {
-                                localLinks.Add(new VisualFeeObjectLink(
-                                    item.Guid.ToString("D"),
-                                    slotName,
-                                    parsedGuid.ToString("D"),
-                                    linkedSlot ?? string.Empty));
-                            }
+                            links.Add(new VisualFeeObjectLink(
+                                item.Guid.ToString("D"),
+                                slotName,
+                                parsedGuid.ToString("D"),
+                                linkedSlot ?? string.Empty));
                         }
                     }
-                    catch (OperationCanceledException)
-                    {
-                        throw;
-                    }
-                    catch
-                    {
-                        Interlocked.Increment(ref failures);
-                    }
                 }
-                return localLinks;
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    failures++;
+                }
             }
-            finally
-            {
-                throttle.Release();
-            }
-        });
+        }
 
-        foreach (var result in await Task.WhenAll(reads))
-            links.AddRange(result);
         var distinct = links.Distinct().ToArray();
         if (failures > 0)
             logger.Warning($"{failures} FEE-SimObject-Slot(s) konnten nicht rückgelesen werden.");

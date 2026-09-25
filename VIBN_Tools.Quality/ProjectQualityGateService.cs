@@ -80,6 +80,15 @@ public sealed class ProjectQualityGateService
         }
 
         var evidence = _evidenceStore.Load();
+        var staleThreshold = DateTimeOffset.UtcNow.AddHours(-24);
+        findings.AddRange(evidence
+            .Where(item => item.TimestampUtc < staleThreshold)
+            .Select(item => new QualityFinding(
+                "Nachweise",
+                "EVIDENCE_STALE",
+                QualityStatus.Warning,
+                $"Der Nachweis '{item.Area}' ist älter als 24 Stunden ({item.TimestampUtc.LocalDateTime:dd.MM.yyyy HH:mm}).",
+                $"Die Aktion in '{item.Area}' erneut ausführen und danach dieses Quality Gate aktualisieren.")));
         var allStatuses = findings.Select(item => item.Status).Concat(evidence.Select(item => item.Status)).ToArray();
         var overall = allStatuses.Contains(QualityStatus.Failed)
             ? QualityStatus.Failed

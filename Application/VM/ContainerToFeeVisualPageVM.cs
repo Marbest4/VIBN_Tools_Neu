@@ -38,6 +38,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private string _feeObjectFilter = string.Empty;
     private string _feeSignalFilter = string.Empty;
     private VisualStatusFilterOption _selectedTreeStatusFilter = VisualStatusFilterOption.All;
+    private VisualTreeSortOption _selectedTreeSort = VisualTreeSortOption.ByType;
     private VisualStatusFilterOption _selectedFeeObjectStatusFilter = VisualStatusFilterOption.All;
     private VisualStatusFilterOption _selectedFeeSignalStatusFilter = VisualStatusFilterOption.All;
     private bool _showOnlyCompatibleFeeObjects;
@@ -175,6 +176,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public IReadOnlyList<VisualStatusFilterOption> TreeStatusFilters { get; } =
         VisualStatusFilterOption.TreeOptions;
+    public IReadOnlyList<VisualTreeSortOption> TreeSortOptions { get; } =
+        VisualTreeSortOption.Options;
     public IReadOnlyList<VisualStatusFilterOption> FeeObjectStatusFilters { get; } =
         VisualStatusFilterOption.AssignmentOptions;
     public IReadOnlyList<VisualStatusFilterOption> FeeSignalStatusFilters { get; } =
@@ -1102,6 +1105,19 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
     }
 
+    public VisualTreeSortOption SelectedTreeSort
+    {
+        get => _selectedTreeSort;
+        set
+        {
+            if (ReferenceEquals(_selectedTreeSort, value) || value is null)
+                return;
+            _selectedTreeSort = value;
+            OnPropertyChanged();
+            ApplyTreeSort();
+        }
+    }
+
     public VisualStatusFilterOption SelectedFeeObjectStatusFilter
     {
         get => _selectedFeeObjectStatusFilter;
@@ -1162,11 +1178,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private async Task<FeeRefreshSnapshot> RefreshFeeStateAsync(CancellationToken cancellationToken)
     {
-        var objectsTask = _planService.DiscoverFeeObjectsAsync(cancellationToken);
-        var interfacesTask = _planService.DiscoverFeeInterfacesAsync(cancellationToken);
-        await Task.WhenAll(objectsTask, interfacesTask);
-        IReadOnlyList<VisualFeeObject> objects = await objectsTask;
-        IReadOnlyList<VisualFeeInterface> interfaces = await interfacesTask;
+        IReadOnlyList<VisualFeeObject> objects =
+            await _planService.DiscoverFeeObjectsAsync(cancellationToken);
+        IReadOnlyList<VisualFeeInterface> interfaces =
+            await _planService.DiscoverFeeInterfacesAsync(cancellationToken);
         RefreshFeeObjectProjection(objects);
         RefreshFeeInterfaceProjection(interfaces);
 
@@ -1174,11 +1189,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         // live discovery states afterwards, otherwise that rebuild can mask a
         // missing SimObject-slot link with a stale green container state.
         int automaticAssignments = _planService.AutoAssignMatches();
-        var signalLinksTask = _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
-        var simObjectLinksTask = _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
-        await Task.WhenAll(signalLinksTask, simObjectLinksTask);
-        IReadOnlyList<VisualFeeSignalLink> signalLinks = await signalLinksTask;
-        IReadOnlyList<VisualFeeObjectLink> simObjectLinks = await simObjectLinksTask;
+        IReadOnlyList<VisualFeeSignalLink> signalLinks =
+            await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
+        IReadOnlyList<VisualFeeObjectLink> simObjectLinks =
+            await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
         ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
         ApplyDiscoveredSimObjectStates();
         ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
@@ -1480,6 +1494,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
             ApplyVerifiedContainerStates(_verifiedContainerIds);
             PublishIssues(validation.Issues);
+            ApplyTreeSort();
             ApplyTreeFilter();
 
             SelectedTreeNode = FindTreeNode(selectedNodeId) ?? TreeRoots.FirstOrDefault();
@@ -1894,6 +1909,31 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             root.ApplyFilter(TreeFilter, MatchesTreeStatus);
     }
 
+    private void ApplyTreeSort()
+    {
+        SortContainerChildren(TreeRoots);
+        foreach (var root in TreeRoots)
+        foreach (var node in root.SelfAndDescendants())
+            SortContainerChildren(node.Children);
+    }
+
+    private void SortContainerChildren(ObservableCollection<ContainerToFeeVisualTreeNodeVM> nodes)
+    {
+        if (!nodes.Any(node => node.Kind == VisualNodeKind.Container))
+            return;
+        var sorted = SelectedTreeSort.Key switch
+        {
+            VisualTreeSortKey.ContainerName => nodes
+                .OrderBy(node => node.Kind == VisualNodeKind.Container ? 0 : 1)
+                .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase),
+            _ => nodes
+                .OrderBy(node => node.Kind == VisualNodeKind.Container ? 0 : 1)
+                .ThenBy(node => node.TypeName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase),
+        };
+        nodes.ReplaceWith(sorted.ToArray());
+    }
+
     private bool MatchesTreeStatus(ContainerToFeeVisualTreeNodeVM node) =>
         SelectedTreeStatusFilter.Key switch
         {
@@ -2145,13 +2185,30 @@ public enum VisualStatusFilterKey
     Valid,
 }
 
+public enum VisualTreeSortKey
+{
+    ContainerType,
+    ContainerName,
+}
+
+public sealed record VisualTreeSortOption(VisualTreeSortKey Key, string DisplayName)
+{
+    public static VisualTreeSortOption ByType { get; } =
+        new(VisualTreeSortKey.ContainerType, "Containertyp (A-Z)");
+    public static IReadOnlyList<VisualTreeSortOption> Options { get; } =
+    [
+        ByType,
+        new(VisualTreeSortKey.ContainerName, "Containername (A-Z)"),
+    ];
+}
+
 public sealed record VisualStatusFilterOption(VisualStatusFilterKey Key, string DisplayName)
 {
     public static VisualStatusFilterOption All { get; } = new(VisualStatusFilterKey.All, "Alle");
     public static IReadOnlyList<VisualStatusFilterOption> TreeOptions { get; } =
     [
         All,
-        new(VisualStatusFilterKey.Verified, "Vollständig verknüpft"),
+        new(VisualStatusFilterKey.Verified, "Alles vorhanden (grün)"),
         new(VisualStatusFilterKey.LinkMissing, "Verknüpfung fehlt"),
         new(VisualStatusFilterKey.Unassigned, "Nicht zugewiesen"),
         new(VisualStatusFilterKey.Planned, "Wird erzeugt"),

@@ -8,12 +8,17 @@ Der Level9-Reiter **Project Quality** bündelt wiederholbare Qualitätsnachweise
 
 Profile werden atomar unter `%LOCALAPPDATA%\VIBN_Tools\quality\project-profiles.json` gespeichert. Sie enthalten Kunde, Projektwurzel, Requirements-/ContainerFile, TIA-Version, ViCo-Bibliothek, Rockwell-Standard, erlaubte Containertypen, Namensregeln, Signaladressbereiche und die aktivierten Simulationsadapter. Produktive Zugangsdaten gehören nicht in das Profil. Namensregeln werden als `Container=<Regex>; Signal=<Regex>` und Adressbereiche beispielsweise als `E0-E127, A0-A127` eingegeben; das Quality Gate wendet diese Regeln tatsächlich auf das ContainerFile an.
 
+In der Oberfläche ist **Name** rot als einziges technisches Pflichtfeld markiert. Projektwurzel, Requirements.xml und Container.xml sind orange: Das Profil kann ohne sie gespeichert werden, das Gate überspringt dann aber wesentliche Datei-, Struktur- und Szenarioprüfungen und meldet dies. Blaue Felder sind optional beziehungsweise nur für die zugehörige Plattform oder Zusatzregel erforderlich. Die Eingabefelder sind in der Breite begrenzt; bei kleineren Fenstern stehen horizontale und vertikale Scrollleisten zur Verfügung.
+
 ## Quality-Gate-Ablauf
 
 1. Profil auswählen, Pfade konfigurieren und speichern.
 2. **Quality Gate ausführen** prüft Profilpfade, sichere XML-Lesbarkeit, erzeugt neutrale Testszenarien, prüft konfigurierte Adapter und führt vorhandene Nachweise zusammen.
 3. **Bericht exportieren** schreibt JSON und HTML nach `<Projektwurzel>\QualityReports`; fehlt die Projektwurzel, wird der Dokumente-Ordner verwendet.
 4. Fehler und Warnungen bleiben getrennt. Ein nicht live geprüfter externer Adapter bleibt eine Warnung.
+5. Nachweise werden bei jeder Ausführung neu aus dem gemeinsamen Evidence-Store geladen. Bereits geöffnete Quality-Seiten reagieren außerdem auf neue TIA-Compile-, Signalregister- oder Generierungsnachweise. Ein Nachweis älter als 24 Stunden wird als `EVIDENCE_STALE` gewarnt und muss im zuständigen Reiter erneut erzeugt werden.
+
+**Passed** belegt nur die tatsächlich ausgeführten strukturellen Prüfungen und frischen Nachweise. **Warning** kennzeichnet optionale Lücken, einen nicht live verifizierten Adapter, einen veralteten Nachweis oder notwendige Fachfreigabe. **Failed** bezeichnet einen reproduzierbaren Datei-, XML-, Regel-, Identitäts- oder Compilefehler. Keine dieser Stufen simuliert ohne Runtime-Adapter eine HMI-Bedienung oder physische Zylinderrückmeldung.
 
 ## Signalidentitätsregister
 

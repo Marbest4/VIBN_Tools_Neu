@@ -51,7 +51,8 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="360" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="250" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
@@ -68,7 +69,7 @@
                         <Button MinWidth="245"
                                 Margin="8,0,0,0"
                                 Content="Konfigurieren + AxisDB/AxisFC erzeugen"
-                                ToolTip="Konfiguriert die ausgewählten Achsen und legt AxisDB.xml/AxisFC.xml im unten gewählten ViCo-Bibliotheksordner ab. Import und Projektspeicherung erfolgen nicht automatisch."
+                                ToolTip="Konfiguriert ausgewählte gefundene Achsen und nimmt markierte bereits konfigurierte Achsen in AxisDB.xml/AxisFC.xml auf."
                                 Command="{Binding ConfigureAxesAndCreateFilesCommand}" />
                         <Button MinWidth="65" Margin="8,0,0,0" Content="Alle" Command="{Binding SelectAllAxesCommand}" />
                         <Button MinWidth="65" Margin="8,0,0,0" Content="Keine" Command="{Binding SelectNoAxesCommand}" />
@@ -84,7 +85,21 @@
                         </StackPanel>
                     </Border>
 
-                    <Grid Grid.Row="2">
+                    <Grid Grid.Row="2" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="190" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="AxisDB/AxisFC-Ablagewurzel"
+                                   ToolTip="Es werden die Unterordner _Programm\Axis angelegt. Das entspricht dem bisherigen Avalonia-Ablauf." />
+                        <TextBox Grid.Column="1" Margin="8,0" Text="{Binding AxisArtifactPath}"
+                                 ToolTip="Projekt- oder Kundenordner auswählen. Ausgabe: &lt;Ordner&gt;\_Programm\Axis\AxisDB.xml und AxisFC.xml" />
+                        <Button Grid.Column="2" MinWidth="110" Content="Durchsuchen"
+                                Command="{Binding BrowseAxisArtifactCommand}" />
+                    </Grid>
+
+                    <Grid Grid.Row="3">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="12" />
@@ -103,17 +118,18 @@
                         </GroupBox>
                         <GroupBox Grid.Column="2" Header="2. Erfolgreich konfigurierte Achsen">
                             <DataGrid ItemsSource="{Binding ConfiguredAxes}" AutoGenerateColumns="False"
-                                      IsReadOnly="True" EnableRowVirtualization="True">
+                                      IsReadOnly="False" EnableRowVirtualization="True">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="Achse" Binding="{Binding Name, Mode=OneWay}" Width="140" />
-                                    <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupPath, Mode=OneWay}" Width="*" />
-                                    <DataGridTextColumn Header="Ergebnis" Binding="{Binding Result, Mode=OneWay}" Width="190" />
+                                    <DataGridCheckBoxColumn Header="In Dateien" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="75" />
+                                    <DataGridTextColumn Header="Achse" Binding="{Binding Name, Mode=OneWay}" Width="140" IsReadOnly="True" />
+                                    <DataGridTextColumn Header="Gruppe" Binding="{Binding GroupPath, Mode=OneWay}" Width="*" IsReadOnly="True" />
+                                    <DataGridTextColumn Header="Ergebnis" Binding="{Binding Result, Mode=OneWay}" Width="190" IsReadOnly="True" />
                                 </DataGrid.Columns>
                             </DataGrid>
                         </GroupBox>
                     </Grid>
 
-                    <DockPanel Grid.Row="3" Margin="0,8,0,0">
+                    <DockPanel Grid.Row="4" Margin="0,8,0,0">
                         <ProgressBar Width="250" Height="8" Minimum="0" Maximum="100"
                                      VerticalAlignment="Center" Value="{Binding OperationProgress, Mode=OneWay}" />
                         <Button MinWidth="190" Margin="8,0,0,0" HorizontalAlignment="Right"
