@@ -134,13 +134,13 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
     public ICommand CompileQualityGateCommand { get; }
 
     public string CompileQualityGateInfo =>
-        "Kompiliert ausschließlich die ausgewählte PLC über TIA Openness und liest Fehler, Warnungen und " +
-        "Meldungspfade aus. Das Projekt wird dabei nicht gespeichert. Ein erfolgreiches Ergebnis wird als " +
-        "Nachweis für das zentrale Quality Gate hinterlegt; Safety- oder Know-how-geschützte Inhalte können " +
-        "weiterhin eine Anmeldung direkt in TIA erfordern. Das ist ein statischer Build-Test, kein Laufzeit- oder " +
-        "HMI-Funktionstest. Ein automatischer Ablauf wie 'HMI-Taste -> PLC-Ausgang -> Simulationsrückmeldung' " +
-        "benötigt zusätzlich eine verbundene WinCC Runtime, PLCSIM Advanced oder eine Test-PLC und einen " +
-        "Simulationsadapter mit sicherer Rücksetzung der geschriebenen Werte.";
+        "Der Button kompiliert ausschließlich die ausgewählte PLC über TIA Openness und liest Fehler, Warnungen " +
+        "und Meldungspfade aus. Ergebnisse stehen direkt in der Tabelle, im Anwendungslog und als Nachweis unter " +
+        "Project Quality > Adapter/Nachweise. Das Projekt wird nicht gespeichert. Safety- oder Know-how-geschützte " +
+        "Inhalte können weiterhin eine Anmeldung direkt in TIA erfordern. Auch mit vorhandenen Lizenzen wird derzeit " +
+        "kein HMI-Funktionstest automatisch gestartet. Ein Ablauf wie 'HMI-Taste -> PLC-Ausgang -> " +
+        "Simulationsrückmeldung' benötigt eine verbundene WinCC Runtime, PLCSIM Advanced oder eine Test-PLC, eine " +
+        "projektspezifische Tag-/Bildzuordnung, einen Simulationsadapter und eine sichere Rücksetzung der Schreibwerte.";
 
     public string AxisConfigurationInfo =>
         "Auswahl konfigurieren ändert ausschließlich die markierten Technologieachsen. " +

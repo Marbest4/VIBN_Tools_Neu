@@ -52,7 +52,7 @@
 
         <HierarchicalDataTemplate DataType="{x:Type vm:ContainerToFeeVisualTreeNodeVM}"
                                   ItemsSource="{Binding Children}">
-            <Grid Margin="2" Background="{Binding StateBackground}"
+            <Grid Margin="2" Background="{Binding DisplayBackground}"
                   Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                   behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
                   behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
@@ -103,7 +103,8 @@
         </HierarchicalDataTemplate>
     </UserControl.Resources>
 
-    <Grid Margin="10">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+    <Grid Margin="10" MinWidth="1000" MinHeight="700">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -209,13 +210,13 @@
         <ScrollViewer Grid.Row="2" Margin="0,8,0,8"
                       HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Disabled">
-        <Grid MinWidth="1200">
+        <Grid MinWidth="1100">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="380" MinWidth="280" />
+                <ColumnDefinition Width="1.05*" MinWidth="280" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="*" MinWidth="360" />
+                <ColumnDefinition Width="1.25*" MinWidth="380" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="690" MinWidth="520" />
+                <ColumnDefinition Width="1.7*" MinWidth="480" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -264,9 +265,9 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="2*" />
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="2*" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
@@ -357,8 +358,9 @@
                                         <ItemsControl Grid.Row="3" ItemsSource="{Binding Assignments}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,2" Padding="7,4" Background="White"
+                                                    <Border Margin="0,2" Padding="7,4" Background="{Binding StateBackground}"
                                                             BorderBrush="#B6C9E0" BorderThickness="1" CornerRadius="3"
+                                                            ToolTip="{Binding ToolTipText}"
                                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
@@ -386,7 +388,7 @@
 
                     <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,8,0,4"
                                Text="Signalslots des ausgewählten Containers" />
-                    <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}"
+                    <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}" MinHeight="190"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                              ScrollViewer.CanContentScroll="True"
@@ -457,17 +459,34 @@
 
                     <Expander Grid.Row="5" Grid.RowSpan="2" Margin="0,8,0,0"
                               Header="Technische Verknüpfungen (Details)" IsExpanded="False">
+                        <Grid MinHeight="190">
+                            <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                         <DataGrid ItemsSource="{Binding VisibleEdges}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
                                   HeadersVisibility="Column" SelectionMode="Single"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                   EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow"><Setter Property="ToolTip" Value="{Binding Description}"/></Style>
+                            </DataGrid.RowStyle>
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Art" Binding="{Binding Kind, Mode=OneWay}" Width="105" />
-                                <DataGridTextColumn Header="Quelle" Binding="{Binding Source, Mode=OneWay}" Width="*" />
-                                <DataGridTextColumn Header="Ziel" Binding="{Binding Target, Mode=OneWay}" Width="*" />
-                                <DataGridTextColumn Header="Bedeutung" Binding="{Binding Description, Mode=OneWay}" Width="180" />
+                                <DataGridTextColumn Header="Art" Binding="{Binding Kind, Mode=OneWay}" Width="Auto" MinWidth="80" />
+                                <DataGridTextColumn Header="Quelle" Binding="{Binding Source, Mode=OneWay}" Width="2*" MinWidth="120" />
+                                <DataGridTextColumn Header="Ziel" Binding="{Binding Target, Mode=OneWay}" Width="2*" MinWidth="120" />
+                                <DataGridTextColumn Header="Bedeutung" Binding="{Binding Description, Mode=OneWay}" Width="3*" MinWidth="150" />
                             </DataGrid.Columns>
                         </DataGrid>
+                            <TextBlock Grid.Row="1" Margin="0,7,0,3" FontWeight="SemiBold" Text="Vorgangsprotokoll" />
+                            <ListBox Grid.Row="2" ItemsSource="{Binding OperationDetails}" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Margin="2" TextTrimming="CharacterEllipsis" ToolTip="{Binding ToolTipText}">
+                                            <Run Text="{Binding TimestampText, Mode=OneWay}"/><Run Text=" · "/><Run FontWeight="SemiBold" Text="{Binding Category, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Message, Mode=OneWay}"/>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
                     </Expander>
                 </Grid>
             </Border>
@@ -637,4 +656,5 @@
             </StackPanel>
         </Grid>
     </Grid>
+    </ScrollViewer>
 </UserControl>

@@ -57,6 +57,19 @@
                         <TextBlock Margin="0,0,18,0" Foreground="#FF8A5A00" FontWeight="SemiBold" Text="Orange: empfohlen für belastbare Teilprüfung" />
                         <TextBlock Foreground="#FF365E77" FontWeight="SemiBold" Text="Blau: optional/plattformspezifisch" />
                     </WrapPanel>
+                    <TextBlock Margin="0,12,0,4" FontWeight="SemiBold" Text="Aktuelle Eingaben und tatsächlich ausgeführte Teilprüfungen" />
+                    <DataGrid MaxHeight="250" ItemsSource="{Binding InputRequirements}"
+                              AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              ToolTip="Die Liste reagiert direkt auf das Projektprofil. Nicht angegebene optionale Quellen werden übersprungen; ein grünes Quality Gate ersetzt keinen HMI- oder Modell-Laufzeittest.">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Eingabe" Binding="{Binding Input}" Width="150" />
+                            <DataGridTextColumn Header="Notwendigkeit" Binding="{Binding Necessity}" Width="175" />
+                            <DataGridTextColumn Header="Aktueller Status" Binding="{Binding State}" Width="125" />
+                            <DataGridTextColumn Header="Datei/Format" Binding="{Binding AcceptedFormat}" Width="210" />
+                            <DataGridTextColumn Header="Was wird geprüft?" Binding="{Binding Check}" Width="*" MinWidth="360" />
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </StackPanel>
             </Border>
         </Expander>

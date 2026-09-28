@@ -68,6 +68,14 @@ namespace VIBN_Tools.Application.VM
             () => SetAllReimportChanges(true));
         public ICommand SelectNoReimportChanges => GetCommandBinding(
             () => SetAllReimportChanges(false));
+        public ICommand ToggleGroupingHelp => GetCommandBinding(() =>
+            IsGroupingHelpVisible = !IsGroupingHelpVisible);
+        public ICommand UseAddressGroupingExample => GetCommandBinding(ApplyAddressGroupingExample);
+        public ICommand UseIdGroupingExample => GetCommandBinding(ApplyIdGroupingExample);
+        public ICommand HideReimportComparison => GetCommandBinding(() =>
+            IsReimportComparisonVisible = false);
+        public ICommand ShowReimportComparison => GetCommandBinding(() =>
+            IsReimportComparisonVisible = true);
 
 
 
@@ -164,6 +172,7 @@ namespace VIBN_Tools.Application.VM
             {
                 _selectedFilteredEntry = value;
                 OnPropertyChanged(nameof(SelectedFilteredEntry));
+                UpdateGroupingPreview();
             }
         }
 
@@ -196,6 +205,7 @@ namespace VIBN_Tools.Application.VM
             {
                 _selectedUnassignedEntry = value;
                 OnPropertyChanged(nameof(SelectedUnassignedEntry));
+                UpdateGroupingPreview();
             }
         }
 
@@ -228,6 +238,7 @@ namespace VIBN_Tools.Application.VM
             {
                 _selectedContainers = value;
                 OnPropertyChanged(nameof(SelectedContainers));
+                UpdateGroupingPreview();
             }
         }
 
@@ -321,6 +332,8 @@ namespace VIBN_Tools.Application.VM
                 _settings = value;
                 _settings.PropertyChanged += Settings_PropertyChanged;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(GroupingRuleSummary));
+                UpdateGroupingPreview();
                 ConfigureAutoSaveTimer();
             }
         }
@@ -365,6 +378,22 @@ namespace VIBN_Tools.Application.VM
         public ObservableCollection<WorkspaceActivityLogEntry> ActivityLog { get; } = [];
 
         public bool HasPendingReimportChanges => PendingReimportChanges.Count > 0;
+        private bool _isReimportComparisonVisible = true;
+        public bool IsReimportComparisonVisible
+        {
+            get => _isReimportComparisonVisible;
+            set
+            {
+                if (_isReimportComparisonVisible == value)
+                    return;
+                _isReimportComparisonVisible = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowPendingReimportPanel));
+                OnPropertyChanged(nameof(ShowCollapsedReimportSummary));
+            }
+        }
+        public bool ShowPendingReimportPanel => HasPendingReimportChanges && IsReimportComparisonVisible;
+        public bool ShowCollapsedReimportSummary => HasPendingReimportChanges && !IsReimportComparisonVisible;
         public bool CanUndo => _undoHistory.Count > 0;
         public bool CanRedo => _redoHistory.Count > 0;
         public string UndoDescription =>
@@ -376,6 +405,29 @@ namespace VIBN_Tools.Application.VM
                 ? $"Wiederholen: {_redoHistory[^1].Description}"
                 : "Keine Änderung zum Wiederholen";
         public bool HasActivityLog => ActivityLog.Count > 0;
+
+        private bool _isGroupingHelpVisible;
+        public bool IsGroupingHelpVisible
+        {
+            get => _isGroupingHelpVisible;
+            set
+            {
+                if (_isGroupingHelpVisible == value)
+                    return;
+                _isGroupingHelpVisible = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private ContainerGroupingPreview? _groupingPreview;
+        public string GroupingRuleSummary => BuildGroupingRuleSummary();
+        public string GroupingPreviewSignal => _groupingPreview?.Signal ?? "Kein Signal ausgewählt";
+        public string GroupingPreviewCriteria => _groupingPreview?.Criteria ??
+            "Ein Signal in Nicht zugeordnet, Gefiltert oder einen Container auswählen.";
+        public string GroupingPreviewKey => _groupingPreview?.GroupKey ?? "–";
+        public string GroupingPreviewContainerName => _groupingPreview?.ContainerName ?? "–";
+        public string GroupingPreviewError => _groupingPreview?.Error ?? string.Empty;
+        public bool HasGroupingPreviewError => _groupingPreview?.HasError == true;
 
         public string ClearActivityLogUnavailableReason => HasActivityLog
             ? "Löscht die sichtbare Sitzungshistorie; das strukturierte Lernprotokoll bleibt erhalten."
@@ -875,6 +927,9 @@ namespace VIBN_Tools.Application.VM
                                 }
 
                                 OnPropertyChanged(nameof(HasPendingReimportChanges));
+                                IsReimportComparisonVisible = true;
+                                OnPropertyChanged(nameof(ShowPendingReimportPanel));
+                                OnPropertyChanged(nameof(ShowCollapsedReimportSummary));
                                 OnPropertyChanged(nameof(ShowReimportNotice));
                                 OnPropertyChanged(nameof(PendingReimportSelectionSummary));
                                 ReimportNotice =
@@ -1101,6 +1156,9 @@ namespace VIBN_Tools.Application.VM
                 }
 
                 OnPropertyChanged(nameof(HasPendingReimportChanges));
+                IsReimportComparisonVisible = true;
+                OnPropertyChanged(nameof(ShowPendingReimportPanel));
+                OnPropertyChanged(nameof(ShowCollapsedReimportSummary));
                 OnPropertyChanged(nameof(ShowReimportNotice));
                 OnPropertyChanged(nameof(PendingReimportSelectionSummary));
                 ReimportNotice =
@@ -1347,6 +1405,8 @@ namespace VIBN_Tools.Application.VM
 
         private void Settings_PropertyChanged(object? sender, PropertyChangedEventArgs eventArgs)
         {
+            UpdateGroupingPreview();
+            OnPropertyChanged(nameof(GroupingRuleSummary));
             if (eventArgs.PropertyName is not nameof(ContainerGenerationSettings.AutoSaveEnabled) and
                 not nameof(ContainerGenerationSettings.AutoSaveIntervalMinutes))
             {
@@ -1512,6 +1572,8 @@ namespace VIBN_Tools.Application.VM
             _pendingComparisonIsContainerFile = false;
             PendingReimportChanges.Clear();
             OnPropertyChanged(nameof(HasPendingReimportChanges));
+            OnPropertyChanged(nameof(ShowPendingReimportPanel));
+            OnPropertyChanged(nameof(ShowCollapsedReimportSummary));
             OnPropertyChanged(nameof(ShowReimportNotice));
             OnPropertyChanged(nameof(PendingReimportSelectionSummary));
         }
@@ -2181,17 +2243,18 @@ namespace VIBN_Tools.Application.VM
 
         private void SelectionChanged_Executed(object parameter)
         {
-            this.SelectedContainers.Clear();
+            var selected = new List<ContainerData>();
             if (parameter is IList ConvertedList)
             {
                 foreach (var SelectedData in ConvertedList)
                 {
                     if (SelectedData is ContainerData ConvertedData)
                     {
-                        this.SelectedContainers.Add(ConvertedData);
+                        selected.Add(ConvertedData);
                     }
                 }
             }
+            SelectedContainers = selected;
         }
 
 
@@ -2349,10 +2412,7 @@ namespace VIBN_Tools.Application.VM
             else
             {
                 var targetRow = FindAncestor<DataGridRow>((DependencyObject)e.OriginalSource);
-                if (targetRow == null)
-                    return;
-
-                var targetDescription = targetRow.Item is ContainerData target
+                var targetDescription = targetRow?.Item is ContainerData target
                     ? $"Container „{target.Component}“ ({target.Type})"
                     : "neuer Container";
                 RunWorkspaceAction(
@@ -2368,9 +2428,9 @@ namespace VIBN_Tools.Application.VM
         /// </summary>
         /// <param name="targetRow">Row in the target grid.</param>
         /// <param name="data">Data entry to add.</param>
-        private void MoveData(DataGridRow targetRow, ContainerEntry data)
+        private void MoveData(DataGridRow? targetRow, ContainerEntry data)
         {
-            if (targetRow.Item is ContainerData targetData)
+            if (targetRow?.Item is ContainerData targetData)
             {
                 // Quell-Container ermitteln (fuer Log: welcher Container verliert das Signal?)
                 var sourceContainer = ContainerList.FirstOrDefault(c => c.DataList.Contains(data));
@@ -2408,9 +2468,13 @@ namespace VIBN_Tools.Application.VM
                     sourceKey: GetActionLogSourceKey());
 
             }
-            else if (targetRow.Item == CollectionView.NewItemPlaceholder)
+            else if (targetRow is null || targetRow.Item == CollectionView.NewItemPlaceholder)
             {
-                ContainerData CreatedContainerData = new ContainerData();
+                ContainerData CreatedContainerData = new ContainerData
+                {
+                    Id = $"manual-{Guid.NewGuid():N}",
+                    Component = CreateContainerName(data)
+                };
                 GenerationWorkspaceEditor.MoveToContainer(
                     data,
                     CreatedContainerData,
@@ -2431,6 +2495,20 @@ namespace VIBN_Tools.Application.VM
                     sourceKey: GetActionLogSourceKey());
 
             }
+        }
+
+        private static string CreateContainerName(ContainerEntry entry)
+        {
+            var source = !string.IsNullOrWhiteSpace(entry.Signal)
+                ? entry.Signal
+                : !string.IsNullOrWhiteSpace(entry.ID)
+                    ? entry.ID
+                    : !string.IsNullOrWhiteSpace(entry.Address)
+                        ? entry.Address
+                        : entry.EnsureSignalId();
+            var normalized = Regex.Replace(source.Trim(), @"\s+", "_");
+            normalized = Regex.Replace(normalized, @"[^\p{L}\p{N}_.-]", "_").Trim('_');
+            return string.IsNullOrWhiteSpace(normalized) ? "Manueller_Container" : normalized;
         }
 
         private void ContainerList_CollectionChanged(
@@ -2739,6 +2817,63 @@ namespace VIBN_Tools.Application.VM
             entry.IsManuallyEdited = true;
             entry.ReviewState = ContainerEntryReviewState.ManuallyEdited;
             entry.ReviewMessage = message;
+        }
+
+        private void ApplyAddressGroupingExample()
+        {
+            Settings.GroupByAddress = true;
+            Settings.RegexAddress = @"^[%]?[IEAQM](\d+)\.";
+            StatusText = "Beispiel aktiv: Adressen wie %I12.3 oder A12.0 werden über die Byteadresse 12 gruppiert.";
+            UpdateGroupingPreview();
+        }
+
+        private void ApplyIdGroupingExample()
+        {
+            Settings.GroupById = true;
+            Settings.RegexId = @"^(.+?)[._-]\d+$";
+            StatusText = "Beispiel aktiv: IDs wie Motor_01 und Motor_02 werden über den Präfix Motor gruppiert.";
+            UpdateGroupingPreview();
+        }
+
+        private string BuildGroupingRuleSummary()
+        {
+            var rules = new List<string>();
+            if (Settings.GroupByComponent)
+                rules.Add("erkannter Component-/Containername muss gleich sein");
+            if (Settings.GroupByType)
+                rules.Add("Containertyp muss gleich sein");
+            if (Settings.GroupById)
+                rules.Add($"ID muss Regex '{Settings.RegexId}' treffen; verwendet werden die Klammergruppen");
+            if (Settings.GroupByAddress)
+                rules.Add($"Adresse muss Regex '{Settings.RegexAddress}' treffen; verwendet werden die Klammergruppen");
+            return rules.Count == 0
+                ? "Aktuell ist keine zusätzliche Gruppierungsregel aktiv."
+                : "Aktiv: " + string.Join("; ", rules) + ". Alle aktiven Kriterien müssen für eine gemeinsame Gruppe passen.";
+        }
+
+        private void UpdateGroupingPreview()
+        {
+            ContainerEntry? entry = SelectedUnassignedEntry ?? SelectedFilteredEntry;
+            ContainerData? owner = null;
+            if (entry is null)
+            {
+                owner = SelectedContainers.FirstOrDefault();
+                entry = owner?.DataList.FirstOrDefault();
+            }
+            else
+            {
+                owner = ContainerList.FirstOrDefault(container => container.DataList.Contains(entry));
+            }
+
+            _groupingPreview = entry is null
+                ? null
+                : Settings.CreateGroupingPreview(entry, owner?.Component, owner?.Type);
+            OnPropertyChanged(nameof(GroupingPreviewSignal));
+            OnPropertyChanged(nameof(GroupingPreviewCriteria));
+            OnPropertyChanged(nameof(GroupingPreviewKey));
+            OnPropertyChanged(nameof(GroupingPreviewContainerName));
+            OnPropertyChanged(nameof(GroupingPreviewError));
+            OnPropertyChanged(nameof(HasGroupingPreviewError));
         }
 
 

@@ -10,9 +10,15 @@
     <UserControl.DataContext>
         <vm:Fee2ContainerPageVM />
     </UserControl.DataContext>
+    <UserControl.Resources>
+        <Style x:Key="ResponsiveColumnHeader" TargetType="DataGridColumnHeader">
+            <Setter Property="Padding" Value="5,4" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Resources>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <Grid Margin="20" MinWidth="980" MinHeight="620">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+    <Grid Margin="20" MinWidth="1120" MinHeight="680">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -49,6 +55,8 @@
         <DataGrid Grid.Row="2" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedRoot}"
                   AutoGenerateColumns="False" IsReadOnly="False"
                   CanUserAddRows="False" CanUserDeleteRows="False"
+                  MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
+                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True">
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Export" ToolTip="Legt fest, ob dieser oberste BasicFrame in das ContainerFile übernommen wird." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
@@ -87,9 +95,9 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="2*" MinWidth="360" />
                 <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="3*" />
+                <ColumnDefinition Width="3*" MinWidth="520" />
             </Grid.ColumnDefinitions>
             <GroupBox Header="Erkannte Container">
                 <Grid>
@@ -100,6 +108,8 @@
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
@@ -130,6 +140,8 @@
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding SignalRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
@@ -161,6 +173,8 @@
                              ToolTip="Nicht zugeordnete Objekte nach Name, FEE-Typ, Grund oder Zielcontainer durchsuchen." />
                 <DataGrid Grid.Row="1" ItemsSource="{Binding NonContainerObjectsView}" AutoGenerateColumns="False"
                           IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          MinColumnWidth="90" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="2*" IsReadOnly="True" />

@@ -41,6 +41,16 @@ namespace VIBN_Tools.Application.View
             }
         }
 
+        private void OpenReimportComparisonWindow_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new ReimportComparisonWindow
+            {
+                DataContext = DataContext,
+                Owner = Window.GetWindow(this)
+            };
+            window.Show();
+        }
+
 
     }
 }

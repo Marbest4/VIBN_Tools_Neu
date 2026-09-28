@@ -8,7 +8,7 @@ Der Level9-Reiter **Project Quality** bündelt wiederholbare Qualitätsnachweise
 
 Profile werden atomar unter `%LOCALAPPDATA%\VIBN_Tools\quality\project-profiles.json` gespeichert. Sie enthalten Kunde, Projektwurzel, Requirements-/ContainerFile, TIA-Version, ViCo-Bibliothek, Rockwell-Standard, erlaubte Containertypen, Namensregeln, Signaladressbereiche und die aktivierten Simulationsadapter. Produktive Zugangsdaten gehören nicht in das Profil. Namensregeln werden als `Container=<Regex>; Signal=<Regex>` und Adressbereiche beispielsweise als `E0-E127, A0-A127` eingegeben; das Quality Gate wendet diese Regeln tatsächlich auf das ContainerFile an.
 
-In der Oberfläche ist **Name** rot als einziges technisches Pflichtfeld markiert. Projektwurzel, Requirements.xml und Container.xml sind orange: Das Profil kann ohne sie gespeichert werden, das Gate überspringt dann aber wesentliche Datei-, Struktur- und Szenarioprüfungen und meldet dies. Blaue Felder sind optional beziehungsweise nur für die zugehörige Plattform oder Zusatzregel erforderlich. Die Eingabefelder sind in der Breite begrenzt; bei kleineren Fenstern stehen horizontale und vertikale Scrollleisten zur Verfügung.
+In der Oberfläche ist **Name** rot als einziges technisches Pflichtfeld markiert. Projektwurzel, Requirements.xml und Container.xml sind orange: Das Profil kann ohne sie gespeichert werden, das Gate überspringt dann aber wesentliche Datei-, Struktur- und Szenarioprüfungen und meldet dies. Blaue Felder sind optional beziehungsweise nur für die zugehörige Plattform oder Zusatzregel erforderlich. Die ausklappbare Anleitung enthält eine dynamische Eingabematrix. Sie zeigt je aktueller Profilangabe Notwendigkeit, Erreichbarkeit, zulässiges Format und die tatsächlich davon abhängige Teilprüfung; aktivierte Emulate3D-/EKS-Quellen erscheinen nur dann als erforderliche Zusatzzeilen. Die Eingabefelder sind in der Breite begrenzt; bei kleineren Fenstern stehen horizontale und vertikale Scrollleisten zur Verfügung.
 
 ## Quality-Gate-Ablauf
 
@@ -30,7 +30,7 @@ Aus jedem Container werden neutrale Arrange-/Act-/Assert-Szenarien erstellt. Zyl
 
 ## TIA-Compile-Nachweis
 
-**TIA Portal → TIA Quality Gate → Ausgewählte PLC kompilieren** ruft den Siemens-Compiler über die isolierte TIA-Bridge auf, liest den rekursiven Meldungsbaum, Fehler-/Warnungszahlen und Laufzeit zurück und hinterlegt den Nachweis. Der Vorgang ruft `Project.Save()` nicht auf. Safety-/Know-how-geschützte Inhalte können weiterhin eine Anmeldung in TIA erfordern.
+**TIA Portal → TIA Quality Gate → Ausgewählte PLC kompilieren** ruft den Siemens-Compiler über die isolierte TIA-Bridge auf, liest den rekursiven Meldungsbaum, Fehler-/Warnungszahlen und Laufzeit zurück und hinterlegt den Nachweis. Ergebnisse stehen in der TIA-Tabelle, im Anwendungslog und unter **Adapter/Nachweise**. Der Vorgang ruft `Project.Save()` nicht auf. Safety-/Know-how-geschützte Inhalte können weiterhin eine Anmeldung in TIA erfordern. Auch bei installierter WinCC-/PLCSIM-Lizenz wird derzeit kein HMI-Tastendruck ausgeführt: Dafür fehlen noch der projektspezifische Tag-/Bildvertrag, die Runtime-Verbindung, ein PLC-/Simulationsadapter, Timeouts sowie eine garantierte Rücksetzung geschriebener Werte.
 
 ## Generierungsmanifest
 

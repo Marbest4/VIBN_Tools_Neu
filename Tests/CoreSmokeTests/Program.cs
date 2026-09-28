@@ -56,6 +56,8 @@ try
     await VerifyRoleStoreAndUpdateAsync(temporaryRoot);
     Console.WriteLine("Running administration identity smoke test...");
     await VerifyAdministrationIdentityAsync();
+    Console.WriteLine("Running administration tool-directory boundary smoke test...");
+    VerifyAdministrationToolDirectories(temporaryRoot);
     Console.WriteLine("Running TIA library workflow smoke test...");
     await VerifyTiaLibraryWorkflowAsync(temporaryRoot);
     Console.WriteLine("Running TIA axis selection and result smoke test...");
@@ -987,6 +989,18 @@ static async Task VerifyAdministrationIdentityAsync()
             WindowsUserIdentity.Equals(role.UserName, "lutzma") &&
             string.Equals(role.Level, "Level9", StringComparison.OrdinalIgnoreCase)),
         "The mandatory lutzma Level9 role must be present in the administration view.");
+}
+
+static void VerifyAdministrationToolDirectories(string temporaryRoot)
+{
+    var directories = VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.CreateDefault();
+    Assert(directories.Count >= 6 &&
+           directories.All(item => VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.IsApprovedPath(item.Path)),
+        "All administration directory rows must be explicitly allow-listed before deletion is enabled.");
+    Assert(!VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.IsApprovedPath(temporaryRoot) &&
+           !VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.IsApprovedPath(
+               Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
+        "Administration must reject arbitrary or broad user folders.");
 }
 
 static async Task VerifyTiaLibraryWorkflowAsync(string temporaryRoot)

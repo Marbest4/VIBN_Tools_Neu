@@ -1,6 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using VIBN_Tools.ContainerGeneration.BusinessLogic;
+using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
 using VIBN_Tools.ContainerGeneration.Utils;
 using VIBN_Tools.GlobalClasses;
 
@@ -354,6 +355,125 @@ namespace VIBN_Tools.ContainerGeneration.Models
         }
 
         /// <summary>
+        /// Explains the effective grouping for one signal without changing the
+        /// workspace. The calculation uses the same generated rules as the
+        /// generator and therefore also exposes incomplete or invalid input.
+        /// </summary>
+        public ContainerGroupingPreview CreateGroupingPreview(
+            ContainerEntry entry,
+            string? detectedContainerName = null,
+            string? detectedComponentType = null)
+        {
+            ArgumentNullException.ThrowIfNull(entry);
+            var grouping = GenerateGroupingRules();
+            if (!grouping.IsSuccess)
+            {
+                return new ContainerGroupingPreview(
+                    DescribeSignal(entry),
+                    "Ungültige Gruppierung",
+                    string.Empty,
+                    string.Empty,
+                    grouping.ErrorMessage);
+            }
+
+            var sourceContainer = detectedContainerName?.Trim() ?? string.Empty;
+            var sourceType = detectedComponentType?.Trim() ?? string.Empty;
+            var matching = new MatchingData(
+                sourceContainer,
+                sourceType,
+                sourceContainer,
+                null,
+                null,
+                entry,
+                []);
+            var values = new List<string>();
+            var explanations = new List<string>();
+            var labels = new List<string>();
+            if (GroupByComponent) labels.Add("Component/Containername");
+            if (GroupByType) labels.Add("Containertyp");
+            if (GroupById && !string.IsNullOrWhiteSpace(RegexId)) labels.Add("ID");
+            if (GroupByAddress && !string.IsNullOrWhiteSpace(RegexAddress)) labels.Add("Adresse");
+
+            foreach (var rule in grouping.Value.OrderBy(rule => rule.GroupOrder))
+            {
+                var source = rule.TargetField(matching) ?? string.Empty;
+                var label = rule.GroupOrder < labels.Count ? labels[rule.GroupOrder] : "Kriterium";
+                var value = ExtractGroupingValue(rule, source);
+                explanations.Add($"{label}: '{FormatPreviewValue(source)}' -> '{FormatPreviewValue(value)}'");
+                if (!string.IsNullOrWhiteSpace(value))
+                    values.Add(value);
+            }
+
+            var substitutedName = ApplySubstitutionPreview(matching);
+            var key = values.Count == grouping.Value.Count && values.Count > 0
+                ? $"{FormatPreviewValue(sourceType)} | {string.Join("_", values)}"
+                : grouping.Value.Count == 0
+                    ? "Keine Gruppierungsregel aktiv"
+                    : "Unvollständig – nicht alle aktiven Kriterien liefern einen Treffer";
+            var criteria = explanations.Count == 0
+                ? "Keine Gruppierung aktiv: erkannte Treffer werden nicht anhand eines zusätzlichen Feldes zusammengefasst."
+                : string.Join("; ", explanations);
+
+            return new ContainerGroupingPreview(
+                DescribeSignal(entry),
+                criteria,
+                key,
+                FormatPreviewValue(substitutedName),
+                string.Empty);
+        }
+
+        private string ApplySubstitutionPreview(MatchingData matching)
+        {
+            var substitution = GenerateSubstitutionRule();
+            if (!substitution.IsSuccess)
+                return $"Ungültig: {substitution.ErrorMessage}";
+
+            var value = substitution.Value.TargetField(matching) ?? string.Empty;
+            foreach (var pattern in substitution.Value.PatternList)
+            {
+                var match = pattern.Match(value);
+                if (!match.Success)
+                    continue;
+                var groups = match.Groups.Cast<Group>()
+                    .Skip(1)
+                    .Where(group => group.Success)
+                    .Select(group => group.Value)
+                    .ToArray();
+                return groups.Length == 0 ? string.Empty : string.Concat(groups);
+            }
+            return value;
+        }
+
+        private static string ExtractGroupingValue(GroupingRule rule, string source)
+        {
+            if (rule.PatternList.Count == 0)
+                return source;
+            foreach (var pattern in rule.PatternList)
+            {
+                var match = pattern.Match(source);
+                if (!match.Success)
+                    continue;
+                return string.Join("-", match.Groups.Cast<Group>()
+                    .Skip(1)
+                    .Where(group => group.Success)
+                    .Select(group => group.Value));
+            }
+            return string.Empty;
+        }
+
+        private static string DescribeSignal(ContainerEntry entry) =>
+            !string.IsNullOrWhiteSpace(entry.Signal)
+                ? entry.Signal.Trim()
+                : !string.IsNullOrWhiteSpace(entry.ID)
+                    ? entry.ID.Trim()
+                    : !string.IsNullOrWhiteSpace(entry.Address)
+                        ? entry.Address.Trim()
+                        : "Unbenanntes Signal";
+
+        private static string FormatPreviewValue(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? "<kein Wert>" : value.Trim();
+
+        /// <summary>
         /// Tries to parse a string of regular expressions separated by a specified separator.
         /// This method clears the provided list, splits the input string, and attempts to create a <see cref="Regex"/> for each part.
         /// If any regex is invalid, it logs a warning and returns <c>false</c>.
@@ -385,5 +505,15 @@ namespace VIBN_Tools.ContainerGeneration.Models
             }
             return isValid;
         }
+    }
+
+    public sealed record ContainerGroupingPreview(
+        string Signal,
+        string Criteria,
+        string GroupKey,
+        string ContainerName,
+        string Error)
+    {
+        public bool HasError => !string.IsNullOrWhiteSpace(Error);
     }
 }

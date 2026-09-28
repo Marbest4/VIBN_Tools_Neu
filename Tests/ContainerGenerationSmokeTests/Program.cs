@@ -49,6 +49,7 @@ internal static class Program
         await ValidateSensorXAndSlotValidationAsync();
 
         ValidateWorkspacePersistenceAndAutoSaveSettings();
+        ValidateGroupingPreview();
         ValidateWorkspaceBlockingMarker();
         ValidateSlotMultiplicityPolicy();
         await ValidateContainerToFeeModelContractsAsync();
@@ -676,6 +677,16 @@ internal static class Program
                 throw new InvalidOperationException("A linked existing MotionJoint was not verified as green in the visual plan.");
             typeof(ContainerToFeeVisualPlanService)
                 .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[] { objectLinks[0] });
+            if (service.GetSimObjectConnectionState(target.Id).IsVerified ||
+                !service.GetSimObjectConnectionState(target.Id, objects[0].Id).IsVerified ||
+                service.GetSimObjectConnectionState(target.Id, objects[1].Id).IsVerified)
+            {
+                throw new InvalidOperationException(
+                    "Mehrere gefundene SimObjects werden nicht mehr pro Objekt als verknüpft bzw. offen ausgewertet.");
+            }
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(service, Array.Empty<VisualFeeObjectLink>());
             if (service.GetSimObjectConnectionState(target.Id).IsVerified)
             {
@@ -1189,6 +1200,33 @@ internal static class Program
         {
             if (File.Exists(path))
                 File.Delete(path);
+        }
+    }
+
+    private static void ValidateGroupingPreview()
+    {
+        var signal = new ContainerEntry
+        {
+            ID = "Motor_17",
+            Address = "%I12.3",
+            Signal = "MotorReady",
+        };
+        var settings = new ContainerGenerationSettings
+        {
+            GroupByAddress = true,
+            RegexAddress = @"^[%]?[IEAQM](\d+)\.",
+            SelectedOption = ContainerGenerationSettings.IdOption,
+            RegexSubstitution = @"^(.+?)[._-]\d+$",
+        };
+
+        var preview = settings.CreateGroupingPreview(signal, "Motor", "Cylinder");
+        if (preview.GroupKey.Contains("12", StringComparison.Ordinal) is false ||
+            preview.ContainerName != "Motor" ||
+            preview.Signal != "MotorReady" ||
+            !string.IsNullOrWhiteSpace(preview.Error))
+        {
+            throw new InvalidOperationException(
+                "Die Grouping-Vorschau verwendet nicht dieselben Adress- und Substitutionsregeln wie die Generierung.");
         }
     }
 

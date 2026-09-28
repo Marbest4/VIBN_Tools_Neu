@@ -327,7 +327,18 @@ public sealed class ContainerToFeeVisualPlanService
             $"Signal gefunden, erforderliche Verknüpfung zu '{container.Name}' fehlt. {actual}");
     }
 
-    public VisualSimObjectConnectionState GetSimObjectConnectionState(string targetId)
+    public VisualSimObjectConnectionState GetSimObjectConnectionState(string targetId) =>
+        GetSimObjectConnectionState(targetId, null);
+
+    /// <summary>
+    /// Returns the live link state for one assignment. Supplying no object ID
+    /// aggregates all assignments of the target and is intentionally stricter:
+    /// one missing link keeps the target open while already-linked siblings stay
+    /// individually verified in the UI.
+    /// </summary>
+    public VisualSimObjectConnectionState GetSimObjectConnectionState(
+        string targetId,
+        string? feeObjectId)
     {
         var plan = CurrentPlan;
         var target = plan?.FindTarget(targetId);
@@ -336,10 +347,16 @@ public sealed class ContainerToFeeVisualPlanService
             return new(VisualSimObjectConnectionKind.NotRead, "SimObject-Ziel ist nicht mehr vorhanden.");
 
         var assignments = plan.Assignments.Where(item =>
-                string.Equals(item.TargetId, targetId, StringComparison.Ordinal))
+                string.Equals(item.TargetId, targetId, StringComparison.Ordinal) &&
+                (string.IsNullOrWhiteSpace(feeObjectId) ||
+                 string.Equals(item.FeeObjectId, feeObjectId, StringComparison.Ordinal)))
             .ToArray();
         if (assignments.Length == 0)
-            return new(VisualSimObjectConnectionKind.NotRead, "Noch kein vorhandenes FEE-SimObject zugeordnet.");
+            return new(
+                VisualSimObjectConnectionKind.NotRead,
+                string.IsNullOrWhiteSpace(feeObjectId)
+                    ? "Noch kein vorhandenes FEE-SimObject zugeordnet."
+                    : "Die ausgewählte FEE-SimObject-Zuordnung ist nicht mehr im Plan vorhanden.");
         if (!_hasDiscoveredFeeSimObjectLinks)
             return new(VisualSimObjectConnectionKind.NotRead, "FEE-SimObject-Verknüpfungen wurden noch nicht aktualisiert.");
         if (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
@@ -348,7 +365,9 @@ public sealed class ContainerToFeeVisualPlanService
         {
             return new(
                 VisualSimObjectConnectionKind.NotRequired,
-                "Vorhandenes FEE-SimObject bestätigt; dieser Container erwartet keine SimObject-zu-Logik-Verknüpfung.");
+                assignments.Length == 1
+                    ? $"FEE-SimObject '{assignments[0].FeeObjectName}' bestätigt; dieser Container erwartet keine SimObject-zu-Logik-Verknüpfung."
+                    : "Vorhandene FEE-SimObjects bestätigt; dieser Container erwartet keine SimObject-zu-Logik-Verknüpfung.");
         }
 
         var expectedLogics = _feeContainerObjects.Where(item =>

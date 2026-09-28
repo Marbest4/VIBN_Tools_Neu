@@ -92,7 +92,7 @@
 			<Grid.ColumnDefinitions>
 				<ColumnDefinition Width="2.25*" MinWidth="430" />
 				<ColumnDefinition Width="8" />
-				<ColumnDefinition Width="1*" MinWidth="270" />
+				<ColumnDefinition Width="Auto" />
 			</Grid.ColumnDefinitions>
 
 			<DataGrid Grid.Column="0"
@@ -333,9 +333,13 @@
 				</DataGrid.Columns>
 			</DataGrid>
 
-			<GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="#FFD0D5DC" ShowsPreview="True" />
+			<GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="#FFD0D5DC" ShowsPreview="True"
+                          Visibility="{Binding IsExpanded, ElementName=WorkstationDetails, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-			<ScrollViewer Grid.Column="2" Padding="12,0,4,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+			<Expander x:Name="WorkstationDetails" Grid.Column="2" MinWidth="34"
+                      Header="Arbeitsplatzdetails" IsExpanded="True"
+                      ToolTip="Blendet Konfiguration, Projektpfade und RDP-Aktionen rechts neben der Rechnerliste ein oder aus.">
+			<ScrollViewer Width="350" Padding="12,8,4,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
 				<StackPanel TextBlock.FontSize="14">
 					<TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding SelectedWorkstation.DisplayName, Mode=OneWay}" TextWrapping="Wrap" />
 
@@ -473,6 +477,7 @@
 					</Expander>
 				</StackPanel>
 			</ScrollViewer>
+			</Expander>
 		</Grid>
 
 		<WrapPanel Grid.Row="2" Margin="0,10,0,0" Orientation="Horizontal">

@@ -57,6 +57,7 @@ public sealed class ProjectQualityPageVM : MvvmBase
         _folderSelection = folderSelection;
         _evidenceStore = evidenceStore ?? QualityEvidenceStore.Instance;
         Editor = new ProjectProfileEditorVM();
+        Editor.PropertyChanged += (_, _) => RefreshInputRequirements();
 
         NewProfileCommand = GetCommandBinding(NewProfile);
         SaveProfileCommand = GetCommandBinding(SaveProfile);
@@ -71,6 +72,7 @@ public sealed class ProjectQualityPageVM : MvvmBase
         ExportReportCommand = GetCommandBinding(ExportReport);
         _evidenceStore.EvidenceChanged += OnEvidenceChanged;
         LoadProfiles();
+        RefreshInputRequirements();
     }
 
     public ObservableCollection<ProjectProfile> Profiles { get; } = [];
@@ -79,6 +81,7 @@ public sealed class ProjectQualityPageVM : MvvmBase
     public ObservableCollection<SimulationTestScenario> Scenarios { get; } = [];
     public ObservableCollection<SimulationAdapterProbe> AdapterProbes { get; } = [];
     public ObservableCollection<SignalIdentity> SignalIdentities { get; } = [];
+    public ObservableCollection<ProjectQualityInputRequirementVM> InputRequirements { get; } = [];
     public ProjectProfileEditorVM Editor { get; }
 
     public ICommand NewProfileCommand { get; }
@@ -138,6 +141,73 @@ public sealed class ProjectQualityPageVM : MvvmBase
         "Fehler. Es beweist weder eine reale PLC/HMI-Laufzeit noch die physische Reaktion eines Modells. " +
         "Warnung bedeutet fehlende optionale Angaben, veraltete Nachweise oder eine notwendige Fachprüfung; " +
         "Fehlgeschlagen bedeutet einen reproduzierbaren Struktur-, Datei-, Regel- oder Compilefehler.";
+
+    private void RefreshInputRequirements()
+    {
+        var rows = new List<ProjectQualityInputRequirementVM>
+        {
+            TextRequirement("Profilname", "Pflicht", Editor.Name, "Freier Text",
+                "Identifiziert Profil und Bericht; ohne Namen ist der Test nicht belastbar."),
+            DirectoryRequirement("Projektwurzel", "Empfohlen", Editor.ProjectRoot,
+                "Basis für Projektdateien und QualityReports; fehlt sie, wird der Standard-Berichtsordner verwendet."),
+            FileRequirement("Requirements", "Empfohlen", Editor.RequirementsPath, ".xml",
+                "XML-Lesbarkeit, Slot-/Containerregeln und Übereinstimmung mit dem ContainerFile."),
+            FileRequirement("ContainerFile", "Empfohlen", Editor.ContainerPath, ".xml",
+                "XML-Struktur, Container/Slots, Signalidentitäten, Regeln und Testszenarien."),
+            TextRequirement("TIA-Version", "Optional", Editor.TiaVersion, "z. B. V20",
+                "Ordnet einen separat erzeugten, frischen TIA-Compile-Nachweis dem Profil zu; startet keinen HMI-Laufzeittest."),
+            DirectoryRequirement("ViCo-Bibliothek", "Optional", Editor.VicoLibraryPath,
+                "Prüft, ob der konfigurierte Bibliotheksordner erreichbar und für die Teilprüfung nutzbar ist."),
+            TextRequirement("Rockwell-Standard", "Optional", Editor.RockwellStandard, "Standardkennung, z. B. GCCS",
+                "Aktiviert die zum gewählten Standard gehörenden Profilregeln; öffnet kein Studio-5000-Projekt."),
+        };
+
+        if (Editor.Emulate3DEnabled)
+        {
+            rows.Add(PathRequirement("Emulate3D Installation", "Bei aktiviertem Adapter erforderlich",
+                Editor.Emulate3DInstallationPath, "Installationsordner oder ausführbare Datei",
+                "Prüft lokale Erreichbarkeit; ohne Hersteller-SDK kein automatischer Modellfunktionstest."));
+            rows.Add(PathRequirement("Emulate3D Projekt", "Bei aktiviertem Adapter erforderlich",
+                Editor.Emulate3DProjectPath, "Projektdatei oder Projektordner",
+                "Prüft lokale Erreichbarkeit der konfigurierten Projektquelle."));
+        }
+
+        if (Editor.EksEnabled)
+        {
+            rows.Add(PathRequirement("EKS Installation", "Bei aktiviertem Adapter erforderlich",
+                Editor.EksInstallationPath, "Installationsordner oder ausführbare Datei",
+                "Prüft lokale Erreichbarkeit; ohne Hersteller-SDK kein automatischer Modellfunktionstest."));
+            rows.Add(PathRequirement("EKS Projekt", "Bei aktiviertem Adapter erforderlich",
+                Editor.EksProjectPath, "Projektdatei oder Projektordner",
+                "Prüft lokale Erreichbarkeit der konfigurierten Projektquelle."));
+        }
+
+        InputRequirements.ReplaceWith(rows);
+    }
+
+    private static ProjectQualityInputRequirementVM TextRequirement(
+        string input, string necessity, string value, string format, string check) =>
+        new(input, necessity, string.IsNullOrWhiteSpace(value) ? "Nicht angegeben" : "Angegeben", format, check);
+
+    private static ProjectQualityInputRequirementVM DirectoryRequirement(
+        string input, string necessity, string value, string check) =>
+        new(input, necessity, PathState(value, Directory.Exists), "Ordner", check);
+
+    private static ProjectQualityInputRequirementVM FileRequirement(
+        string input, string necessity, string value, string extension, string check)
+    {
+        var state = PathState(value, File.Exists);
+        if (!string.IsNullOrWhiteSpace(value) && !string.Equals(Path.GetExtension(value), extension, StringComparison.OrdinalIgnoreCase))
+            state = $"Falsches Format ({Path.GetExtension(value)})";
+        return new(input, necessity, state, extension, check);
+    }
+
+    private static ProjectQualityInputRequirementVM PathRequirement(
+        string input, string necessity, string value, string format, string check) =>
+        new(input, necessity, PathState(value, path => File.Exists(path) || Directory.Exists(path)), format, check);
+
+    private static string PathState(string value, Func<string, bool> exists) =>
+        string.IsNullOrWhiteSpace(value) ? "Nicht angegeben" : exists(value) ? "Vorhanden" : "Nicht gefunden";
 
     public string LastRunText
     {
@@ -301,6 +371,13 @@ public sealed class ProjectQualityPageVM : MvvmBase
         }
     }
 }
+
+public sealed record ProjectQualityInputRequirementVM(
+    string Input,
+    string Necessity,
+    string State,
+    string AcceptedFormat,
+    string Check);
 
 public sealed class ProjectProfileEditorVM : MvvmBase
 {

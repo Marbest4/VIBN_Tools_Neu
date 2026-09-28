@@ -198,6 +198,19 @@ internal static class Program
             {
                 throw new InvalidOperationException("The visual Container2FEE status filters are incomplete.");
             }
+            var duplicateInterfaceGuid = Guid.NewGuid().ToString("D");
+            var duplicateInterface = new VisualFeeInterface(duplicateInterfaceGuid, "Duplicate", "Test", 2);
+            visualContainerViewModel.AvailableFeeInterfaces.Add(new ContainerToFeeVisualFeeInterfaceVM(duplicateInterface));
+            visualContainerViewModel.AvailableFeeInterfaces.Add(new ContainerToFeeVisualFeeInterfaceVM(duplicateInterface));
+            visualContainerViewModel.GetType()
+                .GetMethod("RefreshFeeInterfaceProjection", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(visualContainerViewModel, [null]);
+            if (visualContainerViewModel.AvailableFeeInterfaces.Count(item => item.IsNone) != 1 ||
+                visualContainerViewModel.AvailableFeeInterfaces.Count(item =>
+                    item.GuidString == duplicateInterfaceGuid) != 1)
+            {
+                throw new InvalidOperationException("The refreshed visual interface selector contains transient duplicates.");
+            }
             VerifyVisualSimObjectColorAggregation();
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
@@ -350,7 +363,11 @@ internal static class Program
             if (projectQualityPage.DataContext is not ProjectQualityPageVM projectQualityViewModel ||
                 !projectQualityViewModel.Limitations.Contains("fachliche Freigabe", StringComparison.OrdinalIgnoreCase) ||
                 !projectQualityViewModel.TestInstructions.Contains("Requirements.xml", StringComparison.OrdinalIgnoreCase) ||
-                !projectQualityViewModel.TestMeaning.Contains("Laufzeit", StringComparison.OrdinalIgnoreCase))
+                !projectQualityViewModel.TestMeaning.Contains("Laufzeit", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.InputRequirements.Any(item =>
+                    item.Input == "ContainerFile" && item.AcceptedFormat == ".xml") ||
+                !projectQualityViewModel.InputRequirements.Any(item =>
+                    item.Input == "TIA-Version" && item.Check.Contains("keinen HMI-Laufzeittest", StringComparison.OrdinalIgnoreCase)))
             {
                 throw new InvalidOperationException("The Project Quality page does not disclose its live-verification boundary.");
             }
@@ -852,6 +869,21 @@ internal static class Program
         viewModel.ContainerList.Clear();
         viewModel.UnassignedEntries.Clear();
         viewModel.FilteredEntries.Clear();
+
+        var manualSignal = new ContainerEntry { Signal = "Manual Sensor 01" };
+        viewModel.UnassignedEntries.Add(manualSignal);
+        viewModel.GetType()
+            .GetMethod("MoveData", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(viewModel, [null, manualSignal]);
+        var manualContainer = viewModel.ContainerList.SingleOrDefault();
+        if (manualContainer?.Component != "Manual_Sensor_01" ||
+            !manualContainer.DataList.Contains(manualSignal) ||
+            viewModel.UnassignedEntries.Contains(manualSignal))
+        {
+            throw new InvalidOperationException(
+                "Dropping an unassigned signal on empty container space did not create a named container.");
+        }
+        viewModel.ContainerList.Clear();
     }
 
     private static void VerifyVisualSimObjectColorAggregation()
@@ -943,6 +975,10 @@ internal static class Program
             InvokePrivate(viewModel, "RefreshAggregateTreeStates");
             if (container.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified)
                 throw new InvalidOperationException("An all-green visual subtree did not produce a green container.");
+            viewModel.SelectedTreeStatusFilter = viewModel.TreeStatusFilters.Single(option =>
+                option.Key == VisualStatusFilterKey.Verified);
+            if (!container.IsVisible)
+                throw new InvalidOperationException("The green status filter hid an all-green container.");
 
             SetPrivateField(service, "_feeSimObjectLinks", Array.Empty<VisualFeeObjectLink>());
             InvokePrivate(viewModel, "ApplyDiscoveredSimObjectStates");
@@ -954,6 +990,14 @@ internal static class Program
                 throw new InvalidOperationException(
                     "A missing SimObject link did not propagate purple to object, target, group and container.");
             }
+            viewModel.SelectedTreeStatusFilter = viewModel.TreeStatusFilters.Single(option =>
+                option.Key == VisualStatusFilterKey.Verified);
+            if (container.IsVisible)
+                throw new InvalidOperationException("The green status filter still showed a purple container.");
+            viewModel.SelectedTreeStatusFilter = viewModel.TreeStatusFilters.Single(option =>
+                option.Key == VisualStatusFilterKey.LinkMissing);
+            if (!container.IsVisible)
+                throw new InvalidOperationException("The missing-link filter hid a purple container.");
         }
         finally
         {
