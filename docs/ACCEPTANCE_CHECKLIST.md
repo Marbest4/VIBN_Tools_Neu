@@ -111,7 +111,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Container Generation lädt nach einer Requirements-XML ein bestehendes ContainerFile als aktiven Arbeitsstand; ohne aktiven Stand ist der Vergleich deaktiviert.
 - [ ] **Aktiven Stand vergleichen** fragt nur einen Kandidaten ab und zeigt feldgenaue Unterschiede zum sichtbaren Workspace; **Arbeitsstand laden** lädt weiterhin ausschließlich das interne Workspaceformat.
 - [ ] Der bestehende Container2Fee-Reiter arbeitet unverändert.
-- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 8, zeigt alle deklarierten Signalslots und erlaubt Signale beziehungsweise SimObjects ausschließlich auf ihren getrennten, kompatiblen Drag-and-drop-Zielen.
+- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 9 einschließlich Mehrfach-Interfaceauswahl, zeigt alle deklarierten Signalslots und erlaubt Signale beziehungsweise SimObjects ausschließlich auf ihren getrennten, kompatiblen Drag-and-drop-Zielen.
 - [ ] `Entf`, Kontextmenü und die mittlere Signalliste entfernen Signale nur aus dem wirksamen Plan; Rückgängig stellt sie wieder her und **Container.xml speichern** schreibt genau den bearbeiteten Stand.
 - [ ] Auswahl, Aufklappzustand und Scrollposition der Containerstruktur bleiben nach Drag-and-drop erhalten; helllila kennzeichnet gefundene, aber noch nicht bestätigt verknüpfte Elemente.
 - [ ] Gefundene FEE-Signale lassen sich auf Signal-Knoten ziehen; die bestätigte GUID bleibt nach erneutem Öffnen erhalten und löst einen dokumentierten Tag-/Adresskonflikt eindeutig auf.

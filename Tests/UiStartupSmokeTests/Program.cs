@@ -205,7 +205,7 @@ internal static class Program
             visualContainerViewModel.GetType()
                 .GetMethod("RefreshFeeInterfaceProjection", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(visualContainerViewModel, [null]);
-            if (visualContainerViewModel.AvailableFeeInterfaces.Count(item => item.IsNone) != 1 ||
+            if (visualContainerViewModel.AvailableFeeInterfaces.Any(item => item.IsNone) ||
                 visualContainerViewModel.AvailableFeeInterfaces.Count(item =>
                     item.GuidString == duplicateInterfaceGuid) != 1)
             {
@@ -215,11 +215,10 @@ internal static class Program
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
                 .First(node => node.Kind == VisualNodeKind.Container);
-            if (visualContainerViewModel.SelectedTreeNode.StateBackground != "#FFEF9A9A" ||
-                visualContainerViewModel.AvailableFeeInterfaces.All(item => !item.IsNone))
+            if (visualContainerViewModel.SelectedTreeNode.StateBackground != "#FFEF9A9A")
             {
                 throw new InvalidOperationException(
-                    "Visual container status or explicit no-interface selection is incorrect.");
+                    "Visual container status is incorrect.");
             }
             visualContainerViewModel.CollapseAllCommand.Execute(null);
             if (visualContainerViewModel.TreeRoots
@@ -447,6 +446,11 @@ internal static class Program
                     "WPF binding errors were detected:" + Environment.NewLine +
                     string.Join(Environment.NewLine, bindingErrors.Messages));
             }
+
+            ViCoFeatureBootstrapper.ShutdownAsync().GetAwaiter().GetResult();
+            // The application exit fallback may run after a page has already
+            // disposed itself. Repeating shutdown must therefore be harmless.
+            ViCoFeatureBootstrapper.ShutdownAsync().GetAwaiter().GetResult();
 
             Console.WriteLine("All integrated WPF views initialized without binding errors.");
             return 0;
@@ -790,8 +794,16 @@ internal static class Program
                 "Existing PLC Interface",
                 "Test Provider",
                 1);
-            if (!service.SetExistingInterface(selectedInterface))
-                throw new InvalidOperationException("Visual existing-interface selection could not be stored.");
+            var secondInterface = new VisualFeeInterface(
+                Guid.NewGuid().ToString("D"),
+                "Second PLC Interface",
+                "Test Provider",
+                2);
+            if (!service.SetExistingInterfaces([selectedInterface, secondInterface]) ||
+                service.CurrentPlan.ExistingInterfaceSelections.Count != 2)
+            {
+                throw new InvalidOperationException("Visual multi-interface selection could not be stored.");
+            }
 
             service.SaveSidecarAsync().GetAwaiter().GetResult();
             var restored = new ContainerToFeeVisualPlanService();
@@ -802,7 +814,9 @@ internal static class Program
                 restored.CurrentPlan?.IsCreationRequested(container.Id) != false ||
                 restored.CurrentPlan.IsGenerationSelected(container.Id) ||
                 restored.CurrentPlan.GetEffectiveSlot(signalNode) != "PLC_IN_PartPresent_Ch1" ||
-                restored.CurrentPlan.ExistingInterfaceSelection?.InterfaceGuid != selectedInterface.GuidString)
+                restored.CurrentPlan.ExistingInterfaceSelections.Count != 2 ||
+                restored.CurrentPlan.ExistingInterfaceSelections[0].InterfaceGuid != selectedInterface.GuidString ||
+                restored.CurrentPlan.ExistingInterfaceSelections[1].InterfaceGuid != secondInterface.GuidString)
                 throw new InvalidOperationException("Visual sidecar was not restored correctly.");
 
             VerifyCabinetAndUnknownPresence(directory);

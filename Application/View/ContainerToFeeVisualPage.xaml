@@ -103,8 +103,7 @@
         </HierarchicalDataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-    <Grid Margin="10" MinWidth="1000" MinHeight="700">
+    <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -207,16 +206,13 @@
             </Border.Style>
         </Border>
 
-        <ScrollViewer Grid.Row="2" Margin="0,8,0,8"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Disabled">
-        <Grid MinWidth="1100">
+        <Grid Grid.Row="2" Margin="0,8,0,8" MinHeight="0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.05*" MinWidth="280" />
+                <ColumnDefinition Width="1.05*" MinWidth="220" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="1.25*" MinWidth="380" />
+                <ColumnDefinition Width="1.25*" MinWidth="300" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="1.7*" MinWidth="480" />
+                <ColumnDefinition Width="1.7*" MinWidth="400" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -249,6 +245,8 @@
                     </StackPanel>
                     <TreeView Grid.Row="3" ItemsSource="{Binding TreeRoots}"
                               ItemContainerStyle="{StaticResource VisualTreeItemStyle}"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                               ScrollViewer.CanContentScroll="True"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"
@@ -269,7 +267,6 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="2*" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0" Margin="0,0,0,8">
@@ -317,6 +314,8 @@
                     <ListBox Grid.Row="2" ItemsSource="{Binding Targets}"
                              SelectedItem="{Binding SelectedTarget, Mode=TwoWay}"
                              BorderThickness="0" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                              ScrollViewer.CanContentScroll="True"
                              VirtualizingPanel.IsVirtualizing="True"
                              VirtualizingPanel.VirtualizationMode="Recycling">
@@ -457,7 +456,7 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <Expander Grid.Row="5" Grid.RowSpan="2" Margin="0,8,0,0"
+                    <Expander Grid.Row="5" Margin="0,8,0,0" MaxHeight="260"
                               Header="Technische Verknüpfungen (Details)" IsExpanded="False">
                         <Grid MinHeight="190">
                             <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -495,9 +494,9 @@
 
             <Grid Grid.Column="4">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="245" />
+                    <ColumnDefinition Width="*" MinWidth="190" />
                     <ColumnDefinition Width="5" />
-                    <ColumnDefinition Width="*" MinWidth="245" />
+                    <ColumnDefinition Width="*" MinWidth="190" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -564,11 +563,27 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Gefundene FEE-Signale" />
-                        <ComboBox Grid.Row="1" MinHeight="28" Margin="0,0,0,6"
-                                  ItemsSource="{Binding AvailableFeeInterfaces}"
-                                  SelectedItem="{Binding SelectedExistingInterface, Mode=TwoWay}"
-                                  DisplayMemberPath="DisplayName"
-                                  ToolTip="Nur Signale dieses Interfaces werden angezeigt und für bestehende Verknüpfungen verwendet." />
+                        <Expander Grid.Row="1" Margin="0,0,0,6" MaxHeight="145"
+                                  Header="{Binding SelectedExistingInterfacesSummary}"
+                                  ToolTip="Ein oder mehrere vorhandene Interfaces auswählen. Nur deren Signale werden durchsucht und automatisch verknüpft.">
+                            <Border Margin="0,4,0,0" Padding="4" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="3">
+                                <ListBox ItemsSource="{Binding AvailableFeeInterfaces}"
+                                         MaxHeight="105"
+                                         BorderThickness="0"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         ScrollViewer.CanContentScroll="True"
+                                         VirtualizingPanel.IsVirtualizing="True"
+                                         VirtualizingPanel.VirtualizationMode="Recycling">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Margin="2" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                      Content="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                        </Expander>
                         <TextBox Grid.Row="2" MinHeight="29" Margin="0,0,0,6"
                                   Text="{Binding FeeSignalFilter, UpdateSourceTrigger=PropertyChanged}"
                                   ToolTip="Nach Tag, Adresse/Pfad, Interface oder Datentyp filtern" />
@@ -633,7 +648,6 @@
                 </Border>
             </Grid>
         </Grid>
-        </ScrollViewer>
 
         <Grid Grid.Row="3" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
@@ -656,5 +670,4 @@
             </StackPanel>
         </Grid>
     </Grid>
-    </ScrollViewer>
 </UserControl>

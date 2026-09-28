@@ -55,6 +55,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private readonly HashSet<string> _verifiedContainerIds = new(StringComparer.Ordinal);
     private readonly GenerationManifestStore _manifestStore = new();
     private readonly GenerationManifestBuilder _manifestBuilder = new();
+    private readonly HashSet<string> _selectedInterfaceGuids = new(StringComparer.OrdinalIgnoreCase);
     private string _lastManifestSummary = "Noch kein Generierungsmanifest für diesen Plan erstellt.";
     private string _lastManifestPath = string.Empty;
 
@@ -258,7 +259,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                                !HasValidationErrors && SelectedAssignmentCount > 0;
 
     public bool CanLinkSignalsOnly => HasPlan && Connection.CanUseFeeFeatures && !IsBusy &&
-                                      SelectedExistingInterface?.IsNone == false;
+                                      HasSelectedExistingInterfaces;
+
+    public bool HasSelectedExistingInterfaces =>
+        AvailableFeeInterfaces.Any(item => item.IsSelected);
+
+    public string SelectedExistingInterfacesSummary => HasSelectedExistingInterfaces
+        ? $"{AvailableFeeInterfaces.Count(item => item.IsSelected)} Interface(s) werden durchsucht"
+        : "Kein Interface ausgewählt";
 
     public int SelectedAssignmentCount
     {
@@ -299,8 +307,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             ? "Zuerst eine Container-XML laden."
             : !Connection.CanUseFeeFeatures
                 ? Connection.UnavailableReason
-                : SelectedExistingInterface?.IsNone != false
-                    ? "Ein vorhandenes Interface auswählen."
+                : !HasSelectedExistingInterfaces
+                    ? "Mindestens ein vorhandenes Interface auswählen."
                     : string.Empty;
 
     public string SourceXmlPath
@@ -430,17 +438,22 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             if (ReferenceEquals(_selectedExistingInterface, value))
                 return;
 
-            _selectedExistingInterface = value;
+            _selectedExistingInterface = value?.Model is null ? null : value;
             OnPropertyChanged();
             if (!_isApplyingPlan && !_isRefreshingFeeInterfaceProjection)
             {
-                _planService.SetExistingInterface(value?.Model);
-                ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+                _isRefreshingFeeInterfaceProjection = true;
+                try
+                {
+                    foreach (var item in AvailableFeeInterfaces)
+                        item.IsSelected = ReferenceEquals(item, value);
+                }
+                finally
+                {
+                    _isRefreshingFeeInterfaceProjection = false;
+                }
+                CommitExistingInterfaceSelection();
             }
-            RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
-            OnPropertyChanged(nameof(CanLinkSignalsOnly));
-            OnPropertyChanged(nameof(LinkSignalsOnlyUnavailableReason));
-            InvalidateCommands();
         }
     }
 
@@ -1555,11 +1568,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
             SelectedTreeNode = FindTreeNode(selectedNodeId) ?? TreeRoots.FirstOrDefault();
             SelectedTarget = Targets.FirstOrDefault(target => target.Id == selectedTargetId) ?? Targets.FirstOrDefault();
-            SelectedExistingInterface = AvailableFeeInterfaces.FirstOrDefault(item =>
-                string.Equals(
-                    item.GuidString,
-                    plan.ExistingInterfaceSelection?.InterfaceGuid,
-                    StringComparison.OrdinalIgnoreCase)) ?? AvailableFeeInterfaces.FirstOrDefault(item => item.IsNone);
+            _selectedExistingInterface = AvailableFeeInterfaces.FirstOrDefault(item => item.IsSelected);
+            OnPropertyChanged(nameof(SelectedExistingInterface));
         }
         finally
         {
@@ -1776,13 +1786,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private void ApplyDiscoveredSignalStates(IReadOnlyList<VisualFeeSignal> signals)
     {
-        var selectedGuid = SelectedExistingInterface?.GuidString;
-        signals = string.IsNullOrWhiteSpace(selectedGuid)
+        var selectedGuids = GetSelectedInterfaceGuids();
+        signals = selectedGuids.Count == 0
             ? []
-            : signals.Where(signal => string.Equals(
-                signal.InterfaceGuidString,
-                selectedGuid,
-                StringComparison.OrdinalIgnoreCase)).ToArray();
+            : signals.Where(signal => selectedGuids.Contains(signal.InterfaceGuidString)).ToArray();
         var selectedSignalGuids = signals
             .Select(signal => signal.GuidString)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -2061,11 +2068,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         if (item is not ContainerToFeeVisualFeeSignalVM signal)
             return false;
 
-        if (SelectedExistingInterface?.Model is not { } selectedInterface ||
-            !string.Equals(
-                signal.Model.InterfaceGuidString,
-                selectedInterface.GuidString,
-                StringComparison.OrdinalIgnoreCase))
+        if (!GetSelectedInterfaceGuids().Contains(signal.Model.InterfaceGuidString))
             return false;
         if (SelectedFeeSignalStatusFilter.Key == VisualStatusFilterKey.Assigned && !signal.IsAssigned)
             return false;
@@ -2087,13 +2090,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         var source = signals ?? AvailableFeeSignals.Select(item => item.Model).ToArray();
         var plan = _planService.CurrentPlan;
-        var selectedGuid = SelectedExistingInterface?.GuidString;
-        var scopedSignals = string.IsNullOrWhiteSpace(selectedGuid)
+        var selectedGuids = GetSelectedInterfaceGuids();
+        var scopedSignals = selectedGuids.Count == 0
             ? Array.Empty<VisualFeeSignal>()
-            : source.Where(signal => string.Equals(
-                signal.InterfaceGuidString,
-                selectedGuid,
-                StringComparison.OrdinalIgnoreCase)).ToArray();
+            : source.Where(signal => selectedGuids.Contains(signal.InterfaceGuidString)).ToArray();
         var verifiedNodeIds = _planService.FindVerifiedSignalNodeIds();
         AvailableFeeSignals.ReplaceWith(source.Select(signal =>
             new ContainerToFeeVisualFeeSignalVM(
@@ -2115,8 +2115,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private void RefreshFeeInterfaceProjection(IReadOnlyList<VisualFeeInterface>? interfaces = null)
     {
-        var selectedGuid = _planService.CurrentPlan?.ExistingInterfaceSelection?.InterfaceGuid ??
-                           SelectedExistingInterface?.GuidString;
+        var selectedGuids = (_planService.CurrentPlan?.ExistingInterfaceSelections
+                             .Select(item => item.InterfaceGuid) ??
+                             AvailableFeeInterfaces.Where(item => item.IsSelected)
+                                 .Select(item => item.GuidString))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var source = interfaces ?? AvailableFeeInterfaces
             .Where(item => item.Model is not null)
             .Select(item => item.Model!)
@@ -2130,19 +2133,65 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         _isRefreshingFeeInterfaceProjection = true;
         try
         {
+            foreach (var existing in AvailableFeeInterfaces)
+                existing.PropertyChanged -= OnAvailableInterfacePropertyChanged;
             AvailableFeeInterfaces.Clear();
-            AvailableFeeInterfaces.Add(ContainerToFeeVisualFeeInterfaceVM.None);
             foreach (var item in distinct)
-                AvailableFeeInterfaces.Add(new ContainerToFeeVisualFeeInterfaceVM(item));
-            SelectedExistingInterface = AvailableFeeInterfaces.FirstOrDefault(item => string.Equals(
-                item.GuidString,
-                selectedGuid,
-                StringComparison.OrdinalIgnoreCase)) ?? ContainerToFeeVisualFeeInterfaceVM.None;
+            {
+                var viewModel = new ContainerToFeeVisualFeeInterfaceVM(
+                    item,
+                    selectedGuids.Contains(item.GuidString));
+                viewModel.PropertyChanged += OnAvailableInterfacePropertyChanged;
+                AvailableFeeInterfaces.Add(viewModel);
+            }
+            _selectedExistingInterface = AvailableFeeInterfaces.FirstOrDefault(item => item.IsSelected);
+            _selectedInterfaceGuids.Clear();
+            _selectedInterfaceGuids.UnionWith(selectedGuids);
+            OnPropertyChanged(nameof(SelectedExistingInterface));
         }
         finally
         {
             _isRefreshingFeeInterfaceProjection = false;
         }
+        NotifyExistingInterfaceSelectionChanged();
+    }
+
+    private void OnAvailableInterfacePropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != nameof(ContainerToFeeVisualFeeInterfaceVM.IsSelected) ||
+            _isRefreshingFeeInterfaceProjection ||
+            _isApplyingPlan)
+            return;
+
+        CommitExistingInterfaceSelection();
+    }
+
+    private void CommitExistingInterfaceSelection()
+    {
+        var selected = AvailableFeeInterfaces
+            .Where(item => item.IsSelected && item.Model is not null)
+            .Select(item => item.Model!)
+            .ToArray();
+        _selectedInterfaceGuids.Clear();
+        _selectedInterfaceGuids.UnionWith(selected.Select(item => item.GuidString));
+        _selectedExistingInterface = AvailableFeeInterfaces.FirstOrDefault(item => item.IsSelected);
+        _planService.SetExistingInterfaces(selected);
+        ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+        RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
+        NotifyExistingInterfaceSelectionChanged();
+    }
+
+    private IReadOnlySet<string> GetSelectedInterfaceGuids() => _selectedInterfaceGuids;
+
+    private void NotifyExistingInterfaceSelectionChanged()
+    {
+        OnPropertyChanged(nameof(SelectedExistingInterface));
+        OnPropertyChanged(nameof(HasSelectedExistingInterfaces));
+        OnPropertyChanged(nameof(SelectedExistingInterfacesSummary));
+        OnPropertyChanged(nameof(CanLinkSignalsOnly));
+        OnPropertyChanged(nameof(LinkSignalsOnlyUnavailableReason));
+        FeeSignalsView.Refresh();
+        InvalidateCommands();
     }
 
     private void PublishIssues(IEnumerable<VisualIssue> issues)
@@ -2461,7 +2510,7 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         VisualNodeKind.SimObjectTarget =>
             $"Sucht ein kompatibles FEE-SimObject für „{Name}“ und verknüpft es mit diesem Logikziel.",
         VisualNodeKind.Signal =>
-            $"Sucht das Interface-Signal „{Name}“; fehlt es, wird es im Grob Generation Interface erzeugt und dem angegebenen Slot zugewiesen.",
+            $"Sucht das Interface-Signal „{Name}“ in allen ausgewählten Interfaces; fehlt es, wird es in einem neuen AutoGenerated-Interface erzeugt und dem angegebenen Slot zugewiesen.",
         VisualNodeKind.Logic => $"Erzeugt bzw. verwendet die Logik „{Name}“ vom Typ „{TypeName}“.",
         VisualNodeKind.BasicFrame => $"Erzeugt den BasicFrame „{Name}“ als Strukturknoten.",
         _ => $"Planobjekt „{Name}“ ({TypeName})."
@@ -2688,16 +2737,36 @@ public sealed class ContainerToFeeVisualTargetVM : MvvmBase
 }
 
 /// <summary>Presentation wrapper for one existing FEE interface.</summary>
-public sealed class ContainerToFeeVisualFeeInterfaceVM(VisualFeeInterface? model)
+public sealed class ContainerToFeeVisualFeeInterfaceVM : MvvmBase
 {
+    private bool _isSelected;
+
+    public ContainerToFeeVisualFeeInterfaceVM(VisualFeeInterface? model, bool isSelected = false)
+    {
+        Model = model;
+        _isSelected = isSelected;
+    }
+
     public static ContainerToFeeVisualFeeInterfaceVM None { get; } = new(null);
 
-    public VisualFeeInterface? Model { get; } = model;
+    public VisualFeeInterface? Model { get; }
     public bool IsNone => Model is null;
     public string GuidString => Model?.GuidString ?? string.Empty;
     public string Name => Model?.Name ?? "Keins";
     public int SignalCount => Model?.SignalCount ?? 0;
     public string DisplayName => IsNone ? "Keins" : $"{Name} ({SignalCount} Signale)";
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value)
+                return;
+            _isSelected = value;
+            OnPropertyChanged();
+        }
+    }
 }
 
 /// <summary>Presentation state showing whether an FEE object is already assigned.</summary>

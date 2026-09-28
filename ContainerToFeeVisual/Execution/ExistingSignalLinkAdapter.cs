@@ -7,7 +7,7 @@ using static VIBN_Tools.GlobalClasses.Interfaces;
 namespace VIBN_Tools.ContainerToFeeVisual;
 
 /// <summary>
-/// Links variables from one explicitly selected existing interface to already
+/// Links variables from explicitly selected existing interfaces to already
 /// existing container objects. It never creates FEE objects or variables.
 /// </summary>
 internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
@@ -18,9 +18,14 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,
         CancellationToken cancellationToken)
     {
-        var selection = plan.ExistingInterfaceSelection;
-        if (selection is null || !runtimeInterfaces.TryGetValue(selection.InterfaceGuid, out var selectedInterface))
-            return Failure("Bitte ein vorhandenes Interface auswählen und FEE aktualisieren.", "SIGNAL_LINK_INTERFACE_REQUIRED");
+        var selectedInterfaceGuids = plan.ExistingInterfaceSelections
+            .Select(item => item.InterfaceGuid)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var selectedInterfaces = runtimeInterfaces.Values
+            .Where(item => selectedInterfaceGuids.Contains(item.Guid.ToString("D")))
+            .ToArray();
+        if (selectedInterfaces.Length == 0)
+            return Failure("Bitte mindestens ein vorhandenes Interface auswählen und FEE aktualisieren.", "SIGNAL_LINK_INTERFACE_REQUIRED");
 
         cancellationToken.ThrowIfCancellationRequested();
         var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects);
@@ -36,7 +41,7 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
             .Concat(binding.UnknownSignals.Select(signal =>
                 new SignalResolutionRequest("unknown-signals", "Unbekannte Signale", signal)))
             .ToArray();
-        var signalPlan = SignalResolutionPlanner.Build(requests, [selectedInterface], plan.SignalAssignments);
+        var signalPlan = SignalResolutionPlanner.Build(requests, selectedInterfaces, plan.SignalAssignments);
         if (!signalPlan.IsValid)
             return new VisualExecutionResult(false, "Signale konnten nicht eindeutig aufgelöst werden.", signalPlan.Issues);
         if (signalPlan.MissingSignals.Count > 0)
@@ -44,9 +49,9 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
             var missingIssues = signalPlan.MissingSignals.Select(missing => new VisualIssue(
                 VisualIssueSeverity.Error,
                 "EXISTING_SIGNAL_MISSING",
-                $"Signal '{missing.Signal.Tag}' ist im ausgewählten Interface nicht vorhanden. Es wurde nichts erzeugt.",
+                $"Signal '{missing.Signal.Tag}' ist in den ausgewählten Interfaces nicht vorhanden. Es wurde nichts erzeugt.",
                 missing.ContainerId)).ToArray();
-            return new VisualExecutionResult(false, "Nicht alle Signale sind im ausgewählten Interface vorhanden.", missingIssues);
+            return new VisualExecutionResult(false, "Nicht alle Signale sind in den ausgewählten Interfaces vorhanden.", missingIssues);
         }
 
         signalPlan.ApplyExistingBindings();
@@ -115,13 +120,13 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                 switch (container)
                 {
                     case ILogicSimObjectOwner full:
-                        await full.AssignSignalsAsync(selectedInterface);
+                        await full.AssignSignalsAsync(selectedInterfaces[0]);
                         break;
                     case ILogicOwner logic:
-                        await logic.AssignSignalsAsync(selectedInterface);
+                        await logic.AssignSignalsAsync(selectedInterfaces[0]);
                         break;
                     case ISimObjectOwner simObject:
-                        await simObject.AssignSignalsAsync(selectedInterface);
+                        await simObject.AssignSignalsAsync(selectedInterfaces[0]);
                         break;
                     default:
                         // Known signal-only containers (SensorX) require no

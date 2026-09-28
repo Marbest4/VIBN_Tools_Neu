@@ -371,6 +371,7 @@ public sealed class VisualPlan
     private readonly List<VisualSignalAssignment> _signalAssignments;
     private readonly List<VisualAddedSignal> _addedSignals;
     private readonly List<VisualSlotOverride> _slotOverrides;
+    private readonly List<VisualExistingInterfaceSelection> _existingInterfaceSelections;
     private readonly HashSet<string> _removedSignalNodeIds;
     private readonly List<VisualEdge> _edges;
     private readonly List<VisualNode> _nodes;
@@ -414,7 +415,7 @@ public sealed class VisualPlan
             ? new(StringComparer.Ordinal)
             : new(removedSignalNodeIds, StringComparer.Ordinal);
         ReplaceAddedSignals(addedSignals ?? []);
-        ExistingInterfaceSelection = existingInterfaceSelection;
+        _existingInterfaceSelections = existingInterfaceSelection is null ? [] : [existingInterfaceSelection];
         Issues = issues;
     }
 
@@ -449,7 +450,17 @@ public sealed class VisualPlan
 
     public IReadOnlySet<string> RemovedSignalNodeIds => _removedSignalNodeIds;
 
-    public VisualExistingInterfaceSelection? ExistingInterfaceSelection { get; private set; }
+    /// <summary>
+    /// Interfaces whose variables may be searched and reused. Multiple entries
+    /// are intentional; a missing variable is never written into these source
+    /// interfaces.
+    /// </summary>
+    public IReadOnlyList<VisualExistingInterfaceSelection> ExistingInterfaceSelections =>
+        _existingInterfaceSelections;
+
+    /// <summary>Backward-compatible primary selection used by older sidecars and callers.</summary>
+    public VisualExistingInterfaceSelection? ExistingInterfaceSelection =>
+        _existingInterfaceSelections.FirstOrDefault();
 
     public IReadOnlyList<VisualIssue> Issues { get; }
 
@@ -558,7 +569,17 @@ public sealed class VisualPlan
     }
 
     internal void SetExistingInterfaceSelection(VisualExistingInterfaceSelection? selection) =>
-        ExistingInterfaceSelection = selection;
+        SetExistingInterfaceSelections(selection is null ? [] : [selection]);
+
+    internal void SetExistingInterfaceSelections(IEnumerable<VisualExistingInterfaceSelection> selections)
+    {
+        var replacement = selections
+            .Where(item => !string.IsNullOrWhiteSpace(item.InterfaceGuid))
+            .DistinctBy(item => item.InterfaceGuid, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _existingInterfaceSelections.Clear();
+        _existingInterfaceSelections.AddRange(replacement);
+    }
 
     internal void RebuildAssignmentEdges()
     {

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using System.Security.Principal;
@@ -20,6 +21,7 @@ public static class ViCoFeatureBootstrapper
     private static readonly IViCoUserRoleStore SharedUserRoleStore = CreateUserRoleStore();
     private static readonly IUserCredentialConfigurationService SharedCredentialConfiguration =
         new SecureUserCredentialConfigurationService();
+    private static readonly ConcurrentDictionary<IAsyncDisposable, byte> AsyncResources = new();
 
     public static IWorkstationDirectory WorkstationDirectory { get; } =
         new WorkstationDirectory(SharedWorkstationCatalog);
@@ -50,12 +52,12 @@ public static class ViCoFeatureBootstrapper
     {
         var client = CreateTiaBridgeClient();
 
-        return new TiaPortalPageVM(
+        return Register(new TiaPortalPageVM(
             client,
             new TiaLibraryService(client),
             new WpfFolderSelectionService(),
             FindInstalledTiaVersions(),
-            ApplicationLogService.Instance);
+            ApplicationLogService.Instance));
     }
 
     /// <summary>Creates an independent bridge process for a TIA-facing page.</summary>
@@ -73,11 +75,44 @@ public static class ViCoFeatureBootstrapper
     }
 
     public static SpecialDevicePageVM CreateSpecialDeviceViewModel() =>
-        new(
+        Register(new SpecialDevicePageVM(
             CreateTiaBridgeClient(),
             FindInstalledTiaVersions(),
             JsonTiaHardwareMappingStore.CreateDefault(),
-            ApplicationLogService.Instance);
+            ApplicationLogService.Instance));
+
+    /// <summary>
+    /// Cancels page-owned work and closes every tool-owned bridge. This is
+    /// invoked centrally because WPF does not await async Exit event handlers.
+    /// </summary>
+    public static async Task ShutdownAsync()
+    {
+        var resources = AsyncResources.Keys.ToArray();
+        foreach (var resource in resources)
+        {
+            try
+            {
+                await resource.DisposeAsync();
+            }
+            catch (Exception exception)
+            {
+                ApplicationLogService.Instance.Warning(
+                    "Anwendungsende",
+                    "Ein Hintergrunddienst konnte nicht sauber beendet werden; die restlichen Dienste werden weiter geschlossen.",
+                    exception.Message);
+            }
+            finally
+            {
+                AsyncResources.TryRemove(resource, out _);
+            }
+        }
+    }
+
+    private static T Register<T>(T resource) where T : IAsyncDisposable
+    {
+        AsyncResources.TryAdd(resource, 0);
+        return resource;
+    }
 
     public static ViCoCopyPageVM CreateCopyViewModel()
     {

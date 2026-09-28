@@ -128,15 +128,16 @@
             </Grid.RowDefinitions>
 
             <!--row 1 - Component Grouping & Substitute Component-->
-            <Expander Margin="5,5,5,35" Grid.Row="0"  IsExpanded="False">
+            <Expander Margin="5,3" Grid.Row="0" MaxHeight="170" IsExpanded="False"
+                      ToolTip="Optionale Gruppierung. Die Einstellungen bleiben eingeklappt, bis sie benötigt werden.">
                 <Expander.Header>
-                    <DockPanel>
-                        <TextBlock Style="{StaticResource H3Style}" Text="Grouping Settings"/>
-                        <Button Margin="14,0,0,0" Padding="8,2" Content="Was passiert hier?"
-                                Command="{Binding ToggleGroupingHelp}" />
-                    </DockPanel>
+                    <TextBlock FontWeight="SemiBold" Text="Grouping (optional)"/>
                 </Expander.Header>
-                <StackPanel>
+                <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,2,0,0">
+                    <Button Margin="5,2" Padding="8,2" HorizontalAlignment="Left"
+                            Content="Was passiert hier?" Command="{Binding ToggleGroupingHelp}" />
                     <Border Margin="5" Padding="9" Background="#FFF3F5F7" CornerRadius="4"
                             Visibility="{Binding IsGroupingHelpVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <StackPanel>
@@ -230,6 +231,7 @@
                         </Grid>
                     </Border>
                 </StackPanel>
+                </ScrollViewer>
             </Expander>
 
             <!-- Row 2 - Search panel container -->

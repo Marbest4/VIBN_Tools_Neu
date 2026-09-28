@@ -20,6 +20,30 @@ namespace VIBN_Tools
             GlobalClasses.Services.Initialize();
 
         }
+
+        protected override void OnExit(ExitEventArgs e)
+        {
+            try
+            {
+                // WPF does not await async Exit handlers. Perform the bounded
+                // cleanup before the host exits so no tool-owned TIA bridge is
+                // left behind in the background.
+                Task.Run(Application.ViCoFeatureBootstrapper.ShutdownAsync)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (Exception exception)
+            {
+                Application.ApplicationLogService.Instance.Error(
+                    "Anwendungsende",
+                    "Hintergrunddienste konnten nicht vollständig beendet werden.",
+                    exception);
+            }
+            finally
+            {
+                base.OnExit(e);
+            }
+        }
     }
 
 }
