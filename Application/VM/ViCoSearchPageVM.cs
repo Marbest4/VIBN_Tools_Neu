@@ -422,7 +422,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
-    private string _statusText = "ViCo-Suche ist bereit.";
+    private string _statusText = "Rechnerübersicht ist bereit.";
     public string StatusText
     {
         get => _statusText;
@@ -523,7 +523,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 {
                     ApplyWorkstations(previous.Workstations);
                     StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf dauert länger als 10 Sekunden");
-                    _log.Warning("ViCo-Suche", StatusText);
+                    _log.Warning("Rechnerübersicht", StatusText);
                 }
             }
 
@@ -538,9 +538,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 {
                     ApplyWorkstations(previous.Workstations);
                     StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf lieferte 0 Arbeitsstationen");
-                    _log.Warning("ViCo-Suche", StatusText);
+                    _log.Warning("Rechnerübersicht", StatusText);
                     foreach (var warning in snapshot.Warnings)
-                        _log.Warning("ViCo-Suche", "Eine Datenquelle konnte nicht gelesen werden.", warning);
+                        _log.Warning("Rechnerübersicht", "Eine Datenquelle konnte nicht gelesen werden.", warning);
                     return;
                 }
             }
@@ -555,9 +555,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             StatusText = completionMessage ?? BuildWorkstationLoadStatus(snapshot);
             if (stopwatch.Elapsed > TimeSpan.FromSeconds(10))
                 StatusText += $" Abrufdauer: {stopwatch.Elapsed.TotalSeconds:F1} s.";
-            _log.Information("ViCo-Suche", StatusText);
+            _log.Information("Rechnerübersicht", StatusText);
             foreach (var warning in snapshot.Warnings)
-                _log.Warning("ViCo-Suche", "Eine Datenquelle konnte nicht gelesen werden.", warning);
+                _log.Warning("Rechnerübersicht", "Eine Datenquelle konnte nicht gelesen werden.", warning);
         }
         catch (Exception exception)
         {
@@ -565,7 +565,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 "Die aktuellen PC- und Projektdaten konnten nicht geladen werden");
             if (!fallbackShown)
                 StatusText = "PC- und Projektdaten konnten nicht geladen werden.";
-            _log.Error("ViCo-Suche", StatusText, exception);
+            _log.Error("Rechnerübersicht", StatusText, exception);
         }
         finally
         {
@@ -595,7 +595,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             return false;
         ApplyWorkstations(previous.Workstations);
         StatusText = BuildFallbackStatus(previous, reason);
-        _log.Warning("ViCo-Suche", StatusText);
+        _log.Warning("Rechnerübersicht", StatusText);
         return true;
     }
 
@@ -947,7 +947,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             ApplyColumnPreferences(ViCoAutoRefreshSettings.Default);
             _columnPreferencesLoaded = true;
             _log.Warning(
-                "ViCo AutoUpdate",
+                "Rechnerübersicht AutoUpdate",
                 "Das gespeicherte Aktualisierungsintervall konnte nicht gelesen werden; fünf Minuten werden verwendet.",
                 exception.Message);
         }
@@ -964,12 +964,12 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 _lifetimeCancellation.Token);
             ScheduleNextAutoRefresh();
             StatusText = $"Kanbanize-AutoUpdate wird alle {normalized} Minute(n) ausgeführt.";
-            _log.Information("ViCo AutoUpdate", StatusText);
+            _log.Information("Rechnerübersicht AutoUpdate", StatusText);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             StatusText = "Das Kanbanize-AutoUpdate-Intervall konnte nicht gespeichert werden.";
-            _log.Error("ViCo AutoUpdate", StatusText, exception);
+            _log.Error("Rechnerübersicht AutoUpdate", StatusText, exception);
         }
     }
 
@@ -980,13 +980,13 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             await _autoRefreshSettingsStore.SaveAsync(
                 BuildDisplaySettings(ViCoAutoRefreshPolicy.Normalize(AutoRefreshIntervalMinutes)),
                 _lifetimeCancellation.Token);
-            StatusText = $"{ColumnOptions.Count(column => column.IsVisible)} ViCo-Spalte(n) werden angezeigt.";
-            _log.Information("ViCo Anzeige", StatusText);
+            StatusText = $"{ColumnOptions.Count(column => column.IsVisible)} Spalte(n) der Rechnerübersicht werden angezeigt.";
+            _log.Information("Rechnerübersicht", StatusText);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            StatusText = "Die ViCo-Anzeigeeinstellung konnte nicht gespeichert werden.";
-            _log.Error("ViCo Anzeige", StatusText, exception);
+            StatusText = "Die Anzeigeeinstellung der Rechnerübersicht konnte nicht gespeichert werden.";
+            _log.Error("Rechnerübersicht", StatusText, exception);
         }
     }
 
@@ -1094,7 +1094,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             }
             _launcher.Open(path);
             opened.Add(path);
-            _log.Information("ViCo-Pfade", $"Geöffnet: {path}");
+            _log.Information("Rechnerübersicht", $"Pfad geöffnet: {path}");
         }
         StatusText = missing.Count == 0
             ? $"{opened.Count} Pfad(e) geöffnet."

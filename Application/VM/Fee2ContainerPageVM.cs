@@ -29,6 +29,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private string _containerSearchText = string.Empty;
     private string _signalSearchText = string.Empty;
     private string _objectSearchText = string.Empty;
+    private bool _suppressCrossListReveal;
 
     public Fee2ContainerPageVM()
         : this(new Fee2ContainerService(), Services.Connection ?? new FeeConnectionService()) { }
@@ -166,8 +167,11 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     signal.ContainerId,
                     value.Id,
                     StringComparison.Ordinal);
-            SignalRevealTarget = FoundSignalsView.Cast<Fee2ContainerFoundSignalVM>()
-                .FirstOrDefault(signal => string.Equals(signal.ContainerId, value.Id, StringComparison.Ordinal));
+            if (!_suppressCrossListReveal)
+            {
+                SignalRevealTarget = FoundSignalsView.Cast<Fee2ContainerFoundSignalVM>()
+                    .FirstOrDefault(signal => string.Equals(signal.ContainerId, value.Id, StringComparison.Ordinal));
+            }
         }
     }
 
@@ -195,8 +199,11 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     container.Id,
                     value.ContainerId,
                     StringComparison.Ordinal);
-            ContainerRevealTarget = FoundContainersView.Cast<Fee2ContainerFoundContainerVM>()
-                .FirstOrDefault(container => string.Equals(container.Id, value.ContainerId, StringComparison.Ordinal));
+            if (!_suppressCrossListReveal)
+            {
+                ContainerRevealTarget = FoundContainersView.Cast<Fee2ContainerFoundContainerVM>()
+                    .FirstOrDefault(container => string.Equals(container.Id, value.ContainerId, StringComparison.Ordinal));
+            }
         }
     }
 
@@ -209,7 +216,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             _selectedRoot = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectionSummary));
-            RefreshSelectionDetails();
+            RefreshSelectionDetails(value);
         }
     }
 
@@ -399,7 +406,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private static string Shorten(string? value) => string.IsNullOrWhiteSpace(value)
         ? "nicht vorhanden" : value[..Math.Min(12, value.Length)];
 
-    private void RefreshSelectionDetails()
+    private void RefreshSelectionDetails(Fee2ContainerRootSelectionVM? selection)
     {
         FoundContainers.Clear();
         FoundSignals.Clear();
@@ -408,7 +415,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         SelectedFoundSignal = null;
         ContainerRevealTarget = null;
         SignalRevealTarget = null;
-        if (SelectedRoot?.Editor is not { } editor)
+        if (selection?.Editor is not { } editor)
             return;
         foreach (var container in editor.Containers)
             FoundContainers.Add(container);
@@ -416,7 +423,18 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             FoundSignals.Add(signal);
         foreach (var item in editor.NonContainerObjects)
             NonContainerObjects.Add(item);
-        SelectedFoundContainer = FoundContainers.FirstOrDefault(item => item.IsIncluded);
+        // Selecting the first row after a root switch is useful, but it is not
+        // a user-requested cross-list jump. Suppress automatic viewport work so
+        // rapid root changes cannot queue navigation against a replaced view.
+        _suppressCrossListReveal = true;
+        try
+        {
+            SelectedFoundContainer = FoundContainers.FirstOrDefault(item => item.IsIncluded);
+        }
+        finally
+        {
+            _suppressCrossListReveal = false;
+        }
     }
 
     private static bool Matches(string query, params string?[] values)

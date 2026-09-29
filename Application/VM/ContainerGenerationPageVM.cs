@@ -13,6 +13,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Xml.Linq;
 using VIBN_Tools.ContainerGeneration.BusinessLogic;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.RequirementsXml;
@@ -82,6 +83,8 @@ namespace VIBN_Tools.Application.VM
         public ICommand RejectReimportChange => GetCommandBinding(parameter =>
             SetReimportChangeDecision(parameter, false));
         public ICommand OpenAutoSaveFolder => GetCommandBinding(OpenAutoSaveDirectory);
+        public ICommand OpenGroupingPresetFolder => GetCommandBinding(OpenGroupingPresetDirectory);
+        public ICommand ReloadGroupingPresets => GetCommandBinding(() => ReloadGroupingPresetFiles(true));
 
 
 
@@ -484,6 +487,13 @@ namespace VIBN_Tools.Application.VM
                 false),
         ];
 
+        public string GroupingPresetDirectory { get; } = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GROB",
+            "VIBN_Tools",
+            "ContainerGeneration",
+            "GroupingPresets");
+
         private ContainerGroupingExample? _selectedGroupingExample;
         public ContainerGroupingExample? SelectedGroupingExample
         {
@@ -752,6 +762,7 @@ namespace VIBN_Tools.Application.VM
             ContainerGenerator = new ContainerGenerator();
 
             LoadDefaultSettings();
+            ReloadGroupingPresetFiles(false);
 
             AddActivity(
                 "System",
@@ -1691,14 +1702,114 @@ namespace VIBN_Tools.Application.VM
         {
             Settings.RegexId = example.RegexId;
             Settings.RegexAddress = example.RegexAddress;
-            Settings.RegexSubstitution = string.Empty;
+            Settings.RegexSubstitution = example.RegexSubstitution;
             Settings.GroupByComponent = example.GroupByComponent;
             Settings.GroupByType = example.GroupByType;
             Settings.GroupById = example.GroupById;
             Settings.GroupByAddress = example.GroupByAddress;
-            Settings.SelectedOption = ContainerGenerationSettings.ComponentOption;
+            Settings.SelectedOption = example.SelectedOption;
             StatusText = $"Grouping-Beispiel '{example.Name}' übernommen: {example.Description}";
             AddActivity("Grouping", "Beispiel übernommen", $"{example.Name}: {example.Description}");
+        }
+
+        private void OpenGroupingPresetDirectory(object? parameter)
+        {
+            try
+            {
+                Directory.CreateDirectory(GroupingPresetDirectory);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = GroupingPresetDirectory,
+                    UseShellExecute = true,
+                });
+                StatusText = $"Grouping-Vorlagenordner geöffnet: {GroupingPresetDirectory}";
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(exception, "Could not open grouping preset directory {Directory}.", GroupingPresetDirectory);
+                StatusText = "Der Grouping-Vorlagenordner konnte nicht geöffnet werden. Details stehen im Protokoll.";
+            }
+        }
+
+        private void ReloadGroupingPresetFiles(bool showStatus)
+        {
+            foreach (var preset in GroupingExamples.Where(item => item.IsUserPreset).ToArray())
+                GroupingExamples.Remove(preset);
+
+            if (!Directory.Exists(GroupingPresetDirectory))
+            {
+                if (showStatus)
+                    StatusText = $"Noch keine eigenen Grouping-Vorlagen vorhanden. XML-Dateien hier ablegen: {GroupingPresetDirectory}";
+                return;
+            }
+
+            var loaded = 0;
+            var ignored = 0;
+            try
+            {
+                foreach (var path in Directory.EnumerateFiles(GroupingPresetDirectory, "*.xml")
+                             .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+                {
+                    var documentResult = XmlHandler.Read(path);
+                    var preset = documentResult.IsSuccess
+                        ? TryCreateGroupingPreset(path, documentResult.Value)
+                        : null;
+                    if (preset is null)
+                    {
+                        ignored++;
+                        continue;
+                    }
+
+                    GroupingExamples.Add(preset);
+                    loaded++;
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Logger.Error(exception, "Could not read grouping presets from {Directory}.", GroupingPresetDirectory);
+                if (showStatus)
+                    StatusText = "Die eigenen Grouping-Vorlagen konnten nicht vollständig gelesen werden. Details stehen im Protokoll.";
+                return;
+            }
+
+            if (showStatus)
+            {
+                StatusText = $"{loaded} eigene Grouping-Vorlage(n) geladen" +
+                             (ignored == 0 ? "." : $"; {ignored} ungültige XML-Datei(en) ignoriert.");
+            }
+        }
+
+        public static ContainerGroupingExample? TryCreateGroupingPreset(string path, XDocument document)
+        {
+            var root = document.Root;
+            if (root is null || !string.Equals(root.Name.LocalName, "CAASettings", StringComparison.Ordinal))
+                return null;
+
+            static bool ReadBoolean(XElement parent, string name) =>
+                bool.TryParse(parent.Element(name)?.Value, out var value) && value;
+
+            var name = root.Element("PresetName")?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                name = Path.GetFileNameWithoutExtension(path);
+            var selectedOption = root.Element("SelectedOption")?.Value?.Trim();
+            if (selectedOption is not ContainerGenerationSettings.ComponentOption and
+                not ContainerGenerationSettings.IdOption)
+            {
+                selectedOption = ContainerGenerationSettings.ComponentOption;
+            }
+
+            return new ContainerGroupingExample(
+                name,
+                $"Eigene Vorlage aus {Path.GetFileName(path)}",
+                root.Element("RegexId")?.Value ?? string.Empty,
+                root.Element("RegexAddress")?.Value ?? string.Empty,
+                ReadBoolean(root, "GroupByComponent"),
+                ReadBoolean(root, "GroupByType"),
+                ReadBoolean(root, "GroupById"),
+                ReadBoolean(root, "GroupByAddress"),
+                root.Element("RegexSubstitution")?.Value ?? string.Empty,
+                selectedOption,
+                Path.GetFullPath(path));
         }
 
         private void ClearPendingReimportResult()
@@ -3027,5 +3138,11 @@ namespace VIBN_Tools.Application.VM
         bool GroupByComponent,
         bool GroupByType,
         bool GroupById,
-        bool GroupByAddress);
+        bool GroupByAddress,
+        string RegexSubstitution = "",
+        string SelectedOption = ContainerGenerationSettings.ComponentOption,
+        string? SourcePath = null)
+    {
+        public bool IsUserPreset => !string.IsNullOrWhiteSpace(SourcePath);
+    }
 }

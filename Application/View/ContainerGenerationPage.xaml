@@ -142,7 +142,13 @@
                                   ItemsSource="{Binding GroupingExamples}"
                                   SelectedItem="{Binding SelectedGroupingExample}"
                                   DisplayMemberPath="Name"
-                                  ToolTip="Geprüfte Beispielregeln auswählen; die Felder bleiben danach frei bearbeitbar." />
+                                  ToolTip="Geprüfte Beispiele und eigene CAASettings-XML auswählen; die Felder bleiben danach frei bearbeitbar." />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Vorlagenordner"
+                                Command="{Binding OpenGroupingPresetFolder}"
+                                ToolTip="Öffnet den Ordner für eigene CAASettings-XML-Dateien." />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Vorlagen neu laden"
+                                Command="{Binding ReloadGroupingPresets}"
+                                ToolTip="Liest eigene XML-Vorlagen aus dem Vorlagenordner erneut ein." />
                         <Button Margin="6,0,0,0" Padding="8,2" Content="Load Settings" Command="{Binding LoadSettings}" />
                         <Button Margin="6,0,0,0" Padding="8,2" Content="Save Settings" Command="{Binding SaveSettings}" />
                     </WrapPanel>

@@ -10,6 +10,7 @@ using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.RequirementsXml;
 using VIBN_Tools.ContainerGeneration.Utils;
 using VIBN_Tools.Application.VM;
+using VIBN_Tools.Application.Behaviors;
 using VIBN_Tools.ContainerToFee;
 using VIBN_Tools.ContainerToFee.GrobStandard;
 using VIBN_Tools.ContainerToFeeVisual;
@@ -51,6 +52,7 @@ internal static class Program
         ValidateWorkspacePersistenceAndAutoSaveSettings();
         ValidateGroupingPreview();
         ValidateGroupingExamplesAgainstProvidedSignals();
+        ValidateReimportDecisionStaging();
         ValidateWorkspaceBlockingMarker();
         ValidateSlotMultiplicityPolicy();
         await ValidateContainerToFeeModelContractsAsync();
@@ -58,6 +60,8 @@ internal static class Program
         await ValidateVisualFeeSignalStatusAsync();
         await ValidateForcedUnknownSlotProjectionAsync();
         ValidateFee2ContainerSelectionHighlighting();
+        ValidateRapidFee2ContainerRootSwitching();
+        ValidateWpfVirtualizationExceptionPolicy();
         ValidatePlcInputFanInParsing();
         ValidateContainerFileComparison();
         await ValidateFee2ContainerProvenanceRoundTripAsync();
@@ -994,6 +998,75 @@ internal static class Program
         }
     }
 
+    private static void ValidateWpfVirtualizationExceptionPolicy()
+    {
+        var indexError = new ArgumentOutOfRangeException("index");
+        const string wpfDiagnostic =
+            "System.ThrowHelper.ThrowArgumentOutOfRange_IndexMustBeLessException() at " +
+            "System.Windows.Controls.ItemContainerGenerator.ContainerFromIndex(Int32 index)";
+        if (!WpfVirtualizationExceptionPolicy.IsRecoverable(indexError, wpfDiagnostic))
+            throw new InvalidOperationException("The known WPF DataGrid virtualization race was not recognized.");
+        if (WpfVirtualizationExceptionPolicy.IsRecoverable(
+                indexError,
+                "System.ThrowHelper.ThrowArgumentOutOfRange_IndexMustBeLessException() at UserCode.Index(Int32 index)"))
+        {
+            throw new InvalidOperationException("A non-WPF index error was incorrectly suppressed.");
+        }
+    }
+
+    private static void ValidateRapidFee2ContainerRootSwitching()
+    {
+        static Fee2ContainerRootSelectionVM CreateRoot(string name, string component)
+        {
+            var document = XDocument.Parse($"""
+                <CAAMergeResult>
+                  <ContainerList>
+                    <Container id="{name}">
+                      <Component>{component}</Component>
+                      <Type>Sensor</Type>
+                      <DataList>
+                        <Entry><ID>A</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>Detected</Signal><Slot>PLC_IN_PartPresent</Slot><Note /></Entry>
+                      </DataList>
+                    </Container>
+                  </ContainerList>
+                </CAAMergeResult>
+                """);
+            var snapshot = new FeeContainerProvenanceSnapshot(
+                new Dictionary<string, string>(),
+                document,
+                Array.Empty<FeeContainerSignalBinding>(),
+                1,
+                1,
+                name);
+            return new Fee2ContainerRootSelectionVM(new Fee2ContainerRoot(
+                Guid.NewGuid(),
+                name,
+                snapshot,
+                1,
+                0,
+                1,
+                0));
+        }
+
+        var viewModel = new Fee2ContainerPageVM();
+        var first = CreateRoot("Root-A", "Sensor A");
+        var second = CreateRoot("Root-B", "Sensor B");
+        viewModel.Roots.Add(first);
+        viewModel.Roots.Add(second);
+        for (var index = 0; index < 50; index++)
+            viewModel.SelectedRoot = index % 2 == 0 ? first : second;
+        viewModel.SelectedRoot = second;
+
+        if (viewModel.FoundContainers.Count != 1 ||
+            viewModel.FoundContainers[0].Component != "Sensor B" ||
+            viewModel.ContainerRevealTarget is not null ||
+            viewModel.SignalRevealTarget is not null)
+        {
+            throw new InvalidOperationException(
+                "Rapid FEE2Container root switching retained stale rows or queued cross-list navigation.");
+        }
+    }
+
     private static void ValidateTopLevelBasicFrameSelection()
     {
         var top = Guid.NewGuid();
@@ -1284,6 +1357,72 @@ internal static class Program
             });
             if (!preview.GroupKey.Contains("27", StringComparison.Ordinal))
                 throw new InvalidOperationException($"Address range grouping did not group {address} into 27xx.");
+        }
+
+        var externalPreset = ContainerGenerationPageVM.TryCreateGroupingPreset(
+            Path.Combine(Path.GetTempPath(), "Customer grouping.xml"),
+            XDocument.Parse("""
+                <CAASettings>
+                  <PresetName>Kunden-ID</PresetName>
+                  <RegexAddress></RegexAddress>
+                  <RegexSubstitution>^(.+?)-\d+$</RegexSubstitution>
+                  <RegexId>=([A-Z0-9_]{9})</RegexId>
+                  <GroupByComponent>true</GroupByComponent>
+                  <GroupByType>false</GroupByType>
+                  <GroupById>true</GroupById>
+                  <GroupByAddress>false</GroupByAddress>
+                  <SelectedOption>ID</SelectedOption>
+                </CAASettings>
+                """));
+        if (externalPreset is null || !externalPreset.IsUserPreset || externalPreset.Name != "Kunden-ID" ||
+            externalPreset.RegexId != @"=([A-Z0-9_]{9})" || !externalPreset.GroupByComponent ||
+            !externalPreset.GroupById || externalPreset.GroupByAddress ||
+            externalPreset.SelectedOption != ContainerGenerationSettings.IdOption)
+        {
+            throw new InvalidOperationException("An external CAASettings grouping preset was not parsed for the dropdown.");
+        }
+        if (ContainerGenerationPageVM.TryCreateGroupingPreset(
+                "invalid.xml",
+                XDocument.Parse("<NotCAASettings />")) is not null)
+        {
+            throw new InvalidOperationException("A non-CAASettings XML was accepted as a grouping preset.");
+        }
+    }
+
+    private static void ValidateReimportDecisionStaging()
+    {
+        var viewModel = new ContainerGenerationPageVM();
+        var first = new ReimportDifference(
+            ReimportChangeKind.SourceChanged,
+            "Adresse",
+            "Sensor A",
+            "%I0.0",
+            "%I0.1",
+            false);
+        var second = new ReimportDifference(
+            ReimportChangeKind.NewFromSource,
+            "Neu",
+            "Sensor B",
+            string.Empty,
+            "%I0.2",
+            false);
+        viewModel.PendingReimportChanges.Add(first);
+        viewModel.PendingReimportChanges.Add(second);
+
+        viewModel.AcceptReimportChange.Execute(first);
+        if (!first.IsAccepted || viewModel.PendingReimportChanges.Count != 2 ||
+            !first.TemporaryDecision.Contains("übernehmen", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Staging a single reimport change removed the comparison list or lost its decision.");
+        }
+
+        viewModel.RejectReimportChange.Execute(first);
+        if (first.IsAccepted || viewModel.PendingReimportChanges.Count != 2 ||
+            !first.TemporaryDecision.Contains("nicht übernehmen", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Rejecting one reimport change removed or changed another comparison row.");
         }
     }
 

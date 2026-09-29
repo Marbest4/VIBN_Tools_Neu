@@ -32,11 +32,13 @@ public static class DataGridRevealBehavior
 
     private static void OnRevealItemChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
     {
-        if (dependencyObject is not DataGrid grid || args.NewValue is null)
+        if (dependencyObject is not DataGrid grid)
             return;
 
         var revision = (long)grid.GetValue(RevealRevisionProperty) + 1;
         grid.SetValue(RevealRevisionProperty, revision);
+        if (args.NewValue is null)
+            return;
         var requestedItem = args.NewValue;
 
         _ = grid.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
@@ -46,11 +48,6 @@ public static class DataGridRevealBehavior
                 return;
             try
             {
-                grid.ScrollIntoView(requestedItem);
-                grid.UpdateLayout();
-                if ((long)grid.GetValue(RevealRevisionProperty) != revision ||
-                    !grid.Items.Contains(requestedItem))
-                    return;
                 var viewer = FindVisualChild<ScrollViewer>(grid);
                 var itemIndex = grid.Items.IndexOf(requestedItem);
                 if (viewer is not null && itemIndex >= 0 && itemIndex < grid.Items.Count)
@@ -59,15 +56,12 @@ public static class DataGridRevealBehavior
                         ? itemIndex - (viewer.ViewportHeight / 2d)
                         : (itemIndex * Math.Max(grid.RowHeight, 1d)) - (viewer.ViewportHeight / 2d);
                     viewer.ScrollToVerticalOffset(Math.Max(0d, targetOffset));
-                    grid.UpdateLayout();
                 }
-                if (grid.ItemContainerGenerator.ContainerFromItem(requestedItem) is DataGridRow row)
-                    row.BringIntoView();
             }
             catch (ArgumentOutOfRangeException)
             {
                 // A root switch can invalidate the virtualized Items collection
-                // between ScrollIntoView and container generation. The newer
+                // between viewport calculation and container generation. The newer
                 // reveal request owns the viewport; this stale one is ignored.
             }
             catch (InvalidOperationException)

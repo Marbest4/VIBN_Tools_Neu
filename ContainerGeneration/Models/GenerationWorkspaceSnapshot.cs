@@ -82,6 +82,9 @@ public sealed class ReimportDifference : NotifyBase
     public string DetectedValue { get; }
     public string ExactDifference { get; }
     public string DecisionEffect => GetDecisionEffect(Kind, IsAccepted);
+    public string TemporaryDecision => IsAccepted
+        ? "Vorgemerkt: übernehmen"
+        : "Vorgemerkt: nicht übernehmen";
 
     public bool IsAccepted
     {
@@ -89,7 +92,10 @@ public sealed class ReimportDifference : NotifyBase
         set
         {
             if (SetPropertyChange(ref _isAccepted, value))
+            {
                 OnPropertyChanged(nameof(DecisionEffect));
+                OnPropertyChanged(nameof(TemporaryDecision));
+            }
         }
     }
 

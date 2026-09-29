@@ -14,6 +14,8 @@
             <TextBlock FontSize="18" FontWeight="SemiBold" Text="Erkannte Änderungen" />
             <TextBlock Margin="0,4,0,0" Text="{Binding ReimportNotice}" TextWrapping="Wrap" />
             <TextBlock Margin="0,3,0,0" FontWeight="SemiBold" Text="{Binding PendingReimportSelectionSummary}" />
+            <TextBlock Margin="0,3,0,0" Foreground="#FF455A64" TextWrapping="Wrap"
+                       Text="Einzelentscheidungen werden nur vorgemerkt. Die Liste bleibt vollständig erhalten, bis 'Auswahl anwenden' oder 'Vorschau verwerfen' gewählt wird." />
         </StackPanel>
         <DataGrid Grid.Row="1" ItemsSource="{Binding PendingReimportChanges}"
                   AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False"
@@ -32,17 +34,18 @@
             </DataGrid.RowStyle>
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Header="Übernehmen" Binding="{Binding IsAccepted, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="90" />
+                <DataGridTextColumn Header="Vorläufige Entscheidung" Binding="{Binding TemporaryDecision}" IsReadOnly="True" Width="190" />
                 <DataGridTextColumn Header="Kriterium" Binding="{Binding Category}" IsReadOnly="True" Width="150" />
                 <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" IsReadOnly="True" Width="180" />
                 <DataGridTextColumn Header="Bisher" Binding="{Binding PreviousValue}" IsReadOnly="True" Width="220" />
                 <DataGridTextColumn Header="Neu erkannt" Binding="{Binding DetectedValue}" IsReadOnly="True" Width="220" />
                 <DataGridTextColumn Header="Genauer Unterschied" Binding="{Binding ExactDifference}" IsReadOnly="True" Width="2*" />
                 <DataGridTextColumn Header="Auswirkung" Binding="{Binding DecisionEffect}" IsReadOnly="True" Width="2*" />
-                <DataGridTemplateColumn Header="Einzeln vormerken" Width="210">
+                <DataGridTemplateColumn Header="Einzeln vormerken" Width="225">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
-                                <Button Padding="6,2" Content="Übernehmen"
+                                <Button Padding="6,2" Content="Vormerken"
                                         Command="{Binding DataContext.AcceptReimportChange, RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}" />
                                 <Button Margin="5,0,0,0" Padding="6,2" Content="Nicht übernehmen"
