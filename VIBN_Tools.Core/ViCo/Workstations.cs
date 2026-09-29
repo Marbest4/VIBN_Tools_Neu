@@ -188,6 +188,24 @@ public sealed record ViCoWorkstationSnapshot(
     IReadOnlyList<ViCoWorkstation> Workstations,
     IReadOnlyList<string> Warnings);
 
+/// <summary>
+/// Last non-empty workstation projection that was successfully displayed. It
+/// is deliberately separate from the Kanbanize transport cache: a broken or
+/// empty refresh must never replace the user's last usable overview.
+/// </summary>
+public sealed record ViCoLastActiveSnapshot(
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<ViCoWorkstation> Workstations);
+
+public interface IViCoLastActiveSnapshotStore
+{
+    Task<ViCoLastActiveSnapshot?> LoadAsync(CancellationToken cancellationToken = default);
+
+    Task SaveAsync(
+        ViCoLastActiveSnapshot snapshot,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IViCoWorkstationCatalog
 {
     Task<ViCoWorkstationSnapshot> LoadAsync(CancellationToken cancellationToken = default);

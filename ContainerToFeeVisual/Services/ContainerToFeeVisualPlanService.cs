@@ -520,7 +520,14 @@ public sealed class ContainerToFeeVisualPlanService
                 .ThenBy(item => item.Id, StringComparer.Ordinal)
                 .ToArray();
             if (!target.AllowMultiSelect)
-                matches = matches.Take(1).ToArray();
+            {
+                // Exact duplicates must remain visible in the plan instead of
+                // silently hiding all but the first GUID. Validation marks the
+                // target as erroneous and forced execution remains an explicit
+                // user decision.
+                var exactDuplicates = matches.Where(item => item.HasExactDuplicate).ToArray();
+                matches = exactDuplicates.Length > 1 ? exactDuplicates : matches.Take(1).ToArray();
+            }
 
             foreach (var match in matches)
             {
@@ -1276,6 +1283,41 @@ public sealed class ContainerToFeeVisualPlanService
                     VisualIssueSeverity.Error,
                     "FEE_OBJECT_ASSIGNED_MULTIPLE_TIMES",
                     $"FEE-Objekt '{group.First().FeeObjectName}' wurde mehrfach zugeordnet."));
+            }
+        }
+
+        if (_hasDiscoveredFeeObjects)
+        {
+            foreach (var duplicateGroup in _feeObjects
+                         .Where(item => item.HasExactDuplicate)
+                         .GroupBy(item => string.Join("\u001f",
+                             item.Name.Trim(),
+                             item.TypeName,
+                             item.FeeType.Trim(),
+                             item.ParentGuidString.Trim()),
+                             StringComparer.OrdinalIgnoreCase))
+            {
+                var sample = duplicateGroup.First();
+                var matchingTargets = plan.Targets.Where(target =>
+                        target.CanAssign(sample) &&
+                        string.Equals(
+                            plan.FindNode(target.ContainerId)?.Name,
+                            sample.Name,
+                            StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var nodeIds = matchingTargets.Length == 0
+                    ? new string?[] { null }
+                    : matchingTargets.Select(target => (string?)target.Id).ToArray();
+                foreach (var nodeId in nodeIds)
+                {
+                    issues.Add(new VisualIssue(
+                        VisualIssueSeverity.Error,
+                        "DUPLICATE_FEE_SIMOBJECT_IDENTITY",
+                        $"{duplicateGroup.Count()} identische FEE-SimObjects '{sample.Name}' vom Typ " +
+                        $"'{sample.FeeType}' wurden unter demselben Parent '{sample.ParentName}' gefunden. " +
+                        "Die GUIDs sind unterschiedlich; Duplikate im FEE-Projekt prüfen und bereinigen.",
+                        nodeId));
+                }
             }
         }
 

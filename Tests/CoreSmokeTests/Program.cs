@@ -32,6 +32,8 @@ try
     VerifyUserCredentialConfiguration();
     Console.WriteLine("Running ViCo auto-refresh preference smoke test...");
     await VerifyAutoRefreshPreferencesAsync(temporaryRoot);
+    Console.WriteLine("Running ViCo last-active snapshot smoke test...");
+    await VerifyLastActiveSnapshotStoreAsync(temporaryRoot);
     Console.WriteLine("Running ViCo project identity and path smoke test...");
     VerifyProjectIdentityAndPaths(temporaryRoot);
     Console.WriteLine("Running Remote Desktop profile smoke test...");
@@ -249,6 +251,10 @@ static void VerifyWorkstationOccupancyAndUnifiedSearch()
         "Unified search must find a Kanbanize user without selecting a separate mode.");
     Assert(search.Search(new[] { free, occupied }, "GM1000/01-001", ViCoSearchMode.All).Single() == free,
         "Unified search must continue to find project numbers.");
+    var dotted = free with { PcName = "PC1.2", DisplayName = "PC1.2" };
+    var plain = occupied with { PcName = "PC12", DisplayName = "PC12" };
+    Assert(search.Search(new[] { dotted, plain }, "1.2", ViCoSearchMode.All).Single() == dotted,
+        "A dot in the query must remain significant and must not match the punctuation-free value.");
 
     var configuration = new ViCoWorkstationConfiguration(
         701,
@@ -941,6 +947,35 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
            handler.Requests.Contains("/api/v2/cards/503", StringComparer.Ordinal) &&
            handler.Requests.Contains("/api/v2/cards/503?fields=card_id,deadline", StringComparer.Ordinal),
         "A position/deadline omitted by the list endpoint must be recovered from the card detail endpoints.");
+}
+
+static async Task VerifyLastActiveSnapshotStoreAsync(string temporaryRoot)
+{
+    var path = Path.Combine(temporaryRoot, "vico-last-active.json");
+    var store = new JsonViCoLastActiveSnapshotStore(path);
+    var updatedAt = new DateTimeOffset(2026, 9, 29, 10, 15, 0, TimeSpan.FromHours(2));
+    var workstation = new ViCoWorkstation(
+        "GM17128 Testplatz",
+        "GM17128",
+        "test-user",
+        "TIA V20",
+        string.Empty,
+        string.Empty,
+        new[] { "[W] GM17128/01-100" },
+        new[] { "[W] GM17128/01-100" });
+
+    await store.SaveAsync(new ViCoLastActiveSnapshot(updatedAt, new[] { workstation }));
+    var loaded = await store.LoadAsync();
+
+    Assert(loaded is not null, "The last-active workstation snapshot was not persisted.");
+    Assert(loaded!.UpdatedAt == updatedAt, "The last-active snapshot timestamp changed during persistence.");
+    Assert(loaded.Workstations.Count == 1 && loaded.Workstations[0].PcName == "GM17128",
+        "The last-active workstation snapshot did not restore the workstation list.");
+
+    await store.SaveAsync(new ViCoLastActiveSnapshot(updatedAt.AddMinutes(5), Array.Empty<ViCoWorkstation>()));
+    loaded = await store.LoadAsync();
+    Assert(loaded!.Workstations.Count == 1,
+        "An empty refresh must not overwrite the last non-empty workstation snapshot.");
 }
 
 static async Task VerifyKanbanizeInvalidRefreshProtectionAsync(string temporaryRoot)

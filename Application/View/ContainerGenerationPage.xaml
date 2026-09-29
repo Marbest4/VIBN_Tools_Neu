@@ -136,8 +136,16 @@
                 <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="0,2,0,0">
-                    <Button Margin="5,2" Padding="8,2" HorizontalAlignment="Left"
-                            Content="Was passiert hier?" Command="{Binding ToggleGroupingHelp}" />
+                    <WrapPanel Margin="5,2">
+                        <Button Padding="8,2" Content="Was passiert hier?" Command="{Binding ToggleGroupingHelp}" />
+                        <ComboBox Margin="6,0,0,0" MinWidth="225"
+                                  ItemsSource="{Binding GroupingExamples}"
+                                  SelectedItem="{Binding SelectedGroupingExample}"
+                                  DisplayMemberPath="Name"
+                                  ToolTip="Geprüfte Beispielregeln auswählen; die Felder bleiben danach frei bearbeitbar." />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Load Settings" Command="{Binding LoadSettings}" />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Save Settings" Command="{Binding SaveSettings}" />
+                    </WrapPanel>
                     <Border Margin="5" Padding="9" Background="#FFF3F5F7" CornerRadius="4"
                             Visibility="{Binding IsGroupingHelpVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <StackPanel>
@@ -893,14 +901,8 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Settings Buttons  -->
-            <StackPanel Grid.Row="0" Orientation="Vertical">
-                <ux:Button Margin="5,5,5,0" Content="Load Settings" DebounceInterval="150" Command="{Binding LoadSettings}" />
-                <ux:Button Margin="5,0,5,5" Content="Save Settings" DebounceInterval="150" Command="{Binding SaveSettings}" />
-            </StackPanel>
-
             <!-- Generate & Export  -->
-            <StackPanel Grid.Row="1" Orientation="Vertical">
+            <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Vertical">
                 <ux:Button Margin="5,5,5,0" Content="Generate" DebounceInterval="150" Command="{Binding GenerateContainers}" IsEnabled="{Binding CanGenerate}" IsBusy="{Binding IsBusyGenerateContainers}" ToolTip="{Binding GenerateUnavailableReason}" ToolTipService.ShowOnDisabled="True"/>
                 <ux:Button Margin="5,0,5,0" Content="Prüfzusammenfassung" DebounceInterval="150" Command="{Binding ValidateWorkspace}" />
                 <ux:Button Margin="5,0,5,0" Content="ContainerFile laden" DebounceInterval="150" Command="{Binding LoadContainerFile}" IsEnabled="{Binding CanLoadData}"
@@ -911,20 +913,29 @@
             </StackPanel>
 
             <!--Load / Save data & unassigend entries-->
-            <StackPanel Grid.Row="2" Orientation="Vertical" VerticalAlignment="Bottom">
-                <ux:Button Margin="5,5,5,0" Content="Arbeitsstand speichern" DebounceInterval="150" Command="{Binding SaveData}" />
-                <ux:Button Margin="5,0,5,5" Content="Arbeitsstand laden" DebounceInterval="150" Command="{Binding LoadData}" IsEnabled="{Binding CanLoadData}" ToolTip="{Binding LoadDataUnavailableReason}" ToolTipService.ShowOnDisabled="True"/>
-                <CheckBox Margin="7,3,5,2"
-                          Content="AutoSave aktiv"
-                          IsChecked="{Binding Settings.AutoSaveEnabled, Mode=TwoWay}" />
-                <StackPanel Margin="7,0,5,2" Orientation="Horizontal">
-                    <TextBlock VerticalAlignment="Center" Text="Intervall (Min.):" />
-                    <TextBox Width="48" Margin="6,0,0,0" HorizontalContentAlignment="Right"
-                             Text="{Binding Settings.AutoSaveIntervalMinutes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <Border Grid.Row="2" Margin="4" Padding="3" CornerRadius="4"
+                    BorderBrush="{Binding AutoSaveAreaBorderBrush}"
+                    BorderThickness="{Binding AutoSaveAreaBorderThickness}">
+                <StackPanel Orientation="Vertical" VerticalAlignment="Bottom">
+                    <ux:Button Margin="2,2,2,0" Content="Arbeitsstand speichern" DebounceInterval="150" Command="{Binding SaveData}" />
+                    <ux:Button Margin="2,0,2,2" Content="Arbeitsstand laden" DebounceInterval="150" Command="{Binding LoadData}" IsEnabled="{Binding CanLoadData}" ToolTip="{Binding LoadDataUnavailableReason}" ToolTipService.ShowOnDisabled="True"/>
+                    <Button Margin="2,0,2,4" Padding="6,2" Content="Arbeitsstand-Ordner öffnen" Command="{Binding OpenAutoSaveFolder}" />
+                    <CheckBox Margin="4,3,2,2"
+                              Content="AutoSave aktiv"
+                              IsChecked="{Binding Settings.AutoSaveEnabled, Mode=TwoWay}" />
+                    <StackPanel Margin="4,0,2,2" Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Text="Intervall (Min.):" />
+                        <TextBox Width="48" Margin="6,0,0,0" HorizontalContentAlignment="Right"
+                                 Text="{Binding Settings.AutoSaveIntervalMinutes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                    </StackPanel>
+                    <TextBlock Margin="4,0,2,3" FontSize="10" Foreground="#FF666666"
+                               Text="{Binding AutoSaveStatus}" TextWrapping="Wrap" />
+                    <TextBlock Margin="4,0,2,3" FontSize="10" Foreground="#FFC62828" FontWeight="SemiBold"
+                               Text="AutoSave ist noch nicht gestartet: zuerst einen Arbeitsstand speichern oder laden."
+                               Visibility="{Binding IsAutoSavePending, Converter={StaticResource BooleanToVisibilityConverter}}"
+                               TextWrapping="Wrap" />
                 </StackPanel>
-                <TextBlock Margin="7,0,5,5" FontSize="10" Foreground="#666666"
-                           Text="{Binding AutoSaveStatus}" TextWrapping="Wrap" />
-            </StackPanel>
+            </Border>
 
         </Grid>
 

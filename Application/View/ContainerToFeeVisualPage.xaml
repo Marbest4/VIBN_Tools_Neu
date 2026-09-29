@@ -536,6 +536,7 @@
                                 <DataTemplate>
                                     <Border Padding="7,5" Margin="1" CornerRadius="3"
                                             Background="{Binding StateBackground}"
+                                            ToolTip="{Binding AssignmentText}"
                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
                                         <StackPanel>
                                             <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
@@ -621,7 +622,9 @@
                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Margin="0,2" Padding="6" CornerRadius="3">
+                                    <Border Margin="0,2" Padding="6" CornerRadius="3"
+                                            ToolTip="{Binding Message}"
+                                            ToolTipService.ShowDuration="60000">
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="#FFE8F1FA" />

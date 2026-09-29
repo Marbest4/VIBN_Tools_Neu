@@ -12,7 +12,8 @@ public sealed record RequirementsRulePatchItem(
     string ComponentType,
     string SignalText,
     string PreviousSlot,
-    string NewSlot);
+    string NewSlot,
+    string XmlFragment);
 
 public sealed record RequirementsRulePatchPlan(
     string SourcePath,
@@ -88,10 +89,11 @@ public sealed class RequirementsRulePatchService
         Validate(document, "Die erzeugte Requirements-Vorschau ist nicht schema-konform.");
         var updatedXml = Serialize(document);
         var preview = string.Join(
-            Environment.NewLine,
+            Environment.NewLine + Environment.NewLine,
             items.Select(item =>
                 $"Typ '{item.ComponentType}', Signal '{item.SignalText}': " +
-                $"Slot '{Display(item.PreviousSlot)}' -> '{item.NewSlot}' (exakter Volltexttreffer)"));
+                $"Slot '{Display(item.PreviousSlot)}' -> '{item.NewSlot}' (exakter Volltexttreffer)" +
+                Environment.NewLine + item.XmlFragment));
 
         return new RequirementsRulePatchPlan(
             fullPath,
@@ -187,25 +189,7 @@ public sealed class RequirementsRulePatchService
         foreach (var component in baseComponents)
             AddExactExclusion(component, suggestion.SignalText);
 
-        var generated = new XElement(
-            "Component",
-            new XAttribute("name", overrideName),
-            new XAttribute("type", suggestion.ComponentType.Trim()),
-            new XElement(
-                "Keygroup",
-                new XAttribute("type", "required"),
-                new XAttribute("operator", "OR"),
-                new XElement(
-                    "KeySet",
-                    new XAttribute("name", Marker),
-                    new XElement(
-                        "Key",
-                        new XAttribute("keep", true),
-                        new XAttribute("match", "exact"),
-                        suggestion.SignalText.Trim()))),
-            new XElement(
-                "Slots",
-                new XElement("Slot", new XAttribute("name", suggestion.NewValue.Trim()))));
+        var generated = CreateGeneratedComponent(suggestion, overrideName);
         componentsRoot.Add(generated);
 
         return new RequirementsRulePatchItem(
@@ -213,8 +197,40 @@ public sealed class RequirementsRulePatchService
             suggestion.ComponentType.Trim(),
             suggestion.SignalText.Trim(),
             suggestion.PreviousValue.Trim(),
-            suggestion.NewValue.Trim());
+            suggestion.NewValue.Trim(),
+            generated.ToString(SaveOptions.None));
     }
+
+    /// <summary>
+    /// Returns the exact schema subtree used by <see cref="CreatePlan"/>. The
+    /// preview therefore cannot drift from the element that is actually added.
+    /// </summary>
+    public static string CreateSuggestionFragment(RuleSuggestion suggestion)
+    {
+        ArgumentNullException.ThrowIfNull(suggestion);
+        var overrideName = $"{Marker} {suggestion.Id[..Math.Min(12, suggestion.Id.Length)]}";
+        return CreateGeneratedComponent(suggestion, overrideName).ToString(SaveOptions.None);
+    }
+
+    private static XElement CreateGeneratedComponent(RuleSuggestion suggestion, string overrideName) => new(
+        "Component",
+        new XAttribute("name", overrideName),
+        new XAttribute("type", suggestion.ComponentType.Trim()),
+        new XElement(
+            "Keygroup",
+            new XAttribute("type", "required"),
+            new XAttribute("operator", "OR"),
+            new XElement(
+                "KeySet",
+                new XAttribute("name", Marker),
+                new XElement(
+                    "Key",
+                    new XAttribute("keep", true),
+                    new XAttribute("match", "exact"),
+                    suggestion.SignalText.Trim()))),
+        new XElement(
+            "Slots",
+            new XElement("Slot", new XAttribute("name", suggestion.NewValue.Trim()))));
 
     private static void AddExactExclusion(XElement component, string signalText)
     {

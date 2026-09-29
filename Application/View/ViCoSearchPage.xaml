@@ -117,6 +117,11 @@
 						<Setter Property="ContextMenu">
 							<Setter.Value>
 								<ContextMenu DataContext="{Binding PlacementTarget.Tag, RelativeSource={RelativeSource Self}}">
+									<MenuItem Header="Konsole öffnen" Command="{Binding OpenCommandPromptCommand}" />
+									<MenuItem Header="Anpingen (ping -t)"
+									          Command="{Binding ContextPingWorkstationCommand}"
+									          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+									<Separator />
 									<MenuItem Header="Remote Desktop"
                                               Command="{Binding ContextConnectRemoteCommand}"
                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
@@ -151,6 +156,11 @@
 								</ContextMenu>
 							</Setter.Value>
 						</Setter>
+						<Style.Triggers>
+							<Trigger Property="IsSelected" Value="True">
+								<Setter Property="Foreground" Value="White" />
+							</Trigger>
+						</Style.Triggers>
 					</Style>
 				</DataGrid.RowStyle>
 				<DataGrid.Columns>
@@ -159,7 +169,7 @@
 						<DataGridTemplateColumn.CellTemplate>
 							<DataTemplate>
 								<Border Margin="3" Padding="5,3" Background="{Binding StatusBackground, Mode=OneWay}" CornerRadius="3">
-									<TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="{Binding Status, Mode=OneWay}" />
+									<TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="Black" Text="{Binding Status, Mode=OneWay}" />
 								</Border>
 							</DataTemplate>
 						</DataGridTemplateColumn.CellTemplate>
@@ -171,7 +181,7 @@
 						<DataGridTemplateColumn.CellTemplate>
 							<DataTemplate>
 								<Border Margin="3" Padding="5,3" Background="{Binding OnlineStatusBackground, Mode=OneWay}" CornerRadius="3">
-									<TextBlock HorizontalAlignment="Center" Text="{Binding OnlineStatus, Mode=OneWay}" />
+									<TextBlock HorizontalAlignment="Center" Foreground="Black" Text="{Binding OnlineStatus, Mode=OneWay}" />
 								</Border>
 							</DataTemplate>
 						</DataGridTemplateColumn.CellTemplate>
@@ -330,6 +340,12 @@
                                         Width="130"
                                         SortMemberPath="ConfigurationProjectIp"
                                         Visibility="{Binding Data.ProjectIpColumn.IsVisible, Source={StaticResource ViewModelProxy}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+					<DataGridTextColumn Header="RDP-Sitzung" Binding="{Binding RemoteSessionStatus, Mode=OneWay}"
+					                    Width="170" SortMemberPath="RemoteSessionStatus"
+					                    Visibility="{Binding Data.RemoteSessionColumn.IsVisible, Source={StaticResource ViewModelProxy}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+					<DataGridTextColumn Header="Letzte Anmeldung" Binding="{Binding LastRemoteLogon, Mode=OneWay}"
+					                    Width="165" SortMemberPath="LastRemoteLogon"
+					                    Visibility="{Binding Data.LastRemoteLogonColumn.IsVisible, Source={StaticResource ViewModelProxy}, Converter={StaticResource BooleanToVisibilityConverter}}" />
 				</DataGrid.Columns>
 			</DataGrid>
 

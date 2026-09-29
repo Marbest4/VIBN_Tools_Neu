@@ -554,6 +554,17 @@
                             <DataGridTextColumn Header="Fälle" Binding="{Binding RelevantCases}" Width="75" />
                             <DataGridTextColumn Header="Konfidenz" Binding="{Binding Confidence, StringFormat={}{0:P0}}" Width="95" />
                             <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                            <DataGridTemplateColumn Header="Requirements.xml (Schema)" Width="3*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding RequirementsXmlFragment}"
+                                                   FontFamily="Consolas"
+                                                   TextWrapping="Wrap"
+                                                   ToolTip="{Binding RequirementsXmlFragment}"
+                                                   ToolTipService.ShowDuration="60000" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="Prüfung" Width="175">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

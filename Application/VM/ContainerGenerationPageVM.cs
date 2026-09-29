@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -76,6 +77,11 @@ namespace VIBN_Tools.Application.VM
             IsReimportComparisonVisible = false);
         public ICommand ShowReimportComparison => GetCommandBinding(() =>
             IsReimportComparisonVisible = true);
+        public ICommand AcceptReimportChange => GetCommandBinding(parameter =>
+            SetReimportChangeDecision(parameter, true));
+        public ICommand RejectReimportChange => GetCommandBinding(parameter =>
+            SetReimportChangeDecision(parameter, false));
+        public ICommand OpenAutoSaveFolder => GetCommandBinding(OpenAutoSaveDirectory);
 
 
 
@@ -429,6 +435,70 @@ namespace VIBN_Tools.Application.VM
         public string GroupingPreviewError => _groupingPreview?.Error ?? string.Empty;
         public bool HasGroupingPreviewError => _groupingPreview?.HasError == true;
 
+        public ObservableCollection<ContainerGroupingExample> GroupingExamples { get; } =
+        [
+            new(
+                "Anlagen-ID (universell)",
+                "Gruppiert u. a. =080DT_004, =080RFS001, =050ABS001, =010VRE007 und =010HTM002 nach den ersten neun Zeichen hinter '='.",
+                @"=([A-Z0-9a-z_]{9})",
+                string.Empty,
+                true,
+                false,
+                true,
+                false),
+            new(
+                "Adressbereich I/Q 27xx",
+                "Gruppiert alle vierstelligen Byteadressen nach den ersten beiden Ziffern: I2700.0 bis Q2799.7 ergeben den Schlüssel 27.",
+                string.Empty,
+                @"^[%]?[IEAQM](\d{2})\d{2}\.",
+                false,
+                false,
+                false,
+                true),
+            new(
+                "Adressgruppe je 10 Bytes",
+                "Gruppiert I2700/Q2700 über 270, I2720/Q2720 über 272 sowie I3401/Q3400 über 340.",
+                string.Empty,
+                @"^[%]?[IEAQM](\d{3})\d\.",
+                false,
+                false,
+                false,
+                true),
+            new(
+                "RFS / ABS nach ID",
+                "Gruppiert RFS- und ABS-Signale über =080RFS001 bzw. =050ABS001; unterschiedliche laufende Nummern bleiben getrennt.",
+                @"=([0-9]{3}(?:RFS|ABS)[0-9]{3})",
+                string.Empty,
+                false,
+                false,
+                true,
+                false),
+            new(
+                "VRE / HTM nach ID",
+                "Gruppiert Ein- und Ausgänge über =010VRE007 bzw. =010HTM002 – unabhängig vom nachfolgenden Gerätekennzeichen.",
+                @"=([0-9]{3}(?:VRE|HTM)[0-9]{3})",
+                string.Empty,
+                false,
+                false,
+                true,
+                false),
+        ];
+
+        private ContainerGroupingExample? _selectedGroupingExample;
+        public ContainerGroupingExample? SelectedGroupingExample
+        {
+            get => _selectedGroupingExample;
+            set
+            {
+                if (ReferenceEquals(_selectedGroupingExample, value))
+                    return;
+                _selectedGroupingExample = value;
+                OnPropertyChanged();
+                if (value is not null)
+                    ApplyGroupingExample(value);
+            }
+        }
+
         public string ClearActivityLogUnavailableReason => HasActivityLog
             ? "Löscht die sichtbare Sitzungshistorie; das strukturierte Lernprotokoll bleibt erhalten."
             : "In dieser Sitzung sind noch keine protokollierten Aktionen vorhanden.";
@@ -501,6 +571,9 @@ namespace VIBN_Tools.Application.VM
                 _workspaceDataPath = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(AutoSaveStatus));
+                OnPropertyChanged(nameof(IsAutoSavePending));
+                OnPropertyChanged(nameof(AutoSaveAreaBorderBrush));
+                OnPropertyChanged(nameof(AutoSaveAreaBorderThickness));
             }
         }
 
@@ -509,6 +582,9 @@ namespace VIBN_Tools.Application.VM
             : string.IsNullOrWhiteSpace(WorkspaceDataPath)
                 ? $"AutoSave alle {Settings.AutoSaveIntervalMinutes} Min. – zuerst Save Data oder Load Data ausführen."
                 : $"AutoSave alle {Settings.AutoSaveIntervalMinutes} Min.: {Path.GetFileName(WorkspaceDataPath)}";
+        public bool IsAutoSavePending => Settings.AutoSaveEnabled && string.IsNullOrWhiteSpace(WorkspaceDataPath);
+        public string AutoSaveAreaBorderBrush => IsAutoSavePending ? "#FFC62828" : "#FFB8C7D1";
+        public Thickness AutoSaveAreaBorderThickness => IsAutoSavePending ? new Thickness(2) : new Thickness(1);
 
 
 
@@ -1270,7 +1346,8 @@ namespace VIBN_Tools.Application.VM
             {
                 Filter = "VIBN-Arbeitsstand (*.vibn-workspace.xml)|*.vibn-workspace.xml|XML (*.xml)|*.xml",
                 Title = "VIBN-Bearbeitungsstand speichern",
-                FileName = "Arbeitsstand.vibn-workspace.xml"
+                FileName = "Arbeitsstand.vibn-workspace.xml",
+                InitialDirectory = GetAutoSaveDirectory()
             };
 
             if (saveFileDialog.ShowDialog() == true)
@@ -1415,6 +1492,42 @@ namespace VIBN_Tools.Application.VM
 
             ConfigureAutoSaveTimer();
             OnPropertyChanged(nameof(AutoSaveStatus));
+            OnPropertyChanged(nameof(IsAutoSavePending));
+            OnPropertyChanged(nameof(AutoSaveAreaBorderBrush));
+            OnPropertyChanged(nameof(AutoSaveAreaBorderThickness));
+        }
+
+        private string GetAutoSaveDirectory()
+        {
+            var configuredDirectory = string.IsNullOrWhiteSpace(WorkspaceDataPath)
+                ? null
+                : Path.GetDirectoryName(WorkspaceDataPath);
+            return configuredDirectory ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "GROB",
+                "VIBN_Tools",
+                "ContainerGeneration",
+                "Workspaces");
+        }
+
+        private void OpenAutoSaveDirectory(object? parameter)
+        {
+            try
+            {
+                var directory = GetAutoSaveDirectory();
+                Directory.CreateDirectory(directory);
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = directory,
+                    UseShellExecute = true,
+                });
+                StatusText = $"Arbeitsstand-Ordner geöffnet: {directory}";
+            }
+            catch (Exception exception)
+            {
+                Logger.Error(exception, "Could not open the workspace autosave directory.");
+                StatusText = "Der Arbeitsstand-Ordner konnte nicht geöffnet werden. Details stehen im Protokoll.";
+            }
         }
 
         private void ConfigureAutoSaveTimer()
@@ -1558,6 +1671,34 @@ namespace VIBN_Tools.Application.VM
                 "Reimport",
                 isAccepted ? "Alle Änderungen ausgewählt" : "Alle Änderungen abgewählt",
                 $"{PendingReimportChanges.Count} Vergleichszeilen aktualisiert.");
+        }
+
+        private void SetReimportChangeDecision(object? parameter, bool isAccepted)
+        {
+            if (parameter is not ReimportDifference difference)
+                return;
+            difference.IsAccepted = isAccepted;
+            AddActivity(
+                "Reimport",
+                isAccepted ? "Einzelne Änderung vorgemerkt" : "Einzelne Änderung abgelehnt",
+                $"{difference.Signal}: {difference.ExactDifference}. Die übrigen Vergleichszeilen bleiben erhalten.");
+            StatusText = isAccepted
+                ? "Die Änderung wurde zur Übernahme vorgemerkt. Erst 'Auswahl anwenden' verändert den Arbeitsstand."
+                : "Die Änderung wurde abgewählt. Die übrige Vergleichsliste bleibt unverändert.";
+        }
+
+        private void ApplyGroupingExample(ContainerGroupingExample example)
+        {
+            Settings.RegexId = example.RegexId;
+            Settings.RegexAddress = example.RegexAddress;
+            Settings.RegexSubstitution = string.Empty;
+            Settings.GroupByComponent = example.GroupByComponent;
+            Settings.GroupByType = example.GroupByType;
+            Settings.GroupById = example.GroupById;
+            Settings.GroupByAddress = example.GroupByAddress;
+            Settings.SelectedOption = ContainerGenerationSettings.ComponentOption;
+            StatusText = $"Grouping-Beispiel '{example.Name}' übernommen: {example.Description}";
+            AddActivity("Grouping", "Beispiel übernommen", $"{example.Name}: {example.Description}");
         }
 
         private void ClearPendingReimportResult()
@@ -2506,9 +2647,10 @@ namespace VIBN_Tools.Application.VM
                     : !string.IsNullOrWhiteSpace(entry.Address)
                         ? entry.Address
                         : entry.EnsureSignalId();
-            var normalized = Regex.Replace(source.Trim(), @"\s+", "_");
-            normalized = Regex.Replace(normalized, @"[^\p{L}\p{N}_.-]", "_").Trim('_');
-            return string.IsNullOrWhiteSpace(normalized) ? "Manueller_Container" : normalized;
+            var normalized = Regex.Replace(source.Trim(), @"\s+", " ");
+            normalized = Regex.Replace(normalized, @"[^\p{L}\p{N} ._-]", " ");
+            normalized = Regex.Replace(normalized, @"\s+", " ").Trim(' ', '_');
+            return string.IsNullOrWhiteSpace(normalized) ? "Manueller Container" : normalized;
         }
 
         private void ContainerList_CollectionChanged(
@@ -2875,10 +3017,15 @@ namespace VIBN_Tools.Application.VM
             OnPropertyChanged(nameof(GroupingPreviewError));
             OnPropertyChanged(nameof(HasGroupingPreviewError));
         }
-
-
-
-
-
     }
+
+    public sealed record ContainerGroupingExample(
+        string Name,
+        string Description,
+        string RegexId,
+        string RegexAddress,
+        bool GroupByComponent,
+        bool GroupByType,
+        bool GroupById,
+        bool GroupByAddress);
 }

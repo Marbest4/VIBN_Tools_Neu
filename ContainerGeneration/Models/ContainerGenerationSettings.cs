@@ -30,7 +30,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
         private bool _groupByAddress = false;
 
         private bool _autoSaveEnabled = true;
-        private int _autoSaveIntervalMinutes = 5;
+        private int _autoSaveIntervalMinutes = 10;
 
         private string _selectedOption = ComponentOption;
 

@@ -890,7 +890,7 @@ internal static class Program
             .GetMethod("MoveData", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(viewModel, [null, manualSignal]);
         var manualContainer = viewModel.ContainerList.SingleOrDefault();
-        if (manualContainer?.Component != "Manual_Sensor_01" ||
+        if (manualContainer?.Component != "Manual Sensor 01" ||
             !manualContainer.DataList.Contains(manualSignal) ||
             viewModel.UnassignedEntries.Contains(manualSignal))
         {
@@ -934,6 +934,9 @@ internal static class Program
                 typeof(FeeJoint).FullName!,
                 "MotionJoint",
                 new[] { nameof(FeeJoint), typeof(FeeJoint).FullName! },
+                "11111111-1111-1111-1111-111111111111",
+                "Axes",
+                false,
             ]);
             SetPrivateField(service, "_feeObjects", new[] { visualJoint });
             SetPrivateField(service, "_hasDiscoveredFeeObjects", true);

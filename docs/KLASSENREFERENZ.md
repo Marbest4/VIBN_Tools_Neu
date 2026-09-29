@@ -33,7 +33,7 @@
 
 | Datei/Typ | Aufgabe |
 | --- | --- |
-| `Workstations.cs` | PC-, Projekt-, Konfigurations-, RDP- und Dienstverträge; `ViCoWorkstation` berechnet Status/Projektübersicht |
+| `Workstations.cs` | PC-, Projekt-, Konfigurations-, RDP- und Dienstverträge; `ViCoWorkstation` berechnet Status/Projektübersicht, `ViCoLastActiveSnapshot` beschreibt den letzten verwendbaren Rechnerbestand |
 | `UserRoles.cs` | `ViCoUserRole`, `ViCoRolePolicy`, `IViCoUserRoleStore`, feste `lutzma`-Rolle und Zwei-Level9-Invariante |
 | `ProjectCatalog.cs` | Projekt-/Favoritenmodelle und Suchverträge |
 | `Diagnostics.cs` | neutraler Logvertrag `IApplicationLog` |
@@ -55,13 +55,15 @@
 | `LegacyRoleMigrationReader.cs` | einmaliger Nur-Lese-Import älterer Zuordnungen |
 | `BoundedFileCopyService.cs` | begrenzte parallele Dateiübertragung |
 | `JsonViCoAutoRefreshSettingsStore.cs` | atomare lokale Persistenz des AutoUpdate-Intervalls |
+| `JsonViCoLastActiveSnapshotStore.cs` | atomare Fallback-Persistenz der letzten nicht leeren Rechnerübersicht; leere/defekte Abrufe ersetzen sie nicht |
+| `WindowsPathLauncher.cs` | öffnet Projektpfade sowie die bewusst angeforderte CMD- bzw. Dauer-Ping-Konsole mit validiertem Rechnernamen |
 | `UserEnvironmentCredentialConfigurationService.cs` | ersetzt PowerShell durch per-user Speichern/Löschen und aktualisiert den laufenden Prozess |
 
 ## ViCo-ViewModels (`Application/VM`)
 
 | Klasse | Aufgabe |
 | --- | --- |
-| `ViCoSearchPageVM` | Suche, manueller/periodischer Refresh samt Countdown, Pfadauflösung, Online-/Session-Abfragen, RDP sowie KONFIGURATION speichern/anlegen |
+| `ViCoSearchPageVM` | punktgenaue Suche, manueller/periodischer Refresh samt Countdown und Last-active-Fallback, Pfadauflösung, Online-/Session-Abfragen, CMD/Ping, RDP sowie KONFIGURATION speichern/anlegen |
 | `ViCoWorkstationRowVM` | Präsentation einer Tabellenzeile: Farben, Erreichbarkeit, RDP-Sitzung und Konfigurationsspalten |
 | `ViCoConfigurationFieldVM` | Änderungsnachverfolgung einer vorhandenen Konfigurations-Unteraufgabe |
 | `ViCoPageVM` | Projekte und Favoriten |
@@ -99,8 +101,8 @@
 | `ContainerXmlVisualPlanParser.cs` | begrenztes, DTD-freies XML-Lesen, Fingerabdruck und deklarativer Plan |
 | `ContainerMetadataCatalog.cs` | Metadaten der bestehenden Containerklassen und ihrer `SimObjectTarget`s |
 | `VisualPlanSidecarStore.cs` | versionierte JSON-Persistenz ohne Änderung der Quell-XML |
-| `FeeSimObjectDiscovery.cs` | SDK-Objekte in stabile, UI-neutrale Identitäten übersetzen |
-| `ContainerToFeeVisualPlanService.cs` | Zuordnung, Eindeutigkeit, Auto-Matching, Undo/Redo, Validierung und Orchestrierung |
+| `FeeSimObjectDiscovery.cs` | SDK-Objekte einschließlich Parent-Identität in stabile, UI-neutrale Identitäten übersetzen und exakt identische Mehrfachfunde erhalten |
+| `ContainerToFeeVisualPlanService.cs` | Zuordnung, Eindeutigkeit, Duplicate-Diagnose, Auto-Matching, Undo/Redo, Validierung und Orchestrierung |
 | `RuntimeVisualPlanBinder.cs` | eine gemeinsame, typgeprüfte Abbildung des Plans auf frische Legacy-Container für beide Ausführungsarten |
 | `LegacyContainerToFeeExecutionAdapter.cs` | nur ausgewählte vollständige Container an den bestehenden Generator übergeben |
 | `ExistingSimObjectLinkAdapter.cs` | ausschließlich vorhandene SimObjects mit vorhandenen gleichnamigen LogicObjects verbinden; keine Erzeugung |

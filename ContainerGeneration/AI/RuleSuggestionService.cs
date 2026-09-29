@@ -23,7 +23,12 @@ public sealed record RuleSuggestion(
     int Frequency,
     int RelevantCases,
     double Confidence,
-    RuleSuggestionStatus Status);
+    RuleSuggestionStatus Status)
+{
+    /// <summary>The exact XSD-validated Component subtree applied after review.</summary>
+    public string RequirementsXmlFragment =>
+        RequirementsRulePatchService.CreateSuggestionFragment(this);
+}
 
 public sealed record RuleSuggestionAnalysis(
     IReadOnlyList<RuleSuggestion> Suggestions,

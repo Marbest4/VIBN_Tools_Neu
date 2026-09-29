@@ -146,6 +146,7 @@ public static class ViCoFeatureBootstrapper
                 new HttpClient(),
                 SharedCredentialConfiguration.GetKanbanizeApiKey),
             new JsonViCoAutoRefreshSettingsStore(options.AutoRefreshSettingsFile),
+            new JsonViCoLastActiveSnapshotStore(options.LastActiveWorkstationsFile),
             WorkspaceContext,
             workstations => WorkstationDirectory.Synchronize(workstations),
             ApplicationLogService.Instance);

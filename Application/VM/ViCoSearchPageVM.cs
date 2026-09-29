@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
 using System.Collections;
+using System.Diagnostics;
 using System.Windows.Input;
 using VIBN_Tools.Core.ViCo;
 using VIBN_Tools.GlobalClasses;
@@ -23,6 +24,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private readonly IViCoOnlineRefreshService _onlineRefresh;
     private readonly IViCoWorkstationConfigurationService _configurationService;
     private readonly IViCoAutoRefreshSettingsStore _autoRefreshSettingsStore;
+    private readonly IViCoLastActiveSnapshotStore _lastActiveSnapshotStore;
     private readonly ViCoWorkspaceContext _workspaceContext;
     private readonly Action<IEnumerable<ViCoWorkstation>> _synchronizeWorkstations;
     private readonly IApplicationLog _log;
@@ -56,6 +58,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         IViCoOnlineRefreshService onlineRefresh,
         IViCoWorkstationConfigurationService configurationService,
         IViCoAutoRefreshSettingsStore autoRefreshSettingsStore,
+        IViCoLastActiveSnapshotStore lastActiveSnapshotStore,
         ViCoWorkspaceContext workspaceContext,
         Action<IEnumerable<ViCoWorkstation>> synchronizeWorkstations,
         IApplicationLog? log = null)
@@ -70,6 +73,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         _onlineRefresh = onlineRefresh;
         _configurationService = configurationService;
         _autoRefreshSettingsStore = autoRefreshSettingsStore;
+        _lastActiveSnapshotStore = lastActiveSnapshotStore;
         _workspaceContext = workspaceContext;
         _synchronizeWorkstations = synchronizeWorkstations;
         _log = log ?? NullApplicationLog.Instance;
@@ -91,6 +95,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         ContextOpenSimulationCommand = GetCommandBinding(parameter => ExecuteForRow(parameter, () => OpenRelated(ViCoRelatedPathKind.Simulation)));
         ContextOpenCommissioningCommand = GetCommandBinding(parameter => ExecuteForRow(parameter, () => OpenRelated(ViCoRelatedPathKind.Commissioning)));
         ContextOpenPlanningCommand = GetCommandBinding(parameter => ExecuteForRow(parameter, () => OpenRelated(ViCoRelatedPathKind.Planning)));
+        OpenCommandPromptCommand = GetCommandBinding(OpenCommandPrompt);
+        ContextPingWorkstationCommand = GetCommandBinding(PingWorkstation);
         OpenKanbanizeCardCommand = GetCommandBinding(OpenKanbanizeCard);
 
         OccupancyColumn = AddColumn("occupancy", "Belegung", true);
@@ -108,6 +114,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         LocationColumn = AddColumn("location", "Standort", true);
         OtherColumn = AddColumn("other", "Sonstiges", false);
         ProjectIpColumn = AddColumn("projectIp", "Projekt-IP", false);
+        RemoteSessionColumn = AddColumn("remoteSession", "RDP-Sitzung", true);
+        LastRemoteLogonColumn = AddColumn("lastRemoteLogon", "Letzte Anmeldung", true);
     }
 
     public ObservableCollection<ViCoWorkstationRowVM> Results { get; } = new();
@@ -131,6 +139,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public ICommand ContextOpenSimulationCommand { get; }
     public ICommand ContextOpenCommissioningCommand { get; }
     public ICommand ContextOpenPlanningCommand { get; }
+    public ICommand OpenCommandPromptCommand { get; }
+    public ICommand ContextPingWorkstationCommand { get; }
     public ICommand OpenKanbanizeCardCommand { get; }
     public ViCoColumnOptionVM OccupancyColumn { get; }
     public ViCoColumnOptionVM PcColumn { get; }
@@ -147,6 +157,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public ViCoColumnOptionVM LocationColumn { get; }
     public ViCoColumnOptionVM OtherColumn { get; }
     public ViCoColumnOptionVM ProjectIpColumn { get; }
+    public ViCoColumnOptionVM RemoteSessionColumn { get; }
+    public ViCoColumnOptionVM LastRemoteLogonColumn { get; }
     public int MonitorCount => _remoteDesktop.MonitorCount;
     public bool HasMonitor2 => MonitorCount >= 2;
     public bool HasMonitor3 => MonitorCount >= 3;
@@ -466,7 +478,11 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         string? onlineFailure = null;
         try
         {
-            await _onlineRefresh.RefreshAsync();
+            var refreshTask = _onlineRefresh.RefreshAsync();
+            var completed = await Task.WhenAny(refreshTask, Task.Delay(TimeSpan.FromSeconds(10)));
+            if (!ReferenceEquals(completed, refreshTask))
+                await ShowLastActiveSnapshotAsync("Die Kanbanize-Aktualisierung dauert länger als 10 Sekunden");
+            await refreshTask;
             onlineUpdateSucceeded = true;
             _log.Information("Kanbanize", "PC-, Projekt- und Robotikdaten wurden aktualisiert.");
         }
@@ -495,32 +511,92 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         StatusText = "PC- und Projektdaten werden geladen …";
         try
         {
+            var stopwatch = Stopwatch.StartNew();
             var catalogTask = _catalog.LoadAsync();
             var resolverTask = _pathResolverFactory(CancellationToken.None);
-            await Task.WhenAll(catalogTask, resolverTask);
+            var combinedTask = Task.WhenAll(catalogTask, resolverTask);
+            var completed = await Task.WhenAny(combinedTask, Task.Delay(TimeSpan.FromSeconds(10)));
+            if (!ReferenceEquals(completed, combinedTask))
+            {
+                var previous = await _lastActiveSnapshotStore.LoadAsync();
+                if (previous is { Workstations.Count: > 0 })
+                {
+                    ApplyWorkstations(previous.Workstations);
+                    StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf dauert länger als 10 Sekunden");
+                    _log.Warning("ViCo-Suche", StatusText);
+                }
+            }
+
+            await combinedTask;
             var snapshot = await catalogTask;
             _pathResolver = await resolverTask;
-            _allWorkstations = snapshot.Workstations;
-            _synchronizeWorkstations(_allWorkstations);
-            OnPropertyChanged(nameof(CanOpenPcProjects));
-            OnPropertyChanged(nameof(CanOpenServerPathActions));
-            OnPropertyChanged(nameof(PcProjectsUnavailableReason));
-            OnPropertyChanged(nameof(ServerPathActionUnavailableReason));
-            ApplySearch();
+
+            if (snapshot.Workstations.Count == 0)
+            {
+                var previous = await _lastActiveSnapshotStore.LoadAsync();
+                if (previous is { Workstations.Count: > 0 })
+                {
+                    ApplyWorkstations(previous.Workstations);
+                    StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf lieferte 0 Arbeitsstationen");
+                    _log.Warning("ViCo-Suche", StatusText);
+                    foreach (var warning in snapshot.Warnings)
+                        _log.Warning("ViCo-Suche", "Eine Datenquelle konnte nicht gelesen werden.", warning);
+                    return;
+                }
+            }
+
+            ApplyWorkstations(snapshot.Workstations);
+            if (snapshot.Workstations.Count > 0)
+            {
+                await _lastActiveSnapshotStore.SaveAsync(new ViCoLastActiveSnapshot(
+                    DateTimeOffset.Now,
+                    snapshot.Workstations));
+            }
             StatusText = completionMessage ?? BuildWorkstationLoadStatus(snapshot);
+            if (stopwatch.Elapsed > TimeSpan.FromSeconds(10))
+                StatusText += $" Abrufdauer: {stopwatch.Elapsed.TotalSeconds:F1} s.";
             _log.Information("ViCo-Suche", StatusText);
             foreach (var warning in snapshot.Warnings)
                 _log.Warning("ViCo-Suche", "Eine Datenquelle konnte nicht gelesen werden.", warning);
         }
         catch (Exception exception)
         {
-            StatusText = "PC- und Projektdaten konnten nicht geladen werden.";
+            var fallbackShown = await ShowLastActiveSnapshotAsync(
+                "Die aktuellen PC- und Projektdaten konnten nicht geladen werden");
+            if (!fallbackShown)
+                StatusText = "PC- und Projektdaten konnten nicht geladen werden.";
             _log.Error("ViCo-Suche", StatusText, exception);
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    private void ApplyWorkstations(IReadOnlyList<ViCoWorkstation> workstations)
+    {
+        _allWorkstations = workstations;
+        _synchronizeWorkstations(_allWorkstations);
+        OnPropertyChanged(nameof(CanOpenPcProjects));
+        OnPropertyChanged(nameof(CanOpenServerPathActions));
+        OnPropertyChanged(nameof(PcProjectsUnavailableReason));
+        OnPropertyChanged(nameof(ServerPathActionUnavailableReason));
+        ApplySearch();
+    }
+
+    private static string BuildFallbackStatus(ViCoLastActiveSnapshot snapshot, string reason) =>
+        $"{reason}. Letzte aktive Übersicht mit {snapshot.Workstations.Count} Arbeitsstation(en) wird angezeigt; " +
+        $"Daten zuletzt am {snapshot.UpdatedAt.LocalDateTime:dd.MM.yyyy, HH:mm:ss} aktualisiert.";
+
+    private async Task<bool> ShowLastActiveSnapshotAsync(string reason)
+    {
+        var previous = await _lastActiveSnapshotStore.LoadAsync();
+        if (previous is not { Workstations.Count: > 0 })
+            return false;
+        ApplyWorkstations(previous.Workstations);
+        StatusText = BuildFallbackStatus(previous, reason);
+        _log.Warning("ViCo-Suche", StatusText);
+        return true;
     }
 
     private async Task RunPeriodicRefreshAsync(CancellationToken cancellationToken)
@@ -1035,6 +1111,36 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             SelectedWorkstation = row;
         }
         action();
+    }
+
+    private void OpenCommandPrompt(object? parameter)
+    {
+        try
+        {
+            _launcher.OpenCommandPrompt();
+            StatusText = "Windows-Konsole wurde geöffnet.";
+        }
+        catch (Exception exception)
+        {
+            StatusText = $"Windows-Konsole konnte nicht geöffnet werden: {exception.Message}";
+            _log.Error("Rechnerübersicht", StatusText, exception);
+        }
+    }
+
+    private void PingWorkstation(object? parameter)
+    {
+        if (parameter is not ViCoWorkstationRowVM row || string.IsNullOrWhiteSpace(row.PcName))
+            return;
+        try
+        {
+            _launcher.OpenContinuousPing(row.PcName);
+            StatusText = $"Dauerhafter Ping für {row.PcName} wurde in einer Konsole gestartet.";
+        }
+        catch (Exception exception)
+        {
+            StatusText = $"Ping für {row.PcName} konnte nicht gestartet werden: {exception.Message}";
+            _log.Error("Rechnerübersicht", StatusText, exception);
+        }
     }
 
     private void OpenKanbanizeCard(object parameter)

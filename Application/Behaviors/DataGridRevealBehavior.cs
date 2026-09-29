@@ -12,6 +12,12 @@ namespace VIBN_Tools.Application.Behaviors;
 /// </summary>
 public static class DataGridRevealBehavior
 {
+    private static readonly DependencyProperty RevealRevisionProperty = DependencyProperty.RegisterAttached(
+        "RevealRevision",
+        typeof(long),
+        typeof(DataGridRevealBehavior),
+        new PropertyMetadata(0L));
+
     public static readonly DependencyProperty RevealItemProperty = DependencyProperty.RegisterAttached(
         "RevealItem",
         typeof(object),
@@ -29,24 +35,45 @@ public static class DataGridRevealBehavior
         if (dependencyObject is not DataGrid grid || args.NewValue is null)
             return;
 
+        var revision = (long)grid.GetValue(RevealRevisionProperty) + 1;
+        grid.SetValue(RevealRevisionProperty, revision);
+        var requestedItem = args.NewValue;
+
         _ = grid.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
-            if (!grid.Items.Contains(args.NewValue))
+            if ((long)grid.GetValue(RevealRevisionProperty) != revision ||
+                !grid.Items.Contains(requestedItem))
                 return;
-            grid.ScrollIntoView(args.NewValue);
-            grid.UpdateLayout();
-            var viewer = FindVisualChild<ScrollViewer>(grid);
-            var itemIndex = grid.Items.IndexOf(args.NewValue);
-            if (viewer is not null && itemIndex >= 0)
+            try
             {
-                var targetOffset = viewer.CanContentScroll
-                    ? itemIndex - (viewer.ViewportHeight / 2d)
-                    : (itemIndex * Math.Max(grid.RowHeight, 1d)) - (viewer.ViewportHeight / 2d);
-                viewer.ScrollToVerticalOffset(Math.Max(0d, targetOffset));
+                grid.ScrollIntoView(requestedItem);
                 grid.UpdateLayout();
+                if ((long)grid.GetValue(RevealRevisionProperty) != revision ||
+                    !grid.Items.Contains(requestedItem))
+                    return;
+                var viewer = FindVisualChild<ScrollViewer>(grid);
+                var itemIndex = grid.Items.IndexOf(requestedItem);
+                if (viewer is not null && itemIndex >= 0 && itemIndex < grid.Items.Count)
+                {
+                    var targetOffset = viewer.CanContentScroll
+                        ? itemIndex - (viewer.ViewportHeight / 2d)
+                        : (itemIndex * Math.Max(grid.RowHeight, 1d)) - (viewer.ViewportHeight / 2d);
+                    viewer.ScrollToVerticalOffset(Math.Max(0d, targetOffset));
+                    grid.UpdateLayout();
+                }
+                if (grid.ItemContainerGenerator.ContainerFromItem(requestedItem) is DataGridRow row)
+                    row.BringIntoView();
             }
-            if (grid.ItemContainerGenerator.ContainerFromItem(args.NewValue) is DataGridRow row)
-                row.BringIntoView();
+            catch (ArgumentOutOfRangeException)
+            {
+                // A root switch can invalidate the virtualized Items collection
+                // between ScrollIntoView and container generation. The newer
+                // reveal request owns the viewport; this stale one is ignored.
+            }
+            catch (InvalidOperationException)
+            {
+                // The grid may be unloaded while a deferred reveal is queued.
+            }
         }));
     }
 

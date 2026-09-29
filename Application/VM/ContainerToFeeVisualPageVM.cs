@@ -1673,6 +1673,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         .Where(issue => issue.Severity == VisualIssueSeverity.Error)
         .Where(issue =>
             string.Equals(issue.NodeId, node.Id, StringComparison.Ordinal) ||
+            (node.Kind == VisualNodeKind.SimObject &&
+             string.Equals(issue.NodeId, node.ParentId, StringComparison.Ordinal)) ||
             (node.Kind == VisualNodeKind.Container &&
              plan.FindTarget(issue.NodeId ?? string.Empty)?.ContainerId == node.Id))
         .Select(issue => $"[{issue.Code}] {issue.Message}")
@@ -2789,12 +2791,19 @@ public sealed class ContainerToFeeVisualFeeObjectVM
     public string Name => Model.Name;
     public string TypeName => Model.TypeName;
     public string FeeType => Model.FeeType;
+    public string ParentName => string.IsNullOrWhiteSpace(Model.ParentName) ? "<oberste Ebene>" : Model.ParentName;
+    public bool HasExactDuplicate => Model.HasExactDuplicate;
     public IReadOnlyList<string> AssignedTargets { get; }
     public bool IsAssigned => AssignedTargets.Count > 0;
-    public string AssignmentText => IsAssigned
-        ? $"Verknüpft mit: {string.Join("; ", AssignedTargets)}"
-        : "Noch nicht zugeordnet";
-    public string StateBackground => IsAssigned ? "#FFC6EFCE" : "Transparent";
+    public string AssignmentText => HasExactDuplicate
+        ? $"FEHLER: identischer Name, Typ und Parent mehrfach vorhanden. Parent: {ParentName}. " +
+          (IsAssigned ? $"Zuordnung: {string.Join("; ", AssignedTargets)}" : "Noch nicht zugeordnet.")
+        : IsAssigned
+            ? $"Verknüpft mit: {string.Join("; ", AssignedTargets)}"
+            : "Noch nicht zugeordnet";
+    public string StateBackground => HasExactDuplicate
+        ? "#FFFFC7CE"
+        : IsAssigned ? "#FFC6EFCE" : "Transparent";
 
     private static string DescribeAssignment(VisualPlan? plan, VisualAssignment assignment)
     {

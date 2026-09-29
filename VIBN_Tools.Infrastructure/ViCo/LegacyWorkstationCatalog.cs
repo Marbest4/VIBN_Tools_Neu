@@ -651,7 +651,10 @@ public sealed class ViCoWorkstationSearch : IViCoWorkstationSearch
     }
 
     private static string Normalize(string value) =>
-        new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        new(value
+            .Where(character => char.IsLetterOrDigit(character) || character == '.')
+            .Select(char.ToLowerInvariant)
+            .ToArray());
 
     private sealed record SearchField(string Column, string NormalizedValue);
     private sealed record SearchTerms(IReadOnlyList<string> Included, IReadOnlyList<string> Excluded);

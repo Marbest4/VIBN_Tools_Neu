@@ -124,7 +124,10 @@ public sealed class VisualFeeObject
         string name,
         string typeName,
         string feeType,
-        IReadOnlyCollection<string> assignableTypeNames)
+        IReadOnlyCollection<string> assignableTypeNames,
+        string parentGuidString,
+        string parentName,
+        bool hasExactDuplicate)
     {
         Id = id;
         GuidString = guidString;
@@ -132,6 +135,9 @@ public sealed class VisualFeeObject
         TypeName = typeName;
         FeeType = feeType;
         AssignableTypeNames = assignableTypeNames;
+        ParentGuidString = parentGuidString;
+        ParentName = parentName;
+        HasExactDuplicate = hasExactDuplicate;
     }
 
     public string Id { get; }
@@ -146,6 +152,16 @@ public sealed class VisualFeeObject
 
     /// <summary>CLR type names including all base classes.</summary>
     public IReadOnlyCollection<string> AssignableTypeNames { get; }
+
+    public string ParentGuidString { get; }
+
+    public string ParentName { get; }
+
+    /// <summary>
+    /// Another FEE object has the same name, runtime/SimObject type and parent,
+    /// but a different GUID. Such entries are retained for diagnosis.
+    /// </summary>
+    public bool HasExactDuplicate { get; }
 }
 
 /// <summary>Kind of non-draggable FEE object used to colour the generation plan.</summary>

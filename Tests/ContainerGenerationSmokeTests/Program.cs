@@ -50,6 +50,7 @@ internal static class Program
 
         ValidateWorkspacePersistenceAndAutoSaveSettings();
         ValidateGroupingPreview();
+        ValidateGroupingExamplesAgainstProvidedSignals();
         ValidateWorkspaceBlockingMarker();
         ValidateSlotMultiplicityPolicy();
         await ValidateContainerToFeeModelContractsAsync();
@@ -626,6 +627,9 @@ internal static class Program
                     typeof(FeeJoint).FullName!,
                     "MotionJoint",
                     new[] { nameof(FeeJoint), typeof(FeeJoint).FullName! },
+                    "11111111-1111-1111-1111-111111111111",
+                    "Axes",
+                    true,
                 ]);
             }
             var objects = new[] { CreateJoint(), CreateJoint() };
@@ -660,6 +664,14 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     "Existing same-name MotionJoints were not reused for a multi-select visual target.");
+            }
+            var duplicateIssue = service.Validate().Issues.SingleOrDefault(issue =>
+                issue.Code == "DUPLICATE_FEE_SIMOBJECT_IDENTITY");
+            if (duplicateIssue is null ||
+                !duplicateIssue.Message.Contains("2 identische FEE-SimObjects", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Exact same-name/type/parent FEE SimObject duplicates were not exposed as a validation error.");
             }
             var objectLinks = objects.Select(item => new VisualFeeObjectLink(
                     item.GuidString,
@@ -1173,6 +1185,9 @@ internal static class Program
 
     private static void ValidateWorkspacePersistenceAndAutoSaveSettings()
     {
+        if (new ContainerGenerationSettings().AutoSaveIntervalMinutes != 10)
+            throw new InvalidOperationException("Container Generation autosave must default to 10 minutes.");
+
         var settings = new ContainerGenerationSettings
         {
             AutoSaveEnabled = true,
@@ -1227,6 +1242,48 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 "Die Grouping-Vorschau verwendet nicht dieselben Adress- und Substitutionsregeln wie die Generierung.");
+        }
+    }
+
+    private static void ValidateGroupingExamplesAgainstProvidedSignals()
+    {
+        var universalId = new ContainerGenerationSettings
+        {
+            GroupById = true,
+            RegexId = @"=([A-Z0-9a-z_]{9})",
+        };
+        foreach (var sample in new[]
+                 {
+                     (Id: "=080DT_004-KF120X101:4", Expected: "080DT_004"),
+                     (Id: "=080RFS001-BZ1:4", Expected: "080RFS001"),
+                     (Id: "=050ABS001-BZ1.1:4", Expected: "050ABS001"),
+                     (Id: "=010VRE007-QM3MM1BG21:4", Expected: "010VRE007"),
+                     (Id: "=010HTM002-QM3MM1BG21:4", Expected: "010HTM002"),
+                 })
+        {
+            var preview = universalId.CreateGroupingPreview(new ContainerEntry
+            {
+                ID = sample.Id,
+                Signal = "Test",
+            });
+            if (!preview.GroupKey.Contains(sample.Expected, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Universal ID grouping did not extract {sample.Expected}.");
+        }
+
+        var addressRange = new ContainerGenerationSettings
+        {
+            GroupByAddress = true,
+            RegexAddress = @"^[%]?[IEAQM](\d{2})\d{2}\.",
+        };
+        foreach (var address in new[] { "I2700.0", "I2720.0", "Q2760.1" })
+        {
+            var preview = addressRange.CreateGroupingPreview(new ContainerEntry
+            {
+                Address = address,
+                Signal = "Test",
+            });
+            if (!preview.GroupKey.Contains("27", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Address range grouping did not group {address} into 27xx.");
         }
     }
 
@@ -1679,7 +1736,9 @@ internal static class Program
             var service = new RequirementsRulePatchService();
             var plan = service.CreatePlan(requirementsPath, [suggestion]);
             if (!plan.UpdatedXml.Contains("match=\"exact\"", StringComparison.Ordinal) ||
-                !plan.Preview.Contains("PLC_IN_Old' -> 'PLC_IN_New", StringComparison.Ordinal))
+                !plan.Preview.Contains("PLC_IN_Old' -> 'PLC_IN_New", StringComparison.Ordinal) ||
+                !plan.Preview.Contains(suggestion.RequirementsXmlFragment, StringComparison.Ordinal) ||
+                plan.Items.Single().XmlFragment != suggestion.RequirementsXmlFragment)
             {
                 throw new InvalidOperationException("Requirements patch preview misses the exact override.");
             }

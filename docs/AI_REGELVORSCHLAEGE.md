@@ -34,6 +34,8 @@ Mit **XML-Vorschau** wird anschließend eine AutoCreate-Datei ausgewählt. Der W
 - zeigt Typ, Signal sowie alten und neuen Slot vor dem Schreiben,
 - prüft unmittelbar vor dem Schreiben den SHA-256-Stand der Quelldatei erneut.
 
+Die Vorschlagstabelle zeigt dafür dasselbe vollständige `<Component>`-Fragment, das der Writer später einfügt. Vorschau und Schreibpfad verwenden denselben Builder; dadurch können Attributnamen, `Exclusions`, `Container`, `Slot` und `Signal` in der Anzeige nicht von der tatsächlichen Änderung abweichen. Ausgangsdatei, Vorschau und temporäre Zieldatei müssen jeweils das eingebettete Requirements-XSD erfüllen, bevor eine vorhandene Datei ersetzt wird.
+
 **XML übernehmen** verlangt eine zweite explizite Bestätigung. Danach ersetzt `File.Replace` die unveränderte Quelldatei atomar und legt im selben Ordner eine eindeutig benannte `.vibn-backup`-Datei an. Ein zwischen Vorschau und Übernahme extern geändertes XML wird nicht überschrieben.
 
 Die exakte Regel wird als isolierte Override-Komponente geschrieben. Bestehende Definitionen des Komponententyps erhalten für genau dieses vollständige Signal eine Exclusion; die Override-Komponente ordnet es genau einem Zielslot zu. Dadurch erzeugt die bisherige Eindeutigkeitsprüfung keinen Mehrfachtreffer. Eine spätere Änderung desselben Vorschlags ersetzt den alten generierten Override statt eine konkurrierende Regel zu hinterlassen.

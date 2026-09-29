@@ -38,6 +38,11 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
 
         var byId = new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
         var objects = new List<VisualFeeObject>(uniqueRuntimeObjects.Length);
+        var duplicateIdentities = uniqueRuntimeObjects
+            .GroupBy(CreateIdentity, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var runtimeObject in uniqueRuntimeObjects)
         {
             var id = CreateFeeObjectId(runtimeObject.GuidString);
@@ -48,7 +53,10 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 runtimeObject.Name ?? string.Empty,
                 runtimeObject.GetType().FullName ?? runtimeObject.GetType().Name,
                 runtimeObject.FeeType ?? string.Empty,
-                GetAssignableTypeNames(runtimeObject.GetType())));
+                GetAssignableTypeNames(runtimeObject.GetType()),
+                runtimeObject.Parent?.GuidString ?? string.Empty,
+                runtimeObject.Parent?.Name ?? string.Empty,
+                duplicateIdentities.Contains(CreateIdentity(runtimeObject))));
         }
 
         var containerObjects = allObjects.OfType<FeeLogic>()
@@ -112,5 +120,12 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
         }
         return names;
     }
+
+    private static string CreateIdentity(FeeAbstractObject item) => string.Join(
+        "\u001f",
+        item.Name?.Trim() ?? string.Empty,
+        item.GetType().FullName ?? item.GetType().Name,
+        item.FeeType?.Trim() ?? string.Empty,
+        item.Parent?.GuidString?.Trim() ?? string.Empty);
 
 }
