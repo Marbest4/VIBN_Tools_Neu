@@ -141,6 +141,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         ToggleTreeNodeGenerationCommand = new RelayCommand<ContainerToFeeVisualTreeNodeVM>(
             ToggleTreeNodeGeneration,
             node => node?.ContainerId is not null && !IsBusy);
+        ConfirmDuplicateFeeObjectCommand = new RelayCommand<ContainerToFeeVisualTreeNodeVM>(
+            ConfirmDuplicateFeeObject,
+            node => node?.CanConfirmDuplicate == true && !IsBusy);
         ResumeLastGenerationCommand = new RelayCommand(
             ResumeLastGeneration,
             () => HasPlan && !IsBusy);
@@ -231,6 +234,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     public ICommand DeleteTreeNodeCommand { get; }
 
     public ICommand ToggleTreeNodeGenerationCommand { get; }
+
+    public ICommand ConfirmDuplicateFeeObjectCommand { get; }
 
     public ICommand ResumeLastGenerationCommand { get; }
 
@@ -1638,6 +1643,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
 
         var feeObjectId = ResolveAssignedFeeObjectId(node, plan);
+        var hasDuplicateIdentity = _planService.IsDuplicateFeeObject(feeObjectId);
+        var isDuplicateConfirmed = _planService.IsDuplicateFeeObjectConfirmed(feeObjectId);
 
         return new(
             node,
@@ -1647,11 +1654,25 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             plan.GetEffectiveSlot(node),
             allowedSlots,
             feeObjectId,
+            hasDuplicateIdentity,
+            isDuplicateConfirmed,
             GetNodeState(node, plan),
             GetNodeConnectionDescription(node, plan),
             GetNodeErrors(node, plan, issues),
             SetGenerationSelected,
             SetSlotOverride);
+    }
+
+    private void ConfirmDuplicateFeeObject(ContainerToFeeVisualTreeNodeVM? node)
+    {
+        if (node?.ParentId is null || string.IsNullOrWhiteSpace(node.FeeObjectId))
+            return;
+        var result = _planService.ConfirmDuplicateAssignment(node.ParentId, node.FeeObjectId);
+        StatusText = result.Message;
+        if (result.Success)
+            _log.Information(LogArea, result.Message);
+        else
+            _log.Warning(LogArea, result.Message);
     }
 
     private void SetSlotOverride(string signalNodeId, string slot)
@@ -2446,6 +2467,8 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         string effectiveSlot,
         IReadOnlyList<string> allowedSlots,
         string? feeObjectId,
+        bool hasDuplicateIdentity,
+        bool isDuplicateConfirmed,
         ContainerToFeeVisualNodeState simObjectState,
         string linkedObjectDescription,
         IEnumerable<string> validationErrors,
@@ -2464,6 +2487,8 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         _slot = effectiveSlot;
         AllowedSlots = allowedSlots;
         FeeObjectId = feeObjectId;
+        HasDuplicateIdentity = hasDuplicateIdentity;
+        IsDuplicateConfirmed = isDuplicateConfirmed;
         _isExpanded = !model.IsTechnical && model.Kind is VisualNodeKind.Root or VisualNodeKind.Container;
     }
 
@@ -2486,6 +2511,15 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
     }
     public IReadOnlyList<string> AllowedSlots { get; }
     public string? FeeObjectId { get; }
+    public string? ParentId => Model.ParentId;
+    public bool HasDuplicateIdentity { get; }
+    public bool IsDuplicateConfirmed { get; }
+    public bool CanConfirmDuplicate => Kind == VisualNodeKind.SimObject &&
+                                       HasDuplicateIdentity &&
+                                       !IsDuplicateConfirmed;
+    public string DuplicateConfirmationText => IsDuplicateConfirmed
+        ? "Mehrfachfund bestätigt"
+        : "Mehrfachfund bestätigen";
     public bool CanEditSlot => Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
                                AllowedSlots.Count > 0;
     public string SourceLocation => Model.SourceLocation;

@@ -43,11 +43,12 @@ public static class DataGridRevealBehavior
 
         _ = grid.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
-            if ((long)grid.GetValue(RevealRevisionProperty) != revision ||
-                !grid.Items.Contains(requestedItem))
+            if ((long)grid.GetValue(RevealRevisionProperty) != revision)
                 return;
             try
             {
+                if (!grid.Items.Contains(requestedItem))
+                    return;
                 var viewer = FindVisualChild<ScrollViewer>(grid);
                 var itemIndex = grid.Items.IndexOf(requestedItem);
                 if (viewer is not null && itemIndex >= 0 && itemIndex < grid.Items.Count)

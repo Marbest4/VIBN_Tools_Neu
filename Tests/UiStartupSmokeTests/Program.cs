@@ -141,6 +141,13 @@ internal static class Program
                 throw new InvalidOperationException(
                     "The Rockwell page must select its explicit GCCS standard and disclose the Studio 5000 prerequisite.");
             }
+            var noStandard = rockwellViewModel.Standards.SingleOrDefault(item => item.Id == "NONE");
+            if (noStandard is null || noStandard.SupportsGeneration)
+                throw new InvalidOperationException("Rockwell must offer an explicit no-standard, no-mutation option.");
+            rockwellViewModel.SelectedStandard = noStandard;
+            if (!rockwellViewModel.SelectedStandardDescription.Contains("keine Änderung", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The no-standard Rockwell option does not disclose its no-mutation behavior.");
+            rockwellViewModel.SelectedStandard = rockwellViewModel.Standards.Single(item => item.Id == "GCCS");
             ExerciseDeferredTemplates(rockwellPage);
 
             var specialDevicePage = new SpecialDevicePage();

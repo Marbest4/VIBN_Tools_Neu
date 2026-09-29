@@ -59,12 +59,17 @@ public sealed class RockwellPageVM : MvvmBase
             _selectedStandard = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanEdit));
-            StatusText = value is null
-                ? "Bitte einen Rockwell-Standard auswählen."
-                : $"Standard '{value.DisplayName}' ausgewählt. Nun L5X laden und die Schritte 1 bis 3 ausführen.";
+            OnPropertyChanged(nameof(SelectedStandardDescription));
+            OnPropertyChanged(nameof(EditUnavailableReason));
+            StatusText = value?.SupportsGeneration == true
+                ? $"Standard '{value.DisplayName}' ausgewählt. Nun L5X laden und die Schritte 1 bis 3 ausführen."
+                : "Kein Simulationsstandard ausgewählt: Die L5X wird nicht verändert; Interface-Export und Bestandsanzeige bleiben verfügbar.";
             CommandManager.InvalidateRequerySuggested();
         }
     }
+
+    public string SelectedStandardDescription => SelectedStandard?.Description ??
+        "Keine Auswahl. Es werden keine standardabhängigen L5X-Änderungen angeboten.";
 
     public bool IsHelpVisible
     {
@@ -75,8 +80,12 @@ public sealed class RockwellPageVM : MvvmBase
     public string WorkflowHelp =>
         "Voraussetzung: ein L5X-Export des Studio-5000-Projekts. Der erste Bereich erzeugt daraus die " +
         "Allen-Bradley-Excel-Schnittstelle wie der InterfaceCreator (Member D*, PtStatus* und VS*). " +
-        "Danach den Standard auswählen. Schritt 1 ergänzt nur fehlende GCCS-Basisobjekte. Schritt 2 erzeugt die Standard-A001-" +
-        "Simulation, Schritt 3 die Safety-A001-Simulation. Jeder Schritt ist idempotent und ändert nur " +
+        "Danach optional GCCS auswählen. 'Kein Standard' verändert die L5X nicht. Schritt 1 sucht im Controller nach " +
+        "DataTypes, AddOnInstructionDefinitions und Tags und ergänzt SIMULATION_MODES, SimulationMode sowie die Standard-/Safety-Tags. " +
+        "Schritt 2 sucht in jedem Standardprogramm B001_MapInputs und A000_Main, erzeugt daraus A001_Simulation und ersetzt dort " +
+        "den JSR-Aufruf. Schritt 3 sucht in Safety-Programmen s_B001_MapInputs/B001_MapInputs und s_A000_Main/A000_Main und erzeugt " +
+        "s_A001_Simulation. Nicht gefundene Abschnitte, Programme, Routinen oder Aufrufe werden mit erwartetem Namen und Suchort gemeldet. " +
+        "Jeder Schritt ist idempotent und ändert nur " +
         "das Arbeitsmodell; geschrieben wird erst mit 'Generierte L5X speichern'. 'Generierte L5X öffnen' " +
         "übergibt die Datei an die Windows-L5X-Zuordnung. Dafür muss Studio 5000 Logix Designer installiert " +
         "und für L5X registriert sein; Studio 5000 zeigt anschließend seinen Importdialog.";
@@ -130,7 +139,13 @@ public sealed class RockwellPageVM : MvvmBase
         }
     }
 
-    public bool CanEdit => _editor is not null && SelectedStandard is not null && !IsBusy;
+    public bool CanEdit => _editor is not null && SelectedStandard?.SupportsGeneration == true && !IsBusy;
+
+    public string EditUnavailableReason => _editor is null
+        ? "Zuerst eine L5X-Datei auswählen."
+        : SelectedStandard?.SupportsGeneration != true
+            ? "Ohne Simulationsstandard werden keine L5X-Änderungen ausgeführt."
+            : IsBusy ? "Ein Rockwell-Vorgang läuft bereits." : string.Empty;
 
     public bool CanExportInterface => !IsBusy && !string.IsNullOrWhiteSpace(SourcePath) && File.Exists(SourcePath);
 
@@ -234,9 +249,9 @@ public sealed class RockwellPageVM : MvvmBase
 
     private void ApplyStage(int stage)
     {
-        if (SelectedStandard is null)
+        if (SelectedStandard?.SupportsGeneration != true)
         {
-            StatusText = "Bitte zuerst einen Rockwell-Standard auswählen.";
+            StatusText = "Für diesen Schritt GCCS auswählen. 'Kein Standard' führt bewusst keine L5X-Änderung aus.";
             return;
         }
         Apply(editor => SelectedStandard.ApplyStage(editor, stage));

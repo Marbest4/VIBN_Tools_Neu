@@ -677,6 +677,17 @@ internal static class Program
                 throw new InvalidOperationException(
                     "Exact same-name/type/parent FEE SimObject duplicates were not exposed as a validation error.");
             }
+            var confirmation = service.ConfirmDuplicateAssignment(target.Id, objects[0].Id);
+            var confirmedIssue = service.Validate().Issues.SingleOrDefault(issue =>
+                issue.Code == "DUPLICATE_FEE_SIMOBJECT_IDENTITY");
+            if (!confirmation.Success ||
+                loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 2 ||
+                confirmedIssue?.Severity != VisualIssueSeverity.Warning ||
+                !service.IsDuplicateFeeObjectConfirmed(objects[1].Id))
+            {
+                throw new InvalidOperationException(
+                    "An explicitly confirmed duplicate multi-select identity was not retained and downgraded to a warning.");
+            }
             var objectLinks = objects.Select(item => new VisualFeeObjectLink(
                     item.GuidString,
                     "InTarget",
@@ -1408,6 +1419,15 @@ internal static class Program
             false);
         viewModel.PendingReimportChanges.Add(first);
         viewModel.PendingReimportChanges.Add(second);
+
+        viewModel.SelectedReimportCriterion = first.Category;
+        if (viewModel.PendingReimportChangesView.Cast<object>().Count() != 1)
+            throw new InvalidOperationException("Reimport criterion filter did not restrict the comparison list.");
+        viewModel.SelectedReimportCriterion = "Alle";
+        viewModel.ReimportSearchText = "Sensor B";
+        if (viewModel.PendingReimportChangesView.Cast<ReimportDifference>().SingleOrDefault() != second)
+            throw new InvalidOperationException("Reimport full-text search did not find the expected change.");
+        viewModel.ReimportSearchText = string.Empty;
 
         viewModel.AcceptReimportChange.Execute(first);
         if (!first.IsAccepted || viewModel.PendingReimportChanges.Count != 2 ||

@@ -314,12 +314,14 @@ public sealed class ViCoColumnOptionVM : MvvmBase
 	{
 		Key = key;
 		Title = title;
+		DefaultIsVisible = isVisible;
 		_isVisible = isVisible;
 		_changed = changed;
 	}
 
 	public string Key { get; }
 	public string Title { get; }
+	public bool DefaultIsVisible { get; }
 
 	public bool IsVisible
 	{
@@ -341,6 +343,8 @@ public sealed class ViCoColumnOptionVM : MvvmBase
 		_isVisible = value;
 		OnPropertyChanged(nameof(IsVisible));
 	}
+
+	public void Reset() => Apply(DefaultIsVisible);
 }
 
 /// <summary>

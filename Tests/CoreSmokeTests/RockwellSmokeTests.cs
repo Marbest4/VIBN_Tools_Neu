@@ -71,8 +71,12 @@ internal static class RockwellSmokeTests
         Assert(await File.ReadAllTextAsync(source) == original, "Allen-Bradley interface export must not alter the source L5X.");
 
         var editor = RockwellProjectEditor.Load(source);
-        var gccs = RockwellStandardCatalog.All.Single();
+        var gccs = RockwellStandardCatalog.All.Single(definition => definition.Id == "GCCS");
         Assert(gccs.Id == "GCCS", "The verified Rockwell standard catalog should expose GCCS explicitly.");
+        var noStandard = RockwellStandardCatalog.All.Single(definition => definition.Id == "NONE");
+        Assert(!noStandard.SupportsGeneration &&
+               noStandard.Description.Contains("keine Änderung", StringComparison.OrdinalIgnoreCase),
+            "The Rockwell catalog should expose an explicit read-only no-standard choice.");
         var basics = gccs.ApplyStage(editor, 1);
         Assert(basics.AddedItems == 4, "Rockwell basic integration should add data type, AOI and both controller tags.");
         Assert(editor.EnsureSimulationBasics().AddedItems == 0, "Rockwell basic integration must be idempotent.");

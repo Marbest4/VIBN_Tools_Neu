@@ -384,7 +384,38 @@ namespace VIBN_Tools.Application.VM
         private bool _pendingComparisonIsContainerFile;
 
         public ObservableCollection<ReimportDifference> PendingReimportChanges { get; } = [];
+        public ICollectionView PendingReimportChangesView { get; }
+        public ObservableCollection<string> ReimportCriteria { get; } = ["Alle"];
         public ObservableCollection<WorkspaceActivityLogEntry> ActivityLog { get; } = [];
+
+        private string _selectedReimportCriterion = "Alle";
+        public string SelectedReimportCriterion
+        {
+            get => _selectedReimportCriterion;
+            set
+            {
+                var normalized = string.IsNullOrWhiteSpace(value) ? "Alle" : value;
+                if (string.Equals(_selectedReimportCriterion, normalized, StringComparison.Ordinal))
+                    return;
+                _selectedReimportCriterion = normalized;
+                OnPropertyChanged();
+                PendingReimportChangesView.Refresh();
+            }
+        }
+
+        private string _reimportSearchText = string.Empty;
+        public string ReimportSearchText
+        {
+            get => _reimportSearchText;
+            set
+            {
+                if (string.Equals(_reimportSearchText, value, StringComparison.Ordinal))
+                    return;
+                _reimportSearchText = value ?? string.Empty;
+                OnPropertyChanged();
+                PendingReimportChangesView.Refresh();
+            }
+        }
 
         public bool HasPendingReimportChanges => PendingReimportChanges.Count > 0;
         private bool _isReimportComparisonVisible = true;
@@ -717,6 +748,9 @@ namespace VIBN_Tools.Application.VM
             UnassignedEntries = new ObservableCollection<ContainerEntry>();
             ContainerList = new ObservableCollection<ContainerData>();
             ContainerList.CollectionChanged += ContainerList_CollectionChanged;
+            PendingReimportChangesView = CollectionViewSource.GetDefaultView(PendingReimportChanges);
+            PendingReimportChangesView.Filter = FilterReimportDifference;
+            PendingReimportChanges.CollectionChanged += (_, _) => RefreshReimportCriteria();
 
             SelectedContainers = new List<ContainerData>();
 
@@ -1216,45 +1250,7 @@ namespace VIBN_Tools.Application.VM
             try
             {
                 var candidate = ContainerFileWorkspaceReader.Read(candidateDialog.FileName);
-                var candidateContainers = candidate.Containers.ToList();
-                var candidateUnassigned = candidate.UnassignedSignals.ToList();
-                var candidateFiltered = new List<ContainerEntry>();
-                var snapshot = GenerationWorkspaceReconciler.Capture(
-                    ContainerList,
-                    UnassignedEntries,
-                    FilteredEntries);
-                var summary = GenerationWorkspaceReconciler.Reconcile(
-                    snapshot,
-                    candidateContainers,
-                    candidateUnassigned,
-                    candidateFiltered,
-                    RequirementsFile);
-
-                ClearPendingReimportResult();
-                _pendingGeneratedContainers = candidateContainers;
-                _pendingGeneratedUnassigned = candidateUnassigned;
-                _pendingGeneratedFiltered = candidateFiltered;
-                _pendingReimportSummary = summary;
-                _pendingComparisonIsContainerFile = true;
-                foreach (var difference in summary.Differences)
-                {
-                    PendingReimportChanges.Add(difference);
-                    difference.PropertyChanged += PendingReimportChange_PropertyChanged;
-                }
-
-                OnPropertyChanged(nameof(HasPendingReimportChanges));
-                IsReimportComparisonVisible = true;
-                OnPropertyChanged(nameof(ShowPendingReimportPanel));
-                OnPropertyChanged(nameof(ShowCollapsedReimportSummary));
-                OnPropertyChanged(nameof(ShowReimportNotice));
-                OnPropertyChanged(nameof(PendingReimportSelectionSummary));
-                ReimportNotice =
-                    $"ContainerFile-Vergleich: aktiver Arbeitsstand → " +
-                    $"{Path.GetFileName(candidateDialog.FileName)}; {summary.Differences.Count} Unterschiede erkannt.";
-                StatusText = summary.Differences.Count == 0
-                    ? "Die beiden ContainerFiles sind semantisch gleich."
-                    : "ContainerFile-Vorschau erstellt. Jede Änderung kann einzeln übernommen oder verworfen werden.";
-                AddActivity("Container-Vergleich", "A/B-Vorschau erstellt", ReimportNotice);
+                PrepareContainerFileComparison(candidateDialog.FileName, candidate);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException)
             {
@@ -1284,6 +1280,28 @@ namespace VIBN_Tools.Application.VM
             try
             {
                 var loaded = ContainerFileWorkspaceReader.Read(dialog.FileName);
+                if (HasWorkspaceData)
+                {
+                    var choice = MessageBox.Show(
+                        "Es ist bereits ein aktiver Arbeitsstand vorhanden.\n\n" +
+                        "Ja: Aktiven Stand vollständig durch das ContainerFile ersetzen.\n" +
+                        "Nein: Änderungen zuerst vergleichen und einzeln auswählen.\n" +
+                        "Abbrechen: Nichts verändern.",
+                        "ContainerFile laden",
+                        MessageBoxButton.YesNoCancel,
+                        MessageBoxImage.Warning,
+                        MessageBoxResult.No);
+                    if (choice == MessageBoxResult.Cancel)
+                    {
+                        StatusText = "ContainerFile wurde nicht geladen; der Arbeitsstand blieb unverändert.";
+                        return;
+                    }
+                    if (choice == MessageBoxResult.No)
+                    {
+                        PrepareContainerFileComparison(dialog.FileName, loaded);
+                        return;
+                    }
+                }
                 var containers = loaded.Containers.ToList();
                 var unassigned = loaded.UnassignedSignals.ToList();
                 foreach (var container in containers)
@@ -1539,6 +1557,95 @@ namespace VIBN_Tools.Application.VM
                 Logger.Error(exception, "Could not open the workspace autosave directory.");
                 StatusText = "Der Arbeitsstand-Ordner konnte nicht geöffnet werden. Details stehen im Protokoll.";
             }
+        }
+
+        private void PrepareContainerFileComparison(
+            string filePath,
+            ContainerFileWorkspace candidate)
+        {
+            var candidateContainers = candidate.Containers.ToList();
+            var candidateUnassigned = candidate.UnassignedSignals.ToList();
+            var candidateFiltered = new List<ContainerEntry>();
+            var snapshot = GenerationWorkspaceReconciler.Capture(
+                ContainerList,
+                UnassignedEntries,
+                FilteredEntries);
+            var summary = GenerationWorkspaceReconciler.Reconcile(
+                snapshot,
+                candidateContainers,
+                candidateUnassigned,
+                candidateFiltered,
+                RequirementsFile);
+
+            ClearPendingReimportResult();
+            _pendingGeneratedContainers = candidateContainers;
+            _pendingGeneratedUnassigned = candidateUnassigned;
+            _pendingGeneratedFiltered = candidateFiltered;
+            _pendingReimportSummary = summary;
+            _pendingComparisonIsContainerFile = true;
+            foreach (var difference in summary.Differences)
+            {
+                PendingReimportChanges.Add(difference);
+                difference.PropertyChanged += PendingReimportChange_PropertyChanged;
+            }
+
+            OnPropertyChanged(nameof(HasPendingReimportChanges));
+            IsReimportComparisonVisible = true;
+            OnPropertyChanged(nameof(ShowPendingReimportPanel));
+            OnPropertyChanged(nameof(ShowCollapsedReimportSummary));
+            OnPropertyChanged(nameof(ShowReimportNotice));
+            OnPropertyChanged(nameof(PendingReimportSelectionSummary));
+            ReimportNotice =
+                $"ContainerFile-Vergleich: aktiver Arbeitsstand → " +
+                $"{Path.GetFileName(filePath)}; {summary.Differences.Count} Unterschiede erkannt.";
+            StatusText = summary.Differences.Count == 0
+                ? "Aktiver Stand und ContainerFile sind semantisch gleich."
+                : "ContainerFile-Vorschau erstellt. Kriterium und Suche können die Anzeige eingrenzen; jede Änderung bleibt einzeln entscheidbar.";
+            AddActivity("Container-Vergleich", "A/B-Vorschau erstellt", ReimportNotice);
+        }
+
+        private bool FilterReimportDifference(object item)
+        {
+            if (item is not ReimportDifference difference)
+                return false;
+            if (!string.Equals(SelectedReimportCriterion, "Alle", StringComparison.Ordinal) &&
+                !string.Equals(difference.Category, SelectedReimportCriterion, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var query = ReimportSearchText.Trim();
+            if (query.Length == 0)
+                return true;
+            return new[]
+            {
+                difference.Category,
+                difference.Signal,
+                difference.PreviousValue,
+                difference.DetectedValue,
+                difference.ExactDifference,
+                difference.DecisionEffect,
+            }.Any(value => value.Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void RefreshReimportCriteria()
+        {
+            var categories = PendingReimportChanges
+                .Select(change => change.Category)
+                .Where(category => !string.IsNullOrWhiteSpace(category))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(category => category, StringComparer.CurrentCultureIgnoreCase)
+                .ToArray();
+            ReimportCriteria.Clear();
+            ReimportCriteria.Add("Alle");
+            foreach (var category in categories)
+                ReimportCriteria.Add(category);
+            if (!ReimportCriteria.Contains(SelectedReimportCriterion))
+            {
+                _selectedReimportCriterion = "Alle";
+                OnPropertyChanged(nameof(SelectedReimportCriterion));
+            }
+            PendingReimportChangesView.Refresh();
         }
 
         private void ConfigureAutoSaveTimer()

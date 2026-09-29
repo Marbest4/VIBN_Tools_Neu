@@ -17,8 +17,8 @@
         </Style>
     </UserControl.Resources>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-    <Grid Margin="20" MinWidth="1120" MinHeight="680">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <Grid Margin="20" MinWidth="1120">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -57,6 +57,8 @@
                   CanUserAddRows="False" CanUserDeleteRows="False"
                   MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                  VirtualizingPanel.VirtualizationMode="Standard"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True">
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Export" ToolTip="Legt fest, ob dieser oberste BasicFrame in das ContainerFile übernommen wird." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
@@ -110,6 +112,8 @@
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          VirtualizingPanel.VirtualizationMode="Standard"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
@@ -142,6 +146,8 @@
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          VirtualizingPanel.VirtualizationMode="Standard"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
@@ -175,6 +181,8 @@
                           IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           MinColumnWidth="90" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                          VirtualizingPanel.VirtualizationMode="Standard"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="2*" IsReadOnly="True" />

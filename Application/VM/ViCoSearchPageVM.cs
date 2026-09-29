@@ -1107,6 +1107,33 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         action();
     }
 
+    public async Task ResetDisplayViewAsync()
+    {
+        _columnPreferencesLoaded = false;
+        foreach (var column in ColumnOptions)
+            column.Reset();
+        _searchVisibleColumnsOnly = false;
+        OnPropertyChanged(nameof(SearchVisibleColumnsOnly));
+        _showExtendedInformation = false;
+        OnPropertyChanged(nameof(ShowExtendedInformation));
+        ApplySearch();
+        _columnPreferencesLoaded = true;
+
+        try
+        {
+            await _autoRefreshSettingsStore.SaveAsync(
+                BuildDisplaySettings(ViCoAutoRefreshPolicy.Normalize(AutoRefreshIntervalMinutes)),
+                _lifetimeCancellation.Token);
+            StatusText = "Spaltenreihenfolge, -breite, Sichtbarkeit und Suchumfang wurden zurückgesetzt.";
+            _log.Information("Rechnerübersicht", StatusText);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            StatusText = "Die Standardansicht wurde hergestellt, konnte aber nicht gespeichert werden.";
+            _log.Error("Rechnerübersicht", StatusText, exception);
+        }
+    }
+
     private void OpenCommandPrompt(object? parameter)
     {
         try

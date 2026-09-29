@@ -142,6 +142,13 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         "Simulationsrückmeldung' benötigt eine verbundene WinCC Runtime, PLCSIM Advanced oder eine Test-PLC, eine " +
         "projektspezifische Tag-/Bildzuordnung, einen Simulationsadapter und eine sichere Rücksetzung der Schreibwerte.";
 
+    public string ProgramInventoryInfo =>
+        "Diese beiden Funktionen sind momentan eine schreibgeschützte Bestandsaufnahme: Sie laden Name und " +
+        "Ordnerpfad der Programmbausteine beziehungsweise PLC-Datentypen aus der ausgewählten PLC. Die Liste " +
+        "ändert, importiert und exportiert nichts. Sie dient zum Prüfen, ob erwartete Kundenbausteine und UDTs " +
+        "vorhanden und richtig einsortiert sind; eine automatische Inhaltsanalyse oder Einzelaktion auf einer " +
+        "markierten Zeile ist derzeit nicht implementiert. Der Bibliotheksimport/-export ist davon getrennt.";
+
     public string AxisConfigurationInfo =>
         "Auswahl konfigurieren ändert ausschließlich die markierten Technologieachsen. " +
         "Ein separates X/Y/Z-Kennzeichen beziehungsweise Namen wie AxisX/AchseX werden als linear erkannt; andere Namen als rotatorisch. " +

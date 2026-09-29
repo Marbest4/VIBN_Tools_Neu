@@ -156,7 +156,14 @@ public sealed class RockwellProjectEditor
                               (safety ? FindRoutine(program, "s_A000_Main") : null);
             if (inputRoutine is null || mainRoutine is null)
             {
-                messages.Add($"{programName}: B001_MapInputs und/oder A000_Main fehlen; keine A001-Routine erzeugt.");
+                var expectedInput = safety ? "s_B001_MapInputs oder B001_MapInputs" : "B001_MapInputs";
+                var expectedMain = safety ? "A000_Main oder s_A000_Main" : "A000_Main";
+                var missing = new List<string>();
+                if (inputRoutine is null)
+                    missing.Add($"Eingangsroutine '{expectedInput}' unter Controller/Programs/Program[@Name='{programName}']/Routines");
+                if (mainRoutine is null)
+                    missing.Add($"Hauptroutine '{expectedMain}' unter Controller/Programs/Program[@Name='{programName}']/Routines");
+                messages.Add($"{programName}: Keine {generatedRoutineName} erzeugt. Nicht gefunden: {string.Join("; ", missing)}.");
                 continue;
             }
 
@@ -183,11 +190,15 @@ public sealed class RockwellProjectEditor
             if (RewriteMainRoutine(mainRoutine, inputRoutine, generatedRoutineName, simulationTag))
                 updated++;
             else
-                messages.Add($"{programName}: Der Aufruf von {Attribute(inputRoutine, "Name")} wurde in A000_Main nicht gefunden.");
+                messages.Add($"{programName}: {generatedRoutineName} wurde erzeugt, aber in Routine '{Attribute(mainRoutine, "Name")}' " +
+                             $"wurde der erwartete Text 'JSR({Attribute(inputRoutine, "Name")},0);' nicht gefunden. " +
+                             "A000_Main wurde deshalb nicht automatisch umgeschaltet.");
         }
 
         if (!candidates.Any())
-            messages.Add(safety ? "Kein Safety-Programm gefunden." : "Kein Standardprogramm gefunden.");
+            messages.Add(safety
+                ? "Kein Safety-Programm unter Controller/Programs gefunden. Erwartet wird Class='Safety' oder ein Programmname mit Präfix 's_'."
+                : "Kein Standardprogramm unter Controller/Programs gefunden; alle gefundenen Programme wurden als Safety klassifiziert.");
         return new RockwellEditResult(added, updated, messages);
     }
 

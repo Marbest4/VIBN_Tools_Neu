@@ -24,6 +24,7 @@ public sealed class ContainerToFeeVisualPlanService
     private readonly ExistingSignalLinkAdapter _signalLinkExecutor;
     private readonly Stack<PlanState> _undo = new();
     private readonly Stack<PlanState> _redo = new();
+    private readonly HashSet<string> _confirmedDuplicateIdentities = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<VisualFeeObject> _feeObjects = [];
     private IReadOnlyList<VisualFeeContainerObject> _feeContainerObjects = [];
     private IReadOnlyDictionary<string, FeeAbstractObject> _runtimeObjects =
@@ -73,6 +74,56 @@ public sealed class ContainerToFeeVisualPlanService
     public IReadOnlyList<VisualFeeSignal> DiscoveredFeeSignals => _feeSignals;
     public IReadOnlyList<VisualFeeSignalLink> DiscoveredFeeSignalLinks => _feeSignalLinks;
     public IReadOnlyList<VisualFeeObjectLink> DiscoveredFeeSimObjectLinks => _feeSimObjectLinks;
+
+    public bool IsDuplicateFeeObject(string? feeObjectId) =>
+        FindFeeObject(feeObjectId)?.HasExactDuplicate == true;
+
+    public bool IsDuplicateFeeObjectConfirmed(string? feeObjectId) =>
+        FindFeeObject(feeObjectId) is { HasExactDuplicate: true } feeObject &&
+        _confirmedDuplicateIdentities.Contains(CreateDuplicateIdentity(feeObject));
+
+    public VisualAssignmentResult ConfirmDuplicateAssignment(string targetId, string feeObjectId)
+    {
+        var plan = CurrentPlan;
+        if (plan is null)
+            return AssignmentFailure("Es ist kein visueller Plan geladen.", "PLAN_NOT_LOADED");
+        var target = plan.FindTarget(targetId);
+        var feeObject = FindFeeObject(feeObjectId);
+        if (target is null || feeObject is null || !feeObject.HasExactDuplicate)
+        {
+            return AssignmentFailure(
+                "Der Mehrfachtreffer ist nicht mehr vorhanden.",
+                "DUPLICATE_CONFIRMATION_TARGET_MISSING",
+                targetId);
+        }
+        if (!target.CanAssign(feeObject))
+            return AssignmentFailure("Das gewählte Objekt ist nicht kompatibel.", "FEE_OBJECT_INCOMPATIBLE", targetId);
+
+        var before = Capture(plan);
+        var assignments = plan.Assignments.ToList();
+        if (!assignments.Any(item => item.TargetId == targetId && item.FeeObjectId == feeObjectId))
+            assignments.Add(ToAssignment(targetId, feeObject));
+        if (!target.AllowMultiSelect)
+        {
+            assignments = assignments
+                .Where(item => item.TargetId != targetId || item.FeeObjectId == feeObjectId)
+                .ToList();
+        }
+        _confirmedDuplicateIdentities.Add(CreateDuplicateIdentity(feeObject));
+        RecordMutation(before);
+        plan.ReplaceAssignments(assignments);
+        _logger.Information(
+            $"Mehrfachfund '{feeObject.Name}' unter '{feeObject.ParentName}' wurde ausdrücklich bestätigt; " +
+            (target.AllowMultiSelect ? "Multi-Select-Zuordnungen bleiben erhalten." : "der bestätigte Treffer wurde eindeutig ausgewählt."));
+        RaisePlanChanged();
+        return new VisualAssignmentResult(
+            true,
+            target.AllowMultiSelect
+                ? $"Mehrfachfund '{feeObject.Name}' wurde für das Multi-Select-Ziel bestätigt."
+                : $"'{feeObject.Name}' wurde als eindeutiger Treffer bestätigt; andere Treffer wurden von diesem Ziel gelöst.",
+            ToAssignment(targetId, feeObject),
+            []);
+    }
 
     public async Task<VisualPlanLoadResult> LoadXmlAsync(
         string xmlPath,
@@ -186,6 +237,7 @@ public sealed class ContainerToFeeVisualPlanService
         CancellationToken cancellationToken = default)
     {
         var result = await _discovery.DiscoverAsync(cancellationToken);
+        _confirmedDuplicateIdentities.Clear();
         _feeObjects = result.Objects;
         _runtimeObjects = result.RuntimeObjects;
         _feeContainerObjects = result.ContainerObjects;
@@ -1298,6 +1350,7 @@ public sealed class ContainerToFeeVisualPlanService
                              StringComparer.OrdinalIgnoreCase))
             {
                 var sample = duplicateGroup.First();
+                var isConfirmed = _confirmedDuplicateIdentities.Contains(CreateDuplicateIdentity(sample));
                 var matchingTargets = plan.Targets.Where(target =>
                         target.CanAssign(sample) &&
                         string.Equals(
@@ -1311,11 +1364,13 @@ public sealed class ContainerToFeeVisualPlanService
                 foreach (var nodeId in nodeIds)
                 {
                     issues.Add(new VisualIssue(
-                        VisualIssueSeverity.Error,
+                        isConfirmed ? VisualIssueSeverity.Warning : VisualIssueSeverity.Error,
                         "DUPLICATE_FEE_SIMOBJECT_IDENTITY",
                         $"{duplicateGroup.Count()} identische FEE-SimObjects '{sample.Name}' vom Typ " +
                         $"'{sample.FeeType}' wurden unter demselben Parent '{sample.ParentName}' gefunden. " +
-                        "Die GUIDs sind unterschiedlich; Duplikate im FEE-Projekt prüfen und bereinigen.",
+                        (isConfirmed
+                            ? "Der Mehrfachfund wurde für diese Sitzung ausdrücklich bestätigt."
+                            : "Die GUIDs sind unterschiedlich; im Strukturbaum einen konkreten Treffer bestätigen oder die Duplikate im FEE-Projekt bereinigen."),
                         nodeId));
                 }
             }
@@ -1524,6 +1579,7 @@ public sealed class ContainerToFeeVisualPlanService
         CurrentPlan = plan;
         _undo.Clear();
         _redo.Clear();
+        _confirmedDuplicateIdentities.Clear();
         _feeObjects = [];
         _feeContainerObjects = [];
         _runtimeObjects = new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
@@ -1745,6 +1801,18 @@ public sealed class ContainerToFeeVisualPlanService
         clone.SetExistingInterfaceSelections(plan.ExistingInterfaceSelections);
         return clone;
     }
+
+    private VisualFeeObject? FindFeeObject(string? feeObjectId) =>
+        string.IsNullOrWhiteSpace(feeObjectId)
+            ? null
+            : _feeObjects.FirstOrDefault(item => string.Equals(item.Id, feeObjectId, StringComparison.Ordinal));
+
+    private static string CreateDuplicateIdentity(VisualFeeObject item) => string.Join(
+        "\u001f",
+        item.Name.Trim(),
+        item.TypeName,
+        item.FeeType.Trim(),
+        item.ParentGuidString.Trim());
 
     private VisualFeeSignal? ResolveSignalForNode(
         VisualPlan plan,

@@ -32,6 +32,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private string _objectSearchText = string.Empty;
     private bool _suppressCrossListReveal;
     private long _selectionRevision;
+    private long _crossSelectionRevision;
 
     public Fee2ContainerPageVM()
         : this(new Fee2ContainerService(), Services.Connection ?? new FeeConnectionService()) { }
@@ -156,24 +157,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null)
                 return;
-
-            if (_selectedFoundSignal is not null)
-            {
-                _selectedFoundSignal = null;
-                OnPropertyChanged(nameof(SelectedFoundSignal));
-            }
-            foreach (var container in FoundContainers)
-                container.IsRelatedToSelection = false;
-            foreach (var signal in FoundSignals)
-                signal.IsRelatedToSelection = string.Equals(
-                    signal.ContainerId,
-                    value.Id,
-                    StringComparison.Ordinal);
-            if (!_suppressCrossListReveal)
-            {
-                SignalRevealTarget = FoundSignalsView.Cast<Fee2ContainerFoundSignalVM>()
-                    .FirstOrDefault(signal => string.Equals(signal.ContainerId, value.Id, StringComparison.Ordinal));
-            }
+            QueueCrossListSelection(value, revealTarget: !_suppressCrossListReveal);
         }
     }
 
@@ -188,24 +172,77 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null)
                 return;
+            QueueCrossListSelection(value, revealTarget: !_suppressCrossListReveal);
+        }
+    }
 
-            if (_selectedFoundContainer is not null)
+    private void QueueCrossListSelection(object selection, bool revealTarget)
+    {
+        var revision = ++_crossSelectionRevision;
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted)
+        {
+            ApplyCrossListSelectionSafely(selection, revealTarget, revision);
+            return;
+        }
+        _ = dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            ApplyCrossListSelectionSafely(selection, revealTarget, revision)));
+    }
+
+    private void ApplyCrossListSelectionSafely(object selection, bool revealTarget, long revision)
+    {
+        if (revision != _crossSelectionRevision)
+            return;
+        try
+        {
+            if (selection is Fee2ContainerFoundContainerVM container)
             {
-                _selectedFoundContainer = null;
-                OnPropertyChanged(nameof(SelectedFoundContainer));
+                if (!ReferenceEquals(container, _selectedFoundContainer))
+                    return;
+                if (_selectedFoundSignal is not null)
+                {
+                    _selectedFoundSignal = null;
+                    OnPropertyChanged(nameof(SelectedFoundSignal));
+                }
+                foreach (var item in FoundContainers)
+                    item.IsRelatedToSelection = false;
+                foreach (var signal in FoundSignals)
+                    signal.IsRelatedToSelection = string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal);
+                if (revealTarget)
+                {
+                    SignalRevealTarget = FoundSignalsView.Cast<Fee2ContainerFoundSignalVM>()
+                        .FirstOrDefault(signal => string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal));
+                }
             }
-            foreach (var signal in FoundSignals)
-                signal.IsRelatedToSelection = false;
-            foreach (var container in FoundContainers)
-                container.IsRelatedToSelection = string.Equals(
-                    container.Id,
-                    value.ContainerId,
-                    StringComparison.Ordinal);
-            if (!_suppressCrossListReveal)
+            else if (selection is Fee2ContainerFoundSignalVM signal)
             {
-                ContainerRevealTarget = FoundContainersView.Cast<Fee2ContainerFoundContainerVM>()
-                    .FirstOrDefault(container => string.Equals(container.Id, value.ContainerId, StringComparison.Ordinal));
+                if (!ReferenceEquals(signal, _selectedFoundSignal))
+                    return;
+                if (_selectedFoundContainer is not null)
+                {
+                    _selectedFoundContainer = null;
+                    OnPropertyChanged(nameof(SelectedFoundContainer));
+                }
+                foreach (var item in FoundSignals)
+                    item.IsRelatedToSelection = false;
+                foreach (var relatedContainer in FoundContainers)
+                    relatedContainer.IsRelatedToSelection = string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal);
+                if (revealTarget)
+                {
+                    ContainerRevealTarget = FoundContainersView.Cast<Fee2ContainerFoundContainerVM>()
+                        .FirstOrDefault(relatedContainer => string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal));
+                }
             }
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            StatusText = "Eine veraltete Tabellenposition wurde verworfen; die Auswahl kann ohne Neustart wiederholt werden.";
+            ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
+        }
+        catch (InvalidOperationException exception)
+        {
+            StatusText = "Die Tabellenansicht wurde während der Auswahl aktualisiert; bitte die Zeile erneut wählen.";
+            ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
         }
     }
 
@@ -445,6 +482,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
 
     private void RefreshSelectionDetails(Fee2ContainerRootSelectionVM? selection)
     {
+        _crossSelectionRevision++;
         FoundContainers.Clear();
         FoundSignals.Clear();
         NonContainerObjects.Clear();

@@ -91,6 +91,9 @@
 						</MenuItem.ItemContainerStyle>
 					</MenuItem>
 				</Menu>
+				<Button Margin="10,0,0,0" MinHeight="28" Padding="9,2"
+						Content="Ansicht zurücksetzen" Click="ResetView_Click"
+						ToolTip="Stellt Standardreihenfolge, Standardbreiten, Standardsichtbarkeit und den vollständigen Suchumfang wieder her." />
 				<CheckBox Margin="18,0,0,0"
                           VerticalAlignment="Center"
                           Content="Nur angezeigte Spalten durchsuchen"
@@ -106,7 +109,7 @@
 				<ColumnDefinition Width="Auto" />
 			</Grid.ColumnDefinitions>
 
-			<DataGrid Grid.Column="0"
+			<DataGrid x:Name="WorkstationGrid" Grid.Column="0"
                       ItemsSource="{Binding Results}"
                       SelectedItem="{Binding SelectedWorkstation}"
                       SelectionMode="Extended"

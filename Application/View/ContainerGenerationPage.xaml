@@ -123,7 +123,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="2*"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition x:Name="AuxiliaryDataRow" Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
@@ -318,9 +318,18 @@
                         <TextBlock Text="{Binding PendingReimportSelectionSummary}"
                                    FontWeight="SemiBold"
                                    Margin="0,3,0,0"/>
+                        <WrapPanel Margin="0,7,0,0">
+                            <TextBlock Margin="0,0,5,0" VerticalAlignment="Center" Text="Kriterium:" />
+                            <ComboBox Width="190" ItemsSource="{Binding ReimportCriteria}"
+                                      SelectedItem="{Binding SelectedReimportCriterion}" />
+                            <TextBlock Margin="12,0,5,0" VerticalAlignment="Center" Text="Suche:" />
+                            <TextBox Width="260" Padding="5,2"
+                                     Text="{Binding ReimportSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Durchsucht Signal, bisherigen/neuen Wert, genauen Unterschied und Auswirkung." />
+                        </WrapPanel>
                     </StackPanel>
                     <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding PendingReimportChanges}"
+                              ItemsSource="{Binding PendingReimportChangesView}"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False"
                               MaxHeight="335"
@@ -742,7 +751,12 @@
             </DataGrid>
 
             <!--Row 4 - Unassigend and filtered entries-->
-            <Grid Grid.Row="4">
+            <Expander x:Name="AuxiliaryDataExpander" Grid.Row="4" Margin="5,2"
+                      IsExpanded="True" Header="Unassigned Data und Filtered Data"
+                      Expanded="AuxiliaryDataExpander_Expanded"
+                      Collapsed="AuxiliaryDataExpander_Collapsed"
+                      ToolTip="Einklappen, um der Haupt-Containerliste mehr Höhe zu geben.">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -768,7 +782,8 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="0" ItemsSource="{Binding UnassignedEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedUnassignedEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True">
+                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
                             <Style.Triggers>
@@ -818,7 +833,8 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="2" ItemsSource="{Binding FilteredEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedFilteredEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True">
+                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
                             <Style.Triggers>
@@ -850,6 +866,7 @@
                 </DataGrid>
 
             </Grid>
+            </Expander>
 
             <Expander Grid.Row="5"
                       Margin="5"

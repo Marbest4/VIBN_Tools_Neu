@@ -16,8 +16,17 @@
             <TextBlock Margin="0,3,0,0" FontWeight="SemiBold" Text="{Binding PendingReimportSelectionSummary}" />
             <TextBlock Margin="0,3,0,0" Foreground="#FF455A64" TextWrapping="Wrap"
                        Text="Einzelentscheidungen werden nur vorgemerkt. Die Liste bleibt vollständig erhalten, bis 'Auswahl anwenden' oder 'Vorschau verwerfen' gewählt wird." />
+            <WrapPanel Margin="0,8,0,0">
+                <TextBlock Margin="0,0,5,0" VerticalAlignment="Center" Text="Kriterium:" />
+                <ComboBox Width="210" ItemsSource="{Binding ReimportCriteria}"
+                          SelectedItem="{Binding SelectedReimportCriterion}" />
+                <TextBlock Margin="14,0,5,0" VerticalAlignment="Center" Text="Suche:" />
+                <TextBox Width="320" Padding="5,2"
+                         Text="{Binding ReimportSearchText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Durchsucht Signal, bisherigen/neuen Wert, genauen Unterschied und Auswirkung." />
+            </WrapPanel>
         </StackPanel>
-        <DataGrid Grid.Row="1" ItemsSource="{Binding PendingReimportChanges}"
+        <DataGrid Grid.Row="1" ItemsSource="{Binding PendingReimportChangesView}"
                   AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"

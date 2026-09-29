@@ -65,9 +65,13 @@
                         <MenuItem Header="Generieren / nicht generieren"
                                   Command="{Binding PlacementTarget.Tag.ToggleTreeNodeGenerationCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                        <MenuItem Header="Mehrfachfund als beabsichtigt bestätigen"
+                                  Command="{Binding PlacementTarget.Tag.ConfirmDuplicateFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
                     </ContextMenu>
                 </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -86,7 +90,16 @@
                 <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,1,0,0" FontSize="10"
                            Foreground="#FF356A88" Text="{Binding LinkedObjectDescription}"
                            TextTrimming="CharacterEllipsis" />
-                <Border Grid.Column="2" Grid.RowSpan="2" Margin="8,0,0,0" Padding="4,1" CornerRadius="3"
+                <StackPanel Grid.Column="2" Grid.RowSpan="2" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <Button Padding="5,1" Content="Mehrfachfund bestätigen"
+                            Command="{Binding DataContext.ConfirmDuplicateFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                            CommandParameter="{Binding}"
+                            Visibility="{Binding CanConfirmDuplicate, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            ToolTip="Bestätigt diesen konkreten FEE-Treffer. Bei Single-Select wird er eindeutig ausgewählt; bei Multi-Select bleiben die Mehrfachzuordnungen erhalten." />
+                    <TextBlock FontSize="10" Foreground="#FF2E7D32" Text="Mehrfachfund bestätigt"
+                               Visibility="{Binding IsDuplicateConfirmed, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </StackPanel>
+                <Border Grid.Column="3" Grid.RowSpan="2" Margin="8,0,0,0" Padding="4,1" CornerRadius="3"
                         Background="#1A000000">
                     <TextBlock Text="{Binding Kind}" FontSize="10" Foreground="#666666" />
                 </Border>

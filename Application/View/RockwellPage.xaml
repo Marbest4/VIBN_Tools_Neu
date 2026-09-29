@@ -53,7 +53,10 @@
             <TextBlock VerticalAlignment="Center" Text="2. Simulationsstandard" />
             <ComboBox Grid.Column="1" Margin="8,0" ItemsSource="{Binding Standards}"
                       SelectedItem="{Binding SelectedStandard}" DisplayMemberPath="DisplayName"
-                      ToolTip="Nur Standards aus diesem Katalog werden angewendet. Derzeit ist GCCS verifiziert." />
+                      ToolTip="GCCS wendet die drei dokumentierten Transformationen an. 'Kein Standard' lässt die L5X unverändert." />
+            <TextBlock Grid.Column="2" Margin="8,0" VerticalAlignment="Center" Foreground="#FF455A64"
+                       Text="{Binding SelectedStandardDescription}" TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding SelectedStandardDescription}" />
             <Button Grid.Column="3" MinWidth="145" Margin="8,0,0,0" Content="Was wird gemacht?"
                     Command="{Binding ToggleHelpCommand}" />
         </Grid>
@@ -72,13 +75,13 @@
                 <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Änderungen vormerken" />
                 <Button MinHeight="38" Margin="0,0,0,7" Content="1. Basic-Simulation ergänzen"
                         Command="{Binding AddBasicsCommand}" IsEnabled="{Binding CanEdit}"
-                        ToolTip="Ergänzt SIMULATION_MODES, SimulationMode und die benötigten Controller-Tags nur, wenn sie fehlen." />
+                        ToolTip="Sucht Controller/DataTypes, AddOnInstructionDefinitions und Tags. Ergänzt SIMULATION_MODES, SimulationMode sowie Standard-/Safety-Tags nur, wenn sie fehlen." />
                 <Button MinHeight="38" Margin="0,0,0,7" Content="2. A001 Standard ergänzen"
                         Command="{Binding AddStandardSimulationCommand}" IsEnabled="{Binding CanEdit}"
-                        ToolTip="Erzeugt A001_Simulation aus B001_MapInputs und passt A000_Main an; vorhandene Routinen bleiben erhalten." />
+                        ToolTip="Sucht B001_MapInputs und A000_Main in jedem Standardprogramm, erzeugt A001_Simulation und ersetzt den passenden JSR-Aufruf. Fehlende Namen und Suchorte erscheinen in den Prüfhinweisen." />
                 <Button MinHeight="38" Margin="0,0,0,7" Content="3. A001 Safety ergänzen"
                         Command="{Binding AddSafetySimulationCommand}" IsEnabled="{Binding CanEdit}"
-                        ToolTip="Erzeugt s_A001_Simulation in erkannten Safety-Programmen. Direkte Moduladressen werden als Prüfhinweis sicher auf NOP gesetzt." />
+                        ToolTip="Sucht s_B001_MapInputs/B001_MapInputs und s_A000_Main/A000_Main in Safety-Programmen. Erzeugt s_A001_Simulation; direkte Moduladressen werden mit Prüfhinweis auf NOP gesetzt." />
                 <Separator Margin="0,6" />
                 <Button MinHeight="38" Margin="0,0,0,7" Content="Generierte L5X speichern"
                         Command="{Binding SaveGeneratedCommand}" IsEnabled="{Binding CanEdit}"
