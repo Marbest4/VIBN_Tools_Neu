@@ -84,6 +84,14 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
 
     public bool HasMonitor4 => _remoteDesktop.MonitorCount >= 4;
 
+    public string Monitor1Label => FormatMonitorLabel(0);
+
+    public string Monitor2Label => FormatMonitorLabel(1);
+
+    public string Monitor3Label => FormatMonitorLabel(2);
+
+    public string Monitor4Label => FormatMonitorLabel(3);
+
     public string StatusText
     {
         get => _statusText;
@@ -288,8 +296,8 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
 
         var monitors = new[] { UseMonitor1, UseMonitor2, UseMonitor3, UseMonitor4 }
             .Select((selected, index) => (selected, index))
-            .Where(item => item.selected)
-            .Select(item => item.index)
+            .Where(item => item.selected && item.index < _remoteDesktop.MonitorIds.Count)
+            .Select(item => _remoteDesktop.MonitorIds[item.index])
             .ToArray();
         try
         {
@@ -305,6 +313,10 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
             _log.Error("Remote Desktop", StatusText, exception);
         }
     }
+
+    private string FormatMonitorLabel(int position) => position < _remoteDesktop.MonitorIds.Count
+        ? $"MSTSC-ID {_remoteDesktop.MonitorIds[position]}"
+        : $"MSTSC-ID {position}";
 
 }
 

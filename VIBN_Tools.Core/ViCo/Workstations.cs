@@ -245,6 +245,12 @@ public interface INetworkAvailabilityService
 
 public interface IRemoteDesktopService
 {
+    /// <summary>
+    /// Machine-specific zero-based display IDs used by mstsc /l and the
+    /// selectedmonitors RDP property. These are not Windows display numbers.
+    /// </summary>
+    IReadOnlyList<int> MonitorIds { get; }
+
     int MonitorCount { get; }
 
     /// <summary>Starts RDP with locally saved Windows credentials.</summary>

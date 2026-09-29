@@ -483,7 +483,7 @@ static void VerifyRemoteDesktopProfile()
         "GM12345",
         "zkds-simulation-p01",
         new[] { 0, 2 },
-        3);
+        new[] { 0, 1, 2 });
     Assert(lines.Contains("username:s:zkds-simulation-p01"),
         "The normalized Kanbanize user was not written to the RDP profile.");
     Assert(lines.Contains("prompt for credentials:i:0"),
@@ -504,12 +504,20 @@ static void VerifyRemoteDesktopProfile()
         "GM12345",
         string.Empty,
         new[] { 0 },
-        1,
+        new[] { 0 },
         promptForCredentials: true);
     Assert(promptedLines.Contains("prompt for credentials:i:1"),
         "The separate RDP button must open the Windows credential dialog.");
     Assert(!promptedLines.Any(line => line.StartsWith("username:s:", StringComparison.OrdinalIgnoreCase)),
         "The prompted RDP profile must not inject an automatic user name.");
+
+    var machineSpecificIds = RemoteDesktopProfileBuilder.Build(
+        "GM12345",
+        "zkds-simulation-p01",
+        new[] { 7, 4 },
+        new[] { 4, 7, 9 });
+    Assert(machineSpecificIds.Contains("selectedmonitors:s:7,4"),
+        "RDP must preserve the selected mstsc /l IDs and their primary-monitor order.");
 }
 
 static async Task VerifyRoleStoreAndUpdateAsync(string temporaryRoot)

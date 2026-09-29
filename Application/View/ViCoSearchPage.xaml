@@ -474,10 +474,10 @@
 					<StackPanel Visibility="{Binding HasSelectedWorkstation, Converter={StaticResource BooleanToVisibilityConverter}}">
 						<TextBlock Margin="0,14,0,4" FontWeight="SemiBold" Text="Monitore" />
 						<WrapPanel>
-							<CheckBox Content="1" IsChecked="{Binding UseMonitor1}" />
-							<CheckBox Margin="12,0,0,0" Content="2" IsChecked="{Binding UseMonitor2}" IsEnabled="{Binding HasMonitor2}" ToolTip="Dieser Monitor ist für den ausgewählten PC nicht verfügbar." ToolTipService.ShowOnDisabled="True" />
-							<CheckBox Margin="12,0,0,0" Content="3" IsChecked="{Binding UseMonitor3}" IsEnabled="{Binding HasMonitor3}" ToolTip="Dieser Monitor ist für den ausgewählten PC nicht verfügbar." ToolTipService.ShowOnDisabled="True" />
-							<CheckBox Margin="12,0,0,0" Content="4" IsChecked="{Binding UseMonitor4}" IsEnabled="{Binding HasMonitor4}" ToolTip="Dieser Monitor ist für den ausgewählten PC nicht verfügbar." ToolTipService.ShowOnDisabled="True" />
+							<CheckBox Content="{Binding Monitor1Label}" IsChecked="{Binding UseMonitor1}" ToolTip="Die angezeigte ID entspricht mstsc /l und wird unverändert in selectedmonitors geschrieben." />
+							<CheckBox Margin="12,0,0,0" Content="{Binding Monitor2Label}" IsChecked="{Binding UseMonitor2}" IsEnabled="{Binding HasMonitor2}" ToolTip="Die angezeigte ID entspricht mstsc /l; dieser Monitor ist deaktiviert, wenn er lokal nicht vorhanden ist." ToolTipService.ShowOnDisabled="True" />
+							<CheckBox Margin="12,0,0,0" Content="{Binding Monitor3Label}" IsChecked="{Binding UseMonitor3}" IsEnabled="{Binding HasMonitor3}" ToolTip="Die angezeigte ID entspricht mstsc /l; dieser Monitor ist deaktiviert, wenn er lokal nicht vorhanden ist." ToolTipService.ShowOnDisabled="True" />
+							<CheckBox Margin="12,0,0,0" Content="{Binding Monitor4Label}" IsChecked="{Binding UseMonitor4}" IsEnabled="{Binding HasMonitor4}" ToolTip="Die angezeigte ID entspricht mstsc /l; dieser Monitor ist deaktiviert, wenn er lokal nicht vorhanden ist." ToolTipService.ShowOnDisabled="True" />
 						</WrapPanel>
 
 						<UniformGrid Margin="0,10,0,0" Columns="2">

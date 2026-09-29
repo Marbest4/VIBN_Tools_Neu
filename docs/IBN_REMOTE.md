@@ -9,7 +9,7 @@
 - Arbeitsplatzliste, Filter, Onlineprüfung und RDP-Sitzungsdiagnose;
 - automatische RDP-Anmeldung mit dem Benutzer der KONFIGURATION-Karte.
 
-Die read-only Startansicht zeigt ausschließlich **PC**, **Online**, **In Arbeit (Projekt)**, **Ende In Arbeit**, **Standort**, **Sonstiges** und **Software**. Zusätzlich stehen Monitorauswahl und der automatische RDP-Start zur Verfügung. Karten oder Konfigurationsdaten können nicht geändert werden.
+Die read-only Startansicht zeigt ausschließlich **PC**, **Online**, **In Arbeit (Projekt)**, **Ende In Arbeit**, **Standort**, **Sonstiges** und **Software**. Zusätzlich stehen Monitorauswahl und der automatische RDP-Start zur Verfügung. Die sichtbaren nullbasierten **MSTSC-IDs** entsprechen `mstsc.exe /l` und werden unverändert in das RDP-Profil übernommen. Karten oder Konfigurationsdaten können nicht geändert werden.
 
 Beim Programmstart darf die Anwendung auf den gemeinsamen Lesecache zurückfallen, damit die zuletzt verfügbare Rechnerliste auch bei einem vorübergehenden Netzausfall sichtbar bleibt. Der manuelle Button **Daten aktualisieren** verhält sich bewusst strenger: Er sendet cachefreie GET-Abfragen an Kanbanize, ersetzt den lokalen Cache erst nach einer vollständigen und zusammenfügbaren Antwort und zeigt bei einem API-/Netzfehler eine eindeutige Fehlermeldung. Die bisherige Anzeige bleibt dann erhalten, wird aber nicht fälschlich als frisch aktualisiert ausgegeben. Quelle und lokaler Aktualisierungszeitpunkt stehen in der Oberfläche.
 

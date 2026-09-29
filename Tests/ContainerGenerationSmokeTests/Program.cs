@@ -1562,6 +1562,22 @@ internal static class Program
                 projection.UpdatedSlots != 2 || projection.UnresolvedSlotVariableGuids.Count != 0)
                 throw new InvalidOperationException("Current FEE variable values were not projected completely.");
 
+            var staleProjection = FeeContainerVariableProjector.Apply(
+                decoded with
+                {
+                    SignalBindings =
+                    [
+                        new FeeContainerSignalBinding(99, 0, variableA),
+                        new FeeContainerSignalBinding(0, 99, variableB),
+                    ]
+                },
+                [
+                    new(variableA, "HomeA", "%I0.0", string.Empty, "Bool", "A"),
+                    new(variableB, "HomeB", "%I0.1", string.Empty, "Bool", "B"),
+                ]);
+            if (staleProjection.UpdatedEntries != 0 || staleProjection.MissingVariableGuids.Count != 2)
+                throw new InvalidOperationException("Stale FEE2Container provenance indexes were not rejected safely.");
+
             FeeContainerProvenanceCodec.SaveAtomically(projection.Snapshot, exportedPath);
             var (containers, unknownSignals) = ContainerToFeeService.ReadInContainerXmlData(exportedPath);
             var cylinder = (GrobCylinder_Container)containers.Single();

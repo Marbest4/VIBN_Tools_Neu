@@ -39,6 +39,7 @@ public sealed class WindowsRemoteDesktopService : IRemoteDesktopService
     private const int MonitorMetric = 80;
     private readonly string _rdpFile;
     private readonly IRemoteCredentialStore _credentialStore;
+    private readonly IReadOnlyList<int> _monitorIds;
 
     public WindowsRemoteDesktopService(
         string workingDirectory,
@@ -47,9 +48,15 @@ public sealed class WindowsRemoteDesktopService : IRemoteDesktopService
         Directory.CreateDirectory(workingDirectory);
         _rdpFile = Path.Combine(workingDirectory, "ViCo.rdp");
         _credentialStore = credentialStore;
+        // mstsc /l reports its own zero-based IDs. They are unrelated to the
+        // 1-based numbers shown in Windows display settings and are assigned
+        // for every monitor currently attached to the local client.
+        _monitorIds = Enumerable.Range(0, Math.Max(1, GetSystemMetrics(MonitorMetric))).ToArray();
     }
 
-    public int MonitorCount => Math.Max(1, GetSystemMetrics(MonitorMetric));
+    public IReadOnlyList<int> MonitorIds => _monitorIds;
+
+    public int MonitorCount => MonitorIds.Count;
 
     public void Connect(string hostName, string userName, IReadOnlyCollection<int> monitorIndexes)
     {
@@ -81,7 +88,7 @@ public sealed class WindowsRemoteDesktopService : IRemoteDesktopService
             hostName,
             userName,
             monitorIndexes,
-            MonitorCount,
+            MonitorIds,
             promptForCredentials);
         File.WriteAllLines(_rdpFile, lines, Encoding.Unicode);
         Process.Start(new ProcessStartInfo("mstsc.exe", $"\"{_rdpFile}\"") { UseShellExecute = true });

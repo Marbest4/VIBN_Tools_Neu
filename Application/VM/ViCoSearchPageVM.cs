@@ -163,6 +163,10 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public bool HasMonitor2 => MonitorCount >= 2;
     public bool HasMonitor3 => MonitorCount >= 3;
     public bool HasMonitor4 => MonitorCount >= 4;
+    public string Monitor1Label => FormatMonitorLabel(0);
+    public string Monitor2Label => FormatMonitorLabel(1);
+    public string Monitor3Label => FormatMonitorLabel(2);
+    public string Monitor4Label => FormatMonitorLabel(3);
     public bool UseMonitor1 { get; set; } = true;
     public bool UseMonitor2 { get; set; }
     public bool UseMonitor3 { get; set; }
@@ -842,8 +846,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
         var monitors = new[] { UseMonitor1, UseMonitor2, UseMonitor3, UseMonitor4 }
             .Select((selected, index) => (selected, index))
-            .Where(value => value.selected)
-            .Select(value => value.index)
+            .Where(value => value.selected && value.index < _remoteDesktop.MonitorIds.Count)
+            .Select(value => _remoteDesktop.MonitorIds[value.index])
             .ToArray();
         var started = new List<string>();
         var failed = new List<string>();
@@ -1112,6 +1116,10 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
         action();
     }
+
+    private string FormatMonitorLabel(int position) => position < _remoteDesktop.MonitorIds.Count
+        ? $"MSTSC-ID {_remoteDesktop.MonitorIds[position]}"
+        : $"MSTSC-ID {position}";
 
     private void OpenCommandPrompt(object? parameter)
     {

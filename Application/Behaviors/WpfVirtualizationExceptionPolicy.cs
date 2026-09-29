@@ -11,8 +11,11 @@ public static class WpfVirtualizationExceptionPolicy
     [
         "System.Windows.Controls.DataGrid",
         "System.Windows.Controls.ItemContainerGenerator",
+        "System.Windows.Controls.ItemCollection",
         "System.Windows.Controls.VirtualizingStackPanel",
         "System.Windows.Controls.Primitives.DataGrid",
+        "System.Windows.Data.ListCollectionView",
+        "MS.Internal.Data.IndexedEnumerable",
     ];
 
     public static bool IsRecoverable(Exception exception, string? diagnosticText = null)

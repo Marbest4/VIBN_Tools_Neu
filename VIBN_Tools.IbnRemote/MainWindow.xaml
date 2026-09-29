@@ -61,10 +61,10 @@
 
         <WrapPanel Grid.Row="3" Margin="0,9,0,0">
             <TextBlock Margin="0,0,7,0" VerticalAlignment="Center" FontWeight="SemiBold" Text="Monitore:" />
-            <CheckBox Content="1" IsChecked="{Binding UseMonitor1}" />
-            <CheckBox Margin="10,0,0,0" Content="2" IsChecked="{Binding UseMonitor2}" IsEnabled="{Binding HasMonitor2}" />
-            <CheckBox Margin="10,0,0,0" Content="3" IsChecked="{Binding UseMonitor3}" IsEnabled="{Binding HasMonitor3}" />
-            <CheckBox Margin="10,0,16,0" Content="4" IsChecked="{Binding UseMonitor4}" IsEnabled="{Binding HasMonitor4}" />
+            <CheckBox Content="{Binding Monitor1Label}" IsChecked="{Binding UseMonitor1}" ToolTip="Lokale Monitor-ID aus mstsc /l." />
+            <CheckBox Margin="10,0,0,0" Content="{Binding Monitor2Label}" IsChecked="{Binding UseMonitor2}" IsEnabled="{Binding HasMonitor2}" ToolTip="Lokale Monitor-ID aus mstsc /l." />
+            <CheckBox Margin="10,0,0,0" Content="{Binding Monitor3Label}" IsChecked="{Binding UseMonitor3}" IsEnabled="{Binding HasMonitor3}" ToolTip="Lokale Monitor-ID aus mstsc /l." />
+            <CheckBox Margin="10,0,16,0" Content="{Binding Monitor4Label}" IsChecked="{Binding UseMonitor4}" IsEnabled="{Binding HasMonitor4}" ToolTip="Lokale Monitor-ID aus mstsc /l." />
             <Button MinWidth="170" MinHeight="32" Content="Remote Desktop starten"
                     Command="{Binding ConnectAutomaticCommand}"
                     CommandParameter="{Binding SelectedWorkstation}"

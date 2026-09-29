@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
 using System.Windows.Data;
+using System.Windows.Threading;
 using System.Xml.Linq;
 using Microsoft.Win32;
 using VIBN_Tools.ContainerToFeeVisual;
@@ -30,6 +31,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private string _signalSearchText = string.Empty;
     private string _objectSearchText = string.Empty;
     private bool _suppressCrossListReveal;
+    private long _selectionRevision;
 
     public Fee2ContainerPageVM()
         : this(new Fee2ContainerService(), Services.Connection ?? new FeeConnectionService()) { }
@@ -216,7 +218,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             _selectedRoot = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectionSummary));
-            RefreshSelectionDetails(value);
+            QueueSelectionDetails(value);
         }
     }
 
@@ -405,6 +407,41 @@ public sealed class Fee2ContainerPageVM : MvvmBase
 
     private static string Shorten(string? value) => string.IsNullOrWhiteSpace(value)
         ? "nicht vorhanden" : value[..Math.Min(12, value.Length)];
+
+    private void QueueSelectionDetails(Fee2ContainerRootSelectionVM? selection)
+    {
+        var revision = ++_selectionRevision;
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.HasShutdownStarted)
+        {
+            RefreshSelectionDetailsSafely(selection, revision);
+            return;
+        }
+
+        _ = dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
+            RefreshSelectionDetailsSafely(selection, revision)));
+    }
+
+    private void RefreshSelectionDetailsSafely(
+        Fee2ContainerRootSelectionVM? selection,
+        long revision)
+    {
+        if (revision != _selectionRevision || !ReferenceEquals(selection, SelectedRoot))
+            return;
+
+        try
+        {
+            RefreshSelectionDetails(selection);
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            // WPF can still surface a stale virtualized row index synchronously
+            // through CollectionChanged. Never let that framework race close the
+            // application; a later/root selection can rebuild the detail lists.
+            StatusText = "Die Detailansicht dieses FEE-Roots konnte wegen eines veralteten Tabellenindex nicht aktualisiert werden. Bitte den Root erneut auswählen.";
+            ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
+        }
+    }
 
     private void RefreshSelectionDetails(Fee2ContainerRootSelectionVM? selection)
     {

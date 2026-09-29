@@ -94,7 +94,7 @@ Wenn Windows die Abfrage einer Remote-Sitzung nicht erlaubt, stehen RDP-Sitzung 
 
 ### Remote Desktop und Pfade
 
-Nach Auswahl eines PCs stehen bis zu vier lokale Monitore sowie diese Aktionen bereit. Dieselben Aktionen sind über einen Rechtsklick auf die Tabellenzeile verfügbar:
+Nach Auswahl eines PCs stehen bis zu vier lokale Monitore sowie diese Aktionen bereit. Die Beschriftung **MSTSC-ID 0**, **MSTSC-ID 1** usw. entspricht der Ausgabe von `mstsc.exe /l` und wird unverändert in `selectedmonitors` geschrieben; sie ist nicht mit den 1-basierten Nummern der Windows-Anzeigeeinstellungen zu verwechseln. Die erste ausgewählte ID wird zum primären Remotemonitor. Dieselben Aktionen sind über einen Rechtsklick auf die Tabellenzeile verfügbar:
 
 - **Remote Desktop** verwendet den priorisierten Kanbanize-Benutzer. Unmittelbar vor dem Start wird das Kennwort aus dem lokalen Windows Credential Manager temporär für `TERMSRV/<PC>` eingetragen und dieser kurzlebige RDP-Eintrag nach 20 Sekunden entfernt.
 - **RDP mit Anmeldedaten** startet dieselbe Remote-Verbindung ohne temporären Eintrag und zeigt bewusst den Windows-Anmeldedialog.
@@ -223,6 +223,12 @@ Vollständig erzeugte Geräte erhalten am Ende des erfolgreichen FEE-Schreibvorg
 Der eigene Hauptreiter durchsucht alle BasicFrame-Unterebenen. Provenienzmarkierte Geräte werden exakt gelesen; ältere Geräte werden nur bei einer eindeutig bekannten Gerätelogik rekonstruiert und entsprechend als Prüfstand gekennzeichnet. Nach Auswahl können Präfix, Hersteller, Gerätetyp, Startadressen sowie aktuelle und fehlende Signale geprüft und atomar als `*.specialdevice.json` exportiert werden. **SpecialDevices2FEE → FEE2-JSON laden** prüft diese Datei und übernimmt bekannte Geräte über denselben Gerätekatalog in die vorhandene Warteschlange. Bei Signalabweichungen wird gewarnt, weil eine erneute Erzeugung weiterhin die freigegebene Katalogdefinition verwendet. Details und Grenzen stehen in [FEE2SpecialDevices](FEE2SPECIALDEVICES.md).
 
 ## Bestehende VIBN-Werkzeuge
+
+### Rockwell
+
+Der erste Schritt im Rockwell-Reiter ist der Interface-Export: **Allen-Bradley L5X Select** wählen, den angezeigten Pfad kontrollieren und **Allen-Bradley Excel Interface** drücken. Das Tool durchsucht BK-, SBK-, PM- und übrige Controller-Tags rekursiv nach `D*`, `PtStatus*` und `VS*`, übernimmt auflösbare Kommentare aus den Program-Tags und schreibt eine neue XLSX mit dem Arbeitsblatt `InterfaceSimExport`. Die L5X bleibt unverändert; eine lokale Microsoft-Excel-Installation ist nicht erforderlich.
+
+Danach kann dieselbe geladene L5X über den gewählten Simulationsstandard weiterbearbeitet werden. Derzeit ist GCCS freigegeben. Die drei Stufen ergänzen Basisobjekte, Standard-A001 und Safety-A001 idempotent im Arbeitsmodell. Erst **Generierte L5X speichern** schreibt eine neue Datei; **Generierte L5X öffnen** benötigt eine installierte und für L5X registrierte Studio-5000-Version.
 
 ### CAD Wizard
 

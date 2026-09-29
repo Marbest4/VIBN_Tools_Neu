@@ -28,6 +28,7 @@ public sealed class RockwellPageVM : MvvmBase
             Standards.Add(standard);
         _selectedStandard = Standards.FirstOrDefault();
         OpenCommand = GetCommandBinding(Open);
+        ExportInterfaceCommand = GetCommandBindingAsync(ExportInterfaceAsync);
         AddBasicsCommand = GetCommandBinding(() => ApplyStage(1));
         AddStandardSimulationCommand = GetCommandBinding(() => ApplyStage(2));
         AddSafetySimulationCommand = GetCommandBinding(() => ApplyStage(3));
@@ -40,6 +41,7 @@ public sealed class RockwellPageVM : MvvmBase
     public ObservableCollection<RockwellStandardDefinition> Standards { get; } = [];
 
     public ICommand OpenCommand { get; }
+    public ICommand ExportInterfaceCommand { get; }
     public ICommand AddBasicsCommand { get; }
     public ICommand AddStandardSimulationCommand { get; }
     public ICommand AddSafetySimulationCommand { get; }
@@ -71,8 +73,9 @@ public sealed class RockwellPageVM : MvvmBase
     }
 
     public string WorkflowHelp =>
-        "Voraussetzung: ein L5X-Export des Studio-5000-Projekts. Zuerst den Standard auswählen und die " +
-        "L5X laden. Schritt 1 ergänzt nur fehlende GCCS-Basisobjekte. Schritt 2 erzeugt die Standard-A001-" +
+        "Voraussetzung: ein L5X-Export des Studio-5000-Projekts. Der erste Bereich erzeugt daraus die " +
+        "Allen-Bradley-Excel-Schnittstelle wie der InterfaceCreator (Member D*, PtStatus* und VS*). " +
+        "Danach den Standard auswählen. Schritt 1 ergänzt nur fehlende GCCS-Basisobjekte. Schritt 2 erzeugt die Standard-A001-" +
         "Simulation, Schritt 3 die Safety-A001-Simulation. Jeder Schritt ist idempotent und ändert nur " +
         "das Arbeitsmodell; geschrieben wird erst mit 'Generierte L5X speichern'. 'Generierte L5X öffnen' " +
         "übergibt die Datei an die Windows-L5X-Zuordnung. Dafür muss Studio 5000 Logix Designer installiert " +
@@ -81,7 +84,13 @@ public sealed class RockwellPageVM : MvvmBase
     public string SourcePath
     {
         get => _sourcePath;
-        private set { _sourcePath = value; OnPropertyChanged(); }
+        private set
+        {
+            _sourcePath = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanExportInterface));
+            CommandManager.InvalidateRequerySuggested();
+        }
     }
 
     public string GeneratedPath
@@ -116,11 +125,14 @@ public sealed class RockwellPageVM : MvvmBase
             _isBusy = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanEdit));
+            OnPropertyChanged(nameof(CanExportInterface));
             CommandManager.InvalidateRequerySuggested();
         }
     }
 
     public bool CanEdit => _editor is not null && SelectedStandard is not null && !IsBusy;
+
+    public bool CanExportInterface => !IsBusy && !string.IsNullOrWhiteSpace(SourcePath) && File.Exists(SourcePath);
 
     public bool CanOpenGenerated => !string.IsNullOrWhiteSpace(GeneratedPath) && File.Exists(GeneratedPath);
 
@@ -168,6 +180,56 @@ public sealed class RockwellPageVM : MvvmBase
                 : "Keine Änderung erforderlich; die ausgewählten Rockwell-Bausteine sind bereits vorhanden.";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }, "Rockwell-Projekt konnte nicht geändert werden");
+    }
+
+    private async Task ExportInterfaceAsync()
+    {
+        if (!CanExportInterface)
+        {
+            StatusText = "Zuerst eine Allen-Bradley-L5X-Datei auswählen.";
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Allen-Bradley Excel Interface speichern",
+            Filter = "Excel-Arbeitsmappe (*.xlsx)|*.xlsx",
+            FileName = $"{Path.GetFileNameWithoutExtension(SourcePath)}_Interface.xlsx",
+            InitialDirectory = Path.GetDirectoryName(SourcePath),
+            DefaultExt = ".xlsx",
+            AddExtension = true,
+            OverwritePrompt = true
+        };
+        if (dialog.ShowDialog() != true)
+            return;
+
+        IsBusy = true;
+        using var measurement = PerformanceMeasurementService.Instance.Start(
+            LogArea,
+            "Allen-Bradley Excel Interface erzeugen");
+        try
+        {
+            StatusText = "Allen-Bradley-Tags und Kommentare werden aus der L5X gelesen …";
+            var result = await Task.Run(() =>
+                AllenBradleyInterfaceExcelExporter.Export(SourcePath, dialog.FileName));
+            Messages.Clear();
+            foreach (var warning in result.Warnings)
+                Messages.Add(warning);
+            StatusText = $"Allen-Bradley Excel Interface mit {result.ExportedSignalCount} Signal(en) gespeichert: {result.FilePath}";
+            ApplicationLogService.Instance.Information(LogArea, StatusText);
+            foreach (var warning in result.Warnings)
+                ApplicationLogService.Instance.Warning(LogArea, warning);
+        }
+        catch (Exception exception)
+        {
+            measurement.MarkFailed();
+            StatusText = $"Allen-Bradley Excel Interface konnte nicht erzeugt werden: {exception.Message}";
+            ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private void ApplyStage(int stage)

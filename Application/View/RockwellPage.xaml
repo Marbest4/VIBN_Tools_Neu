@@ -14,35 +14,50 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <StackPanel>
             <TextBlock FontSize="24" FontWeight="SemiBold" Text="Rockwell Studio 5000" />
             <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
-                       Text="Bearbeitet L5X-Exporte gestuft und idempotent. Die Quelldatei bleibt unverändert; erst der Speichern-Schritt erzeugt eine neue Datei." />
+                       Text="Erzeugt zuerst die Allen-Bradley-Excel-Schnittstelle und bearbeitet danach L5X-Exporte gestuft und idempotent. Die Quelldatei bleibt unverändert." />
         </StackPanel>
-        <Grid Grid.Row="1" Margin="0,16,0,8">
+        <GroupBox Grid.Row="1" Margin="0,16,0,8" Header="1. Allen-Bradley Interface-Excel erzeugen">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button MinWidth="200" MinHeight="34" Content="Allen-Bradley L5X Select"
+                        Command="{Binding OpenCommand}"
+                        ToolTip="Wählt den Studio-5000-L5X-Export aus. Die Quelldatei wird nur gelesen und zugleich für die nachfolgenden Rockwell-Schritte geladen." />
+                <TextBox Grid.Column="1" Margin="8,0" Padding="7,4" IsReadOnly="True"
+                         Text="{Binding SourcePath, Mode=OneWay}"
+                         ToolTip="Vollständiger Pfad der ausgewählten Allen-Bradley-L5X-Datei." />
+                <Button Grid.Column="2" MinWidth="220" MinHeight="34"
+                        Content="Allen-Bradley Excel Interface"
+                        Command="{Binding ExportInterfaceCommand}"
+                        IsEnabled="{Binding CanExportInterface}"
+                        ToolTip="Liest D*, PtStatus* und VS* rekursiv aus BK-, SBK-, PM- und übrigen Controller-Tags, löst Kommentare aus Program-Tags auf und erzeugt das Arbeitsblatt InterfaceSimExport als XLSX." />
+            </Grid>
+        </GroupBox>
+        <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="180" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock VerticalAlignment="Center" Text="Standard" />
+            <TextBlock VerticalAlignment="Center" Text="2. Simulationsstandard" />
             <ComboBox Grid.Column="1" Margin="8,0" ItemsSource="{Binding Standards}"
                       SelectedItem="{Binding SelectedStandard}" DisplayMemberPath="DisplayName"
                       ToolTip="Nur Standards aus diesem Katalog werden angewendet. Derzeit ist GCCS verifiziert." />
-            <Button Grid.Column="2" MinWidth="150" MinHeight="34" Content="L5X auswählen"
-                    Command="{Binding OpenCommand}"
-                    ToolTip="Lädt einen Studio-5000-L5X-Export. Die Quelldatei wird nie überschrieben." />
-            <TextBox Grid.Column="3" Margin="8,0,0,0" Padding="7,4" IsReadOnly="True"
-                     Text="{Binding SourcePath, Mode=OneWay}" />
-            <Button Grid.Column="4" MinWidth="145" Margin="8,0,0,0" Content="Was wird gemacht?"
+            <Button Grid.Column="3" MinWidth="145" Margin="8,0,0,0" Content="Was wird gemacht?"
                     Command="{Binding ToggleHelpCommand}" />
         </Grid>
-        <StackPanel Grid.Row="2" Margin="0,0,0,10">
+        <StackPanel Grid.Row="3" Margin="0,0,0,10">
             <Border Padding="10" Background="#FFF3F5F7" CornerRadius="4">
                 <TextBlock Text="{Binding ProjectSummary}" TextWrapping="Wrap" />
             </Border>
@@ -51,7 +66,7 @@
                 <TextBlock Text="{Binding WorkflowHelp}" TextWrapping="Wrap" />
             </Border>
         </StackPanel>
-        <Grid Grid.Row="3">
+        <Grid Grid.Row="4">
             <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <StackPanel>
                 <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Änderungen vormerken" />
@@ -78,7 +93,7 @@
                 </ListBox>
             </GroupBox>
         </Grid>
-        <Border Grid.Row="4" Margin="0,12,0,0" Padding="8,5" Background="#FFF3F5F7" CornerRadius="3">
+        <Border Grid.Row="5" Margin="0,12,0,0" Padding="8,5" Background="#FFF3F5F7" CornerRadius="3">
             <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
         </Border>
     </Grid>
