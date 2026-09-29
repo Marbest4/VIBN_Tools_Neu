@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace VIBN_Tools.Core.ViCo;
 
@@ -258,6 +259,38 @@ public interface IRemoteDesktopService
 
     /// <summary>Starts RDP without inserting credentials so Windows shows its sign-in dialog.</summary>
     void ConnectWithCredentialPrompt(string hostName, string userName, IReadOnlyCollection<int> monitorIndexes);
+}
+
+/// <summary>
+/// Selectable machine-specific monitor ID as reported by the RDP client.
+/// The UI deliberately displays only <see cref="Id"/> so it matches
+/// <c>mstsc /l</c> without an additional display-number mapping.
+/// </summary>
+public sealed class RemoteDesktopMonitorOption : INotifyPropertyChanged
+{
+    private bool _isSelected;
+
+    public RemoteDesktopMonitorOption(int id, bool isSelected = false)
+    {
+        Id = id;
+        _isSelected = isSelected;
+    }
+
+    public int Id { get; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value)
+                return;
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 /// <summary>Creates and removes the short-lived Windows credential used by automatic RDP.</summary>

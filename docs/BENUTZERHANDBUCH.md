@@ -94,7 +94,7 @@ Wenn Windows die Abfrage einer Remote-Sitzung nicht erlaubt, stehen RDP-Sitzung 
 
 ### Remote Desktop und Pfade
 
-Nach Auswahl eines PCs stehen bis zu vier lokale Monitore sowie diese Aktionen bereit. Die Beschriftung **MSTSC-ID 0**, **MSTSC-ID 1** usw. entspricht der Ausgabe von `mstsc.exe /l` und wird unverändert in `selectedmonitors` geschrieben; sie ist nicht mit den 1-basierten Nummern der Windows-Anzeigeeinstellungen zu verwechseln. Die erste ausgewählte ID wird zum primären Remotemonitor. Dieselben Aktionen sind über einen Rechtsklick auf die Tabellenzeile verfügbar:
+Nach Auswahl eines PCs werden alle lokal ermittelten Monitore dynamisch als reine Zahlen angezeigt, beispielsweise **0**, **4** oder **5**. Die Zahl entspricht der ID aus `mstsc.exe /l` und wird unverändert in `selectedmonitors` geschrieben; sie ist nicht mit den 1-basierten Nummern der Windows-Anzeigeeinstellungen zu verwechseln. Es gibt keine Begrenzung auf vier Auswahlfelder. Die erste ausgewählte ID wird zum primären Remotemonitor. Dieselben Aktionen sind über einen Rechtsklick auf die Tabellenzeile verfügbar:
 
 - **Remote Desktop** verwendet den priorisierten Kanbanize-Benutzer. Unmittelbar vor dem Start wird das Kennwort aus dem lokalen Windows Credential Manager temporär für `TERMSRV/<PC>` eingetragen und dieser kurzlebige RDP-Eintrag nach 20 Sekunden entfernt.
 - **RDP mit Anmeldedaten** startet dieselbe Remote-Verbindung ohne temporären Eintrag und zeigt bewusst den Windows-Anmeldedialog.

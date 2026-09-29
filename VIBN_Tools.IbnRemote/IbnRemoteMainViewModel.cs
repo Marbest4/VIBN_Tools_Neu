@@ -46,6 +46,8 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         _remoteDesktop = new WindowsRemoteDesktopService(
             _options.WorkingDirectory,
             new WindowsTemporaryRemoteCredentialStore(_credentialConfiguration.GetRemoteDesktopPassword));
+        MonitorOptions = new ObservableCollection<RemoteDesktopMonitorOption>(
+            _remoteDesktop.MonitorIds.Select((id, index) => new RemoteDesktopMonitorOption(id, index == 0)));
         RefreshCommand = new AsyncRelayCommand(
             () => RefreshAsync(allowSharedCacheFallback: false),
             () => !IsBusy);
@@ -70,27 +72,7 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         ? "Kein Publish-Filter gesetzt: alle Rechner mit In-Arbeit-Projekten werden angezeigt."
         : $"Fester In-Arbeit-Filter: {_inWorkFilter}";
 
-    public bool UseMonitor1 { get; set; } = true;
-
-    public bool UseMonitor2 { get; set; }
-
-    public bool UseMonitor3 { get; set; }
-
-    public bool UseMonitor4 { get; set; }
-
-    public bool HasMonitor2 => _remoteDesktop.MonitorCount >= 2;
-
-    public bool HasMonitor3 => _remoteDesktop.MonitorCount >= 3;
-
-    public bool HasMonitor4 => _remoteDesktop.MonitorCount >= 4;
-
-    public string Monitor1Label => FormatMonitorLabel(0);
-
-    public string Monitor2Label => FormatMonitorLabel(1);
-
-    public string Monitor3Label => FormatMonitorLabel(2);
-
-    public string Monitor4Label => FormatMonitorLabel(3);
+    public ObservableCollection<RemoteDesktopMonitorOption> MonitorOptions { get; }
 
     public string StatusText
     {
@@ -294,10 +276,9 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
         if (row?.CanConnect != true)
             return;
 
-        var monitors = new[] { UseMonitor1, UseMonitor2, UseMonitor3, UseMonitor4 }
-            .Select((selected, index) => (selected, index))
-            .Where(item => item.selected && item.index < _remoteDesktop.MonitorIds.Count)
-            .Select(item => _remoteDesktop.MonitorIds[item.index])
+        var monitors = MonitorOptions
+            .Where(option => option.IsSelected)
+            .Select(option => option.Id)
             .ToArray();
         try
         {
@@ -313,10 +294,6 @@ public sealed class IbnRemoteMainViewModel : NotifyObject, IDisposable
             _log.Error("Remote Desktop", StatusText, exception);
         }
     }
-
-    private string FormatMonitorLabel(int position) => position < _remoteDesktop.MonitorIds.Count
-        ? $"MSTSC-ID {_remoteDesktop.MonitorIds[position]}"
-        : $"MSTSC-ID {position}";
 
 }
 

@@ -68,6 +68,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         _pathResolverFactory = pathResolverFactory;
         _network = network;
         _remoteDesktop = remoteDesktop;
+        MonitorOptions = new ObservableCollection<RemoteDesktopMonitorOption>(
+            _remoteDesktop.MonitorIds.Select((id, index) => new RemoteDesktopMonitorOption(id, index == 0)));
         _remoteSessions = remoteSessions;
         _launcher = launcher;
         _onlineRefresh = onlineRefresh;
@@ -159,18 +161,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public ViCoColumnOptionVM ProjectIpColumn { get; }
     public ViCoColumnOptionVM RemoteSessionColumn { get; }
     public ViCoColumnOptionVM LastRemoteLogonColumn { get; }
-    public int MonitorCount => _remoteDesktop.MonitorCount;
-    public bool HasMonitor2 => MonitorCount >= 2;
-    public bool HasMonitor3 => MonitorCount >= 3;
-    public bool HasMonitor4 => MonitorCount >= 4;
-    public string Monitor1Label => FormatMonitorLabel(0);
-    public string Monitor2Label => FormatMonitorLabel(1);
-    public string Monitor3Label => FormatMonitorLabel(2);
-    public string Monitor4Label => FormatMonitorLabel(3);
-    public bool UseMonitor1 { get; set; } = true;
-    public bool UseMonitor2 { get; set; }
-    public bool UseMonitor3 { get; set; }
-    public bool UseMonitor4 { get; set; }
+    public ObservableCollection<RemoteDesktopMonitorOption> MonitorOptions { get; }
 
     private int _autoRefreshIntervalMinutes = ViCoAutoRefreshSettings.Default.IntervalMinutes;
     public int AutoRefreshIntervalMinutes
@@ -844,10 +835,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             return;
         }
 
-        var monitors = new[] { UseMonitor1, UseMonitor2, UseMonitor3, UseMonitor4 }
-            .Select((selected, index) => (selected, index))
-            .Where(value => value.selected && value.index < _remoteDesktop.MonitorIds.Count)
-            .Select(value => _remoteDesktop.MonitorIds[value.index])
+        var monitors = MonitorOptions
+            .Where(option => option.IsSelected)
+            .Select(option => option.Id)
             .ToArray();
         var started = new List<string>();
         var failed = new List<string>();
@@ -1116,10 +1106,6 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
         action();
     }
-
-    private string FormatMonitorLabel(int position) => position < _remoteDesktop.MonitorIds.Count
-        ? $"MSTSC-ID {_remoteDesktop.MonitorIds[position]}"
-        : $"MSTSC-ID {position}";
 
     private void OpenCommandPrompt(object? parameter)
     {

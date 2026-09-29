@@ -518,6 +518,13 @@ static void VerifyRemoteDesktopProfile()
         new[] { 4, 7, 9 });
     Assert(machineSpecificIds.Contains("selectedmonitors:s:7,4"),
         "RDP must preserve the selected mstsc /l IDs and their primary-monitor order.");
+
+    var monitorOptions = new[] { 0, 4, 5 }
+        .Select((id, index) => new RemoteDesktopMonitorOption(id, index == 0))
+        .ToArray();
+    Assert(monitorOptions.Select(option => option.Id).SequenceEqual(new[] { 0, 4, 5 }) &&
+           monitorOptions[0].IsSelected && !monitorOptions[1].IsSelected,
+        "The dynamic monitor selector must expose IDs 4, 5 and higher without a four-monitor cap.");
 }
 
 static async Task VerifyRoleStoreAndUpdateAsync(string temporaryRoot)
