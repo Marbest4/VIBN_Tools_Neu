@@ -469,6 +469,17 @@ namespace VIBN_Tools.Application.VM
         public string GroupingPreviewError => _groupingPreview?.Error ?? string.Empty;
         public bool HasGroupingPreviewError => _groupingPreview?.HasError == true;
 
+        private string _lastGenerationSettingsSummary = "Noch keine Generierung mit den aktuellen Einstellungen ausgeführt.";
+        public string LastGenerationSettingsSummary
+        {
+            get => _lastGenerationSettingsSummary;
+            private set
+            {
+                _lastGenerationSettingsSummary = value;
+                OnPropertyChanged();
+            }
+        }
+
         public ObservableCollection<ContainerGroupingExample> GroupingExamples { get; } =
         [
             new(
@@ -516,6 +527,28 @@ namespace VIBN_Tools.Application.VM
                 false,
                 true,
                 false),
+            new(
+                "Component kürzen (Substitution)",
+                "Gruppiert nach Component. Aus z. B. 'Station_010_Zylinder' wird durch die Klammergruppe 'Station_010'.",
+                string.Empty,
+                string.Empty,
+                true,
+                false,
+                false,
+                false,
+                @"^(Station_\d+).*$",
+                ContainerGenerationSettings.ComponentOption),
+            new(
+                "ID als Containername",
+                "Gruppiert anhand der Anlagen-ID und verwendet zusätzlich den erfassten ID-Teil als sichtbaren Containernamen.",
+                @"=([A-Z0-9a-z_]{9})",
+                string.Empty,
+                false,
+                false,
+                true,
+                false,
+                @"=([A-Z0-9a-z_]{9}).*$",
+                ContainerGenerationSettings.IdOption),
         ];
 
         public string GroupingPresetDirectory { get; } = Path.Combine(
@@ -985,6 +1018,9 @@ namespace VIBN_Tools.Application.VM
         private async Task Generate_Containers(object parameter)
         {
             IsBusyGenerateContainers = true;
+            LastGenerationSettingsSummary = "Generiert mit: " + BuildGroupingRuleSummary() +
+                $" Namensquelle: {Settings.SelectedOption}; Substitution: " +
+                (string.IsNullOrWhiteSpace(Settings.RegexSubstitution) ? "keine" : $"'{Settings.RegexSubstitution}'") + ".";
             using var measurement = PerformanceMeasurementService.Instance.Start(
                 "ContainerGeneration",
                 "Container generieren und Reimport abgleichen");
@@ -1513,6 +1549,21 @@ namespace VIBN_Tools.Application.VM
         {
             UpdateGroupingPreview();
             OnPropertyChanged(nameof(GroupingRuleSummary));
+            if (eventArgs.PropertyName is nameof(ContainerGenerationSettings.RegexAddress) or
+                nameof(ContainerGenerationSettings.RegexId) or
+                nameof(ContainerGenerationSettings.RegexSubstitution) or
+                nameof(ContainerGenerationSettings.GroupByComponent) or
+                nameof(ContainerGenerationSettings.GroupByType) or
+                nameof(ContainerGenerationSettings.GroupById) or
+                nameof(ContainerGenerationSettings.GroupByAddress) or
+                nameof(ContainerGenerationSettings.SelectedOption))
+            {
+                if (WasGenerated)
+                {
+                    WasGenerated = false;
+                    StatusText = "Grouping wurde geändert. Die Container können mit den neuen Einstellungen erneut generiert werden.";
+                }
+            }
             if (eventArgs.PropertyName is not nameof(ContainerGenerationSettings.AutoSaveEnabled) and
                 not nameof(ContainerGenerationSettings.AutoSaveIntervalMinutes))
             {

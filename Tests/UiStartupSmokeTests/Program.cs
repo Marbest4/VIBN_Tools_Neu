@@ -200,7 +200,10 @@ internal static class Program
             var visualPlanService = VerifyContainerToFeeVisualPlan();
             var visualContainerViewModel = new ContainerToFeeVisualPageVM(visualPlanService);
             if (visualContainerViewModel.TreeStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
-                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Unassigned) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Verified) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Error) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Planned) ||
                 visualContainerViewModel.FeeSignalStatusFilters.All(item => item.Key != VisualStatusFilterKey.Error))
             {
                 throw new InvalidOperationException("The visual Container2FEE status filters are incomplete.");

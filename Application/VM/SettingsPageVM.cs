@@ -594,6 +594,7 @@ namespace VIBN_Tools.Application.VM
             var stopwatch = Stopwatch.StartNew();
             ConnectionStatus = $"Verbindung zu {SelectedServer} wird aufgebaut …";
             ConnectedServer = "---";
+            _connectionService.ClearConnectionContext();
             _log.Information("Project Settings", ConnectionStatus);
             try
             {
@@ -644,6 +645,7 @@ namespace VIBN_Tools.Application.VM
                 }
 
                 ConnectedServer = SelectedServer;
+                _connectionService.SetConnectionContext(SelectedServer);
                 ConnectionStatus = $"Mit {SelectedServer} verbunden ({stopwatch.Elapsed.TotalSeconds:F1} s).";
                 _log.Information("Project Settings", ConnectionStatus);
             }
@@ -665,6 +667,7 @@ namespace VIBN_Tools.Application.VM
             Services.ApiInstance.Disconnect();
 
             ConnectedServer = "---";
+            _connectionService.ClearConnectionContext();
             ConnectionStatus = "Verbindung getrennt.";
             _log.Information("Project Settings", ConnectionStatus);
             return Task.CompletedTask;

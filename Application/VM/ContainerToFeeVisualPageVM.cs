@@ -35,6 +35,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private ContainerToFeeVisualTreeNodeVM? _selectedTreeNode;
     private ContainerToFeeVisualTargetVM? _selectedTarget;
     private ContainerToFeeVisualFeeInterfaceVM? _selectedExistingInterface;
+    private ContainerToFeeVisualFeeObjectVM? _selectedFeeObject;
+    private ContainerToFeeVisualFeeSignalVM? _selectedFeeSignal;
+    private VisualIssue? _selectedIssue;
+    private bool _synchronizeRelatedSelections = true;
+    private bool _isSynchronizingSelections;
     private string _treeFilter = string.Empty;
     private string _feeObjectFilter = string.Empty;
     private string _feeSignalFilter = string.Empty;
@@ -261,15 +266,6 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         get => _lastManifestPath;
         private set { _lastManifestPath = value; OnPropertyChanged(); }
     }
-
-    public string SignalResolutionHelp =>
-        "'Signale konnten nicht eindeutig aufgelöst werden' bedeutet, dass ein Container-Signal in den " +
-        "ausgewählten Interfaces nicht genau einer FEE-Variablen widerspruchsfrei zugeordnet werden konnte. " +
-        "Eindeutig sein müssen Signalname/Tag und – sofern im ContainerFile vorhanden – Adresse bzw. Pfad; bei " +
-        "mehreren Treffern müssen zusätzlich IO-Typ und Usage unterscheiden. Eine manuell gespeicherte GUID muss " +
-        "noch existieren. Abhilfe: richtige Interfaces auswählen, FEE aktualisieren, doppelte Variablen bereinigen " +
-        "oder das korrekte Signal per Drag & Drop zuordnen. Abweichende bestehende Variablen werden absichtlich " +
-        "nicht automatisch überschrieben.";
 
     public bool HasPlan => _planService.CurrentPlan is not null;
 
@@ -548,6 +544,67 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged(nameof(SelectedContainerSupportsCreation));
             OnPropertyChanged(nameof(IsCreationRequestedForSelection));
             RefreshSelectionProjection();
+            SynchronizeSelectionsFromTree(value);
+        }
+    }
+
+    public bool SynchronizeRelatedSelections
+    {
+        get => _synchronizeRelatedSelections;
+        set
+        {
+            if (_synchronizeRelatedSelections == value)
+                return;
+            _synchronizeRelatedSelections = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public ContainerToFeeVisualFeeObjectVM? SelectedFeeObject
+    {
+        get => _selectedFeeObject;
+        set
+        {
+            if (ReferenceEquals(_selectedFeeObject, value))
+                return;
+            _selectedFeeObject = value;
+            OnPropertyChanged();
+            if (value is null || !SynchronizeRelatedSelections)
+                return;
+            SelectRelatedTreeNode(TreeRoots.SelectMany(root => root.SelfAndDescendants())
+                .FirstOrDefault(node => string.Equals(node.FeeObjectId, value.Id, StringComparison.Ordinal)));
+        }
+    }
+
+    public ContainerToFeeVisualFeeSignalVM? SelectedFeeSignal
+    {
+        get => _selectedFeeSignal;
+        set
+        {
+            if (ReferenceEquals(_selectedFeeSignal, value))
+                return;
+            _selectedFeeSignal = value;
+            OnPropertyChanged();
+            if (value is null || !SynchronizeRelatedSelections)
+                return;
+            var nodeId = _planService.CurrentPlan?.SignalAssignments.FirstOrDefault(assignment =>
+                string.Equals(assignment.FeeSignalGuid, value.GuidString, StringComparison.OrdinalIgnoreCase))?.SignalNodeId;
+            SelectRelatedTreeNode(FindTreeNode(nodeId));
+        }
+    }
+
+    public VisualIssue? SelectedIssue
+    {
+        get => _selectedIssue;
+        set
+        {
+            if (ReferenceEquals(_selectedIssue, value))
+                return;
+            _selectedIssue = value;
+            OnPropertyChanged();
+            if (value is null || !SynchronizeRelatedSelections)
+                return;
+            SelectRelatedTreeNode(FindTreeNode(value.NodeId));
         }
     }
 
@@ -1326,6 +1383,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             .DiscoverVerifiedContainerIdsAsync(cancellationToken);
         _verifiedContainerIds.Clear();
         _verifiedContainerIds.UnionWith(verifiedContainers);
+        _planService.DeselectVerifiedContainers(verifiedContainers);
         ApplyVerifiedContainerStates(verifiedContainers);
 
         return new FeeRefreshSnapshot(
@@ -2250,10 +2308,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             !feeObject.TypeName.Contains(FeeObjectFilter, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.Assigned && !feeObject.IsAssigned)
+        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.Verified && !feeObject.IsValid)
             return false;
-        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.Unassigned && feeObject.IsAssigned)
+        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.LinkMissing && !feeObject.IsLinkMissing)
             return false;
+        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.Error && !feeObject.HasError)
+            return false;
+        if (SelectedFeeObjectStatusFilter.Key == VisualStatusFilterKey.Planned)
+            return false; // Diese Liste enthält ausschließlich bereits vorhandene FEE-Objekte.
 
         return !ShowOnlyCompatibleFeeObjects ||
                SelectedTarget is null ||
@@ -2398,6 +2460,15 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     {
         var issueList = issues.ToArray();
         Issues.ReplaceWith(issueList);
+        foreach (var issue in issueList.Where(issue =>
+                     issue.Message.Contains("nicht eindeutig", StringComparison.OrdinalIgnoreCase) ||
+                     issue.Code.Contains("SIGNAL", StringComparison.OrdinalIgnoreCase) &&
+                     issue.Code.Contains("CONFLICT", StringComparison.OrdinalIgnoreCase)))
+        {
+            AddOperationDetail(
+                "Signalauflösung",
+                issue.Message + " Prüfen: ausgewählte Interfaces, Tag/Adresse/Pfad, IO-Typ/Usage, gespeicherte GUID und doppelte FEE-Signale. Abweichende vorhandene Variablen werden nicht automatisch überschrieben.");
+        }
         var plan = _planService.CurrentPlan;
         if (plan is not null)
         {
@@ -2493,18 +2564,6 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             return node.EffectiveState;
         }
 
-        if (node.Kind == VisualNodeKind.Container)
-        {
-            var descendants = node.SelfAndDescendants().Skip(1).ToArray();
-            var isSignalOnly = descendants.Any(child => child.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal) &&
-                               descendants.All(child => child.Kind is not (VisualNodeKind.Logic or VisualNodeKind.SimObjectTarget or VisualNodeKind.TechnicalHelper));
-            if (isSignalOnly)
-            {
-                node.ApplyExecutionState(ContainerToFeeVisualNodeState.Planned);
-                return node.EffectiveState;
-            }
-        }
-
         var effectiveChildStates = node.Kind == VisualNodeKind.SimObjectTarget
             ? childStates.Append(node.EffectiveState).ToArray()
             : childStates;
@@ -2526,6 +2585,48 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private static FeeConnectionService ResolveConnection() =>
         Services.Connection ?? new FeeConnectionService();
+
+    private void SelectRelatedTreeNode(ContainerToFeeVisualTreeNodeVM? node)
+    {
+        if (node is null || _isSynchronizingSelections)
+            return;
+        _isSynchronizingSelections = true;
+        try
+        {
+            SelectedTreeNode = node;
+            node.IsExpanded = true;
+        }
+        finally
+        {
+            _isSynchronizingSelections = false;
+        }
+    }
+
+    private void SynchronizeSelectionsFromTree(ContainerToFeeVisualTreeNodeVM? node)
+    {
+        if (!SynchronizeRelatedSelections || node is null || _isSynchronizingSelections)
+            return;
+        _isSynchronizingSelections = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(node.FeeObjectId))
+                SelectedFeeObject = AvailableFeeObjects.FirstOrDefault(item => item.Id == node.FeeObjectId);
+
+            var signalAssignment = _planService.CurrentPlan?.SignalAssignments.FirstOrDefault(item =>
+                string.Equals(item.SignalNodeId, node.Id, StringComparison.Ordinal));
+            if (signalAssignment is not null)
+                SelectedFeeSignal = AvailableFeeSignals.FirstOrDefault(item =>
+                    string.Equals(item.GuidString, signalAssignment.FeeSignalGuid, StringComparison.OrdinalIgnoreCase));
+
+            SelectedIssue = Issues.FirstOrDefault(issue =>
+                string.Equals(issue.NodeId, node.Id, StringComparison.Ordinal) ||
+                string.Equals(issue.NodeId, node.ContainerId, StringComparison.Ordinal));
+        }
+        finally
+        {
+            _isSynchronizingSelections = false;
+        }
+    }
 
 }
 
@@ -2583,8 +2684,10 @@ public sealed record VisualStatusFilterOption(VisualStatusFilterKey Key, string 
     public static IReadOnlyList<VisualStatusFilterOption> AssignmentOptions { get; } =
     [
         All,
-        new(VisualStatusFilterKey.Assigned, "Zugewiesen"),
-        new(VisualStatusFilterKey.Unassigned, "Nicht zugewiesen"),
+        new(VisualStatusFilterKey.Verified, "Alles gültig (grün)"),
+        new(VisualStatusFilterKey.LinkMissing, "Verknüpfung fehlt (lila)"),
+        new(VisualStatusFilterKey.Error, "Fehler (rot)"),
+        new(VisualStatusFilterKey.Planned, "Fehlt, wird erzeugt (gelb)"),
     ];
     public static IReadOnlyList<VisualStatusFilterOption> SignalOptions { get; } =
     [
@@ -3035,6 +3138,9 @@ public sealed class ContainerToFeeVisualFeeObjectVM
     public IReadOnlyList<string> AssignedTargets { get; }
     public bool IsAssigned => AssignedTargets.Count > 0;
     public bool HasLiveConnections => ConnectionSummary.HasConnections;
+    public bool HasError => HasExactDuplicate;
+    public bool IsValid => !HasError && (IsAssigned || HasLiveConnections);
+    public bool IsLinkMissing => !HasError && !HasLiveConnections;
     public string GuidDisplay => $"GUID: {GuidString}";
     public string ConnectionStateText => !ConnectionSummary.WasRead
         ? "Live-Verknüpfungen noch nicht vollständig gelesen"
@@ -3057,11 +3163,9 @@ public sealed class ContainerToFeeVisualFeeObjectVM
         : IsAssigned
             ? $"{PlanAssignmentText}. {ConnectionStateText}"
             : ConnectionStateText;
-    public string StateBackground => HasExactDuplicate
-        ? !ConnectionSummary.WasRead
-            ? "#FFE4D7F5"
-            : HasLiveConnections ? "#FFFFE699" : "#FFFFC7CE"
-        : IsAssigned || HasLiveConnections ? "#FFC6EFCE" : "Transparent";
+    public string StateBackground => HasError
+        ? "#FFFFC7CE"
+        : IsValid ? "#FFC6EFCE" : "#FFE8D9F3";
     public string StateBorderBrush => HasExactDuplicate
         ? HasLiveConnections ? "#FFC88719" : "#FFC00000"
         : HasLiveConnections ? "#FF548235" : "Transparent";

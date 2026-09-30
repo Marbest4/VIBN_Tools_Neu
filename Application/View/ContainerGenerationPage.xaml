@@ -11,6 +11,7 @@
              xmlns:settings="clr-namespace:VIBN_Tools.ContainerGeneration.Models;assembly=VIBN_Tools.ContainerGeneration"
              xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"   
              xmlns:local="clr-namespace:VIBN_Tools.Application.View"
+             xmlns:behaviors="clr-namespace:VIBN_Tools.Application.Behaviors"
              mc:Ignorable="d" 
              d:DesignHeight="1000" d:DesignWidth="1600">
 
@@ -159,6 +160,8 @@
                                        Text="Die aktivierten Kriterien werden von oben nach unten ausgewertet. Nur Signale, bei denen jedes aktive Kriterium einen Wert liefert und derselbe Gruppenschlüssel entsteht, landen gemeinsam in einem Container. Bei Regex werden ausschließlich die Inhalte der Klammergruppen verwendet. Mehrere alternative Regex können mit Komma und Leerzeichen getrennt werden." />
                             <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
                                        Text="Component und Type stammen aus dem Treffer in der Requirements.xml. Die Ersetzung bestimmt anschließend den sichtbaren Containernamen; sie ändert nicht den Signalnamen." />
+                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="Substitute Component wählt zuerst die Quelle: Component nutzt den von Requirements erkannten Namen, ID das ID-Feld des Signals. Bleibt der Regex leer, wird die Quelle unverändert übernommen. Bei einem Treffer werden nur die Klammergruppen ohne Trennzeichen zum neuen Namen zusammengesetzt, z. B. ^(Station_)(\d+).*$ → Station_010." />
                             <WrapPanel Margin="0,8,0,0">
                                 <Button Padding="8,2" Content="Beispiel: nach Adressbyte" Command="{Binding UseAddressGroupingExample}"
                                         ToolTip="^[%]?[IEAQM](\d+)\. gruppiert z. B. %I12.3 und %I12.7 über 12." />
@@ -216,10 +219,10 @@
 
                         <StackPanel Orientation="Horizontal">
                             <ux:RadioButton Margin="5,5,25,5" Style="{StaticResource RadioButtonSmallStyle}" IsChecked="{Binding Settings.SelectedOption, Converter={StaticResource EqualityConverter}, ConverterParameter={x:Static settings:ContainerGenerationSettings.ComponentOption}}">
-                                <TextBlock Text="Component" Style="{StaticResource TextRobotoLightStyle}" />
+                                <TextBlock Text="Component" Style="{StaticResource TextRobotoLightStyle}" ToolTip="Der erkannte Component-/Containername ist die Quelle für den sichtbaren Namen." />
                             </ux:RadioButton>
                             <ux:RadioButton Margin="5,5,25,5" Style="{StaticResource RadioButtonSmallStyle}" IsChecked="{Binding Settings.SelectedOption, Converter={StaticResource EqualityConverter}, ConverterParameter={x:Static settings:ContainerGenerationSettings.IdOption}}">
-                                <TextBlock Text="ID" Style="{StaticResource TextRobotoLightStyle}" />
+                                <TextBlock Text="ID" Style="{StaticResource TextRobotoLightStyle}" ToolTip="Das ID-Feld des Signals ist die Quelle für den sichtbaren Namen." />
                             </ux:RadioButton>
                             <ux:TextBox Margin="5" VerticalContentAlignment="Center" MinWidth="275" Text="{Binding Settings.RegexSubstitution, UpdateSourceTrigger=PropertyChanged}"
                                         Watermark="optional, Klammergruppen werden neuer Name"
@@ -244,6 +247,8 @@
                             </TextBlock>
                         </Grid>
                     </Border>
+                    <TextBlock Margin="7,0,7,5" Foreground="#FF455A64" TextWrapping="Wrap"
+                               Text="{Binding LastGenerationSettingsSummary}" />
                 </StackPanel>
                 </ScrollViewer>
             </Expander>
@@ -336,7 +341,10 @@
                               RowHeight="29"
                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                               HeadersVisibility="Column"
-                              IsReadOnly="False">
+                              IsReadOnly="False"
+                              SelectionMode="Extended"
+                              SelectionUnit="FullRow"
+                              behaviors:ReimportSelectionBehavior.IsEnabled="True">
                         <DataGrid.RowStyle>
                             <Style TargetType="DataGridRow">
                                 <Setter Property="Background" Value="#FFFFF3CD"/>

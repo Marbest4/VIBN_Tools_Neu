@@ -15,6 +15,37 @@ namespace VIBN_Tools.Settings
 
         public bool LoadFeeDataOnConnect { get; set; }
 
+        private string? _connectedServer;
+        private string? _connectedStation;
+
+        public string? ConnectedServer
+        {
+            get => _connectedServer;
+            private set
+            {
+                if (SetPropertyChange(ref _connectedServer, value))
+                    OnPropertyChanged(nameof(ConnectedServerDisplay));
+            }
+        }
+
+        public string? ConnectedStation
+        {
+            get => _connectedStation;
+            private set
+            {
+                if (SetPropertyChange(ref _connectedStation, value))
+                    OnPropertyChanged(nameof(ConnectedStationDisplay));
+            }
+        }
+
+        public string ConnectedServerDisplay => IsConnected && !string.IsNullOrWhiteSpace(ConnectedServer)
+            ? ConnectedServer
+            : "nicht verbunden";
+
+        public string ConnectedStationDisplay => IsConnected && !string.IsNullOrWhiteSpace(ConnectedStation)
+            ? ConnectedStation
+            : "nicht eingelesen";
+
 
         private bool _isConnected;
         public bool IsConnected
@@ -28,6 +59,8 @@ namespace VIBN_Tools.Settings
                 {
                     OnPropertyChanged(nameof(CanUseFeeFeatures));
                     OnPropertyChanged(nameof(UnavailableReason));
+                    OnPropertyChanged(nameof(ConnectedServerDisplay));
+                    OnPropertyChanged(nameof(ConnectedStationDisplay));
                 }
 
                 if (changed && value)
@@ -60,6 +93,23 @@ namespace VIBN_Tools.Settings
             _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _timer.Tick += (sender, eventargs) => CheckConnection();
             _timer.Start();
+        }
+
+        public void SetConnectionContext(string? server)
+        {
+            ConnectedServer = string.IsNullOrWhiteSpace(server) ? null : server.Trim();
+            ConnectedStation = null;
+        }
+
+        public void SetConnectedStation(string? station)
+        {
+            ConnectedStation = string.IsNullOrWhiteSpace(station) ? null : station.Trim();
+        }
+
+        public void ClearConnectionContext()
+        {
+            ConnectedServer = null;
+            ConnectedStation = null;
         }
 
         /// <summary>

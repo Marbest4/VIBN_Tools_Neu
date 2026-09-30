@@ -269,6 +269,10 @@
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,7">
                         <Button Content="Alles aufklappen" Command="{Binding ExpandAllCommand}" Padding="8,2" />
                         <Button Content="Alles zuklappen" Command="{Binding CollapseAllCommand}" Padding="8,2" Margin="5,0,0,0" />
+                        <CheckBox Margin="12,0,0,0" VerticalAlignment="Center"
+                                  Content="Auswahl in Listen und Baum synchronisieren"
+                                  IsChecked="{Binding SynchronizeRelatedSelections}"
+                                  ToolTip="Springt beim Auswählen eines Signals, SimObjects oder Validierungseintrags zum zugehörigen Baumknoten – und umgekehrt." />
                     </StackPanel>
                     <TreeView Grid.Row="3" ItemsSource="{Binding TreeRoots}"
                               ItemContainerStyle="{StaticResource VisualTreeItemStyle}"
@@ -280,7 +284,7 @@
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
-                    <Expander Grid.Row="4" Margin="0,7,0,0" Header="Legende und Signalauflösung" IsExpanded="False">
+                    <Expander Grid.Row="4" Margin="0,7,0,0" Header="Legende" IsExpanded="False">
                         <StackPanel Margin="5">
                             <WrapPanel>
                                 <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFC6EFCE"/><TextBlock Margin="0,0,10,0" Text="Grün: vorhanden und vollständig verknüpft"/>
@@ -290,8 +294,6 @@
                             </WrapPanel>
                             <TextBlock Margin="0,5,0,0" TextWrapping="Wrap"
                                        Text="Checkbox am Container: kompletter Container wird im Lauf berücksichtigt. Schreibgeschützte Checkbox am Unterobjekt: dieses Objekt wird tatsächlich neu erzeugt; leer bedeutet wiederverwenden, nur verknüpfen oder überspringen." />
-                            <TextBlock Margin="0,5,0,0" TextWrapping="Wrap" Text="{Binding SignalResolutionHelp}"
-                                       ToolTip="{Binding SignalResolutionHelp}" ToolTipService.ShowDuration="60000" />
                         </StackPanel>
                     </Expander>
                 </Grid>
@@ -538,6 +540,8 @@
                     <ColumnDefinition Width="*" MinWidth="190" />
                     <ColumnDefinition Width="5" />
                     <ColumnDefinition Width="*" MinWidth="190" />
+                    <ColumnDefinition Width="5" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -548,6 +552,7 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Verfügbare FEE-SimObjects" />
                         <TextBox Grid.Row="1" MinHeight="29" Margin="0,0,0,6"
@@ -561,6 +566,8 @@
                                   DisplayMemberPath="DisplayName"
                                   ToolTip="SimObjects nach Zuordnungszustand filtern" />
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeObjectsView}"
+                                 SelectedItem="{Binding SelectedFeeObject, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeObject}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -585,7 +592,6 @@
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                 <TextBlock Text="{Binding FeeType}" Foreground="#777777" FontSize="10" />
-                                                <TextBlock Text="{Binding GuidDisplay}" Foreground="#666666" FontSize="9" TextTrimming="CharacterEllipsis" />
                                                 <TextBlock Text="{Binding DuplicateStateText}" Foreground="{Binding StateForeground}"
                                                            FontSize="10" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding ConnectionStateText}" Foreground="{Binding StateForeground}"
@@ -602,6 +608,11 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
+                        <WrapPanel Grid.Row="5" Margin="0,6,0,0" ToolTip="Farben entsprechen dem Containerbaum; gelb kann in dieser Liste leer sein, da sie nur bereits vorhandene FEE-Objekte enthält.">
+                            <Border Width="13" Height="13" Background="#FFC6EFCE"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="gültig"/>
+                            <Border Width="13" Height="13" Background="#FFE8D9F3"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="Verknüpfung fehlt"/>
+                            <Border Width="13" Height="13" Background="#FFFFC7CE"/><TextBlock Margin="3,0,0,0" FontSize="10" Text="Fehler"/>
+                        </WrapPanel>
                     </Grid>
                 </Border>
 
@@ -614,9 +625,8 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="2*" />
-                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Gefundene FEE-Signale" />
                         <Expander Grid.Row="1" Margin="0,0,0,6" MaxHeight="145"
@@ -649,6 +659,8 @@
                                   DisplayMemberPath="DisplayName"
                                   ToolTip="Signale nach Zuordnung, Fehlern oder Duplikaten filtern" />
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeSignalsView}"
+                                 SelectedItem="{Binding SelectedFeeSignal, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeSignal}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -670,9 +682,22 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <TextBlock Grid.Row="5" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
-                                   Text="Validierung" />
-                        <ListBox Grid.Row="6" ItemsSource="{Binding Issues}"
+                        <WrapPanel Grid.Row="5" Margin="0,6,0,0">
+                            <Border Width="13" Height="13" Background="#FFC6EFCE"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="zugewiesen"/>
+                            <Border Width="13" Height="13" Background="#FFF3F5F7"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="offen"/>
+                            <Border Width="13" Height="13" Background="#FFFFCDD2"/><TextBlock Margin="3,0,0,0" FontSize="10" Text="Fehler"/>
+                        </WrapPanel>
+                    </Grid>
+                </Border>
+
+                <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                <Expander Grid.Column="4" Header="Validierung" IsExpanded="True" ExpandDirection="Left"
+                          ToolTip="Ein-/ausklappbare Validierung neben den gefundenen FEE-Signalen.">
+                    <Border Width="310" Padding="8" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
+                        <ListBox ItemsSource="{Binding Issues}"
+                                 SelectedItem="{Binding SelectedIssue, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedIssue}"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">
                             <ListBox.ItemTemplate>
@@ -702,8 +727,8 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                    </Grid>
-                </Border>
+                    </Border>
+                </Expander>
             </Grid>
         </Grid>
 

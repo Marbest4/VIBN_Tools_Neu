@@ -91,7 +91,21 @@
                                 Command="{Binding ToggleNavigationCommand}"
                                 ToolTip="Blendet die Texte der linken Navigation ein oder aus. Alt+N aktiviert die Schaltfläche."
                                 ToolTipService.ShowOnDisabled="True" />
-						<TextBlock Style="{StaticResource H2Style }" Text="Tools for Modeling and Virtual Commissioning" Margin="10"/>
+						<StackPanel Margin="10,4" VerticalAlignment="Center">
+							<TextBlock Style="{StaticResource H2Style }" Text="Tools for Modeling and Virtual Commissioning"/>
+							<WrapPanel Margin="0,3,0,0">
+								<TextBlock Margin="0,0,16,0" FontSize="11">
+									<Run FontWeight="SemiBold" Text="FEE: "/><Run Text="{Binding Connection.ConnectedServerDisplay, Mode=OneWay}"/>
+								</TextBlock>
+								<TextBlock Margin="0,0,16,0" FontSize="11"
+								           ToolTip="Aus den eingelesenen obersten BasicFrames abgeleitete Station; dies ist kein garantierter Runtime-Laufzustand.">
+									<Run FontWeight="SemiBold" Text="FEE-Station: "/><Run Text="{Binding Connection.ConnectedStationDisplay, Mode=OneWay}"/>
+								</TextBlock>
+								<TextBlock FontSize="11">
+									<Run FontWeight="SemiBold" Text="Rechner: "/><Run Text="{Binding StatusContext.SelectedWorkstationDisplay, Mode=OneWay}"/>
+								</TextBlock>
+							</WrapPanel>
+						</StackPanel>
 					</DockPanel>
 				</ux:AppHeader>
 

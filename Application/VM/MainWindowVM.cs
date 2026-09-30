@@ -28,6 +28,8 @@ public sealed class MainWindowVM : MvvmBase
 
     public FeeConnectionService Connection => Services.Connection;
 
+    public ApplicationStatusContext StatusContext => ApplicationStatusContext.Instance;
+
     public string BuildInformation => ApplicationBuildInformation.DisplayText;
 
     public ICommand ToggleNavigationCommand { get; }

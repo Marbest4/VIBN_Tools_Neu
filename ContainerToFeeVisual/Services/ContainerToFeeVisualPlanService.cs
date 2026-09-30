@@ -449,8 +449,8 @@ public sealed class ContainerToFeeVisualPlanService
         if (!requiresLink)
         {
             return new(
-                VisualSignalConnectionKind.NotRequired,
-                "Für diesen signal-only Container ist keine Objekt-Slot-Verknüpfung vorgesehen.");
+                VisualSignalConnectionKind.LinkMissing,
+                "Das Signal wurde gefunden, besitzt aber kein definiertes FEE-Objektziel. Der signal-only Container bleibt deshalb als offene Verknüpfung markiert.");
         }
 
         var expectedObjectGuids = ResolveExpectedSignalTargetGuids(plan, container, descriptor);
@@ -1251,6 +1251,33 @@ public sealed class ContainerToFeeVisualPlanService
         return changed;
     }
 
+    /// <summary>Deselects fully verified containers in one consistent plan update.</summary>
+    public int DeselectVerifiedContainers(IReadOnlySet<string> containerIds)
+    {
+        var plan = CurrentPlan;
+        if (plan is null || containerIds.Count == 0)
+            return 0;
+
+        var ids = plan.Nodes
+            .Where(node => node.Kind == VisualNodeKind.Container &&
+                           containerIds.Contains(node.Id) &&
+                           plan.IsGenerationSelected(node.Id))
+            .Select(node => node.Id)
+            .ToArray();
+        if (ids.Length == 0)
+            return 0;
+
+        var before = Capture(plan);
+        var excluded = plan.GenerationSelections
+            .Where(item => !ids.Contains(item.ContainerId, StringComparer.Ordinal))
+            .Concat(ids.Select(id => new VisualGenerationSelection(id, false)))
+            .ToArray();
+        plan.ReplaceGenerationSelections(excluded);
+        RecordMutation(before);
+        RaisePlanChanged();
+        return ids.Length;
+    }
+
     /// <summary>Enables or disables creation for every supported container in one undo step.</summary>
     public int SetAllCreationRequested(bool requested)
     {
@@ -1421,10 +1448,17 @@ public sealed class ContainerToFeeVisualPlanService
                 node.Kind is VisualNodeKind.Logic or VisualNodeKind.SimObjectTarget or VisualNodeKind.TechnicalHelper);
             if (!hasRuntimeObject && signalNodes.Length > 0 && plan.IsGenerationSelected(container.Id))
             {
+                var isDeclaredSignalOnly = ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor) &&
+                                           string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) &&
+                                           string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType) &&
+                                           descriptor.Targets.Count == 0 &&
+                                           descriptor.TechnicalHelpers.Count == 0;
                 issues.Add(new VisualIssue(
-                    VisualIssueSeverity.Warning,
-                    "SIGNAL_ONLY_CONTAINER",
-                    $"Container '{container.Name}' besteht ausschließlich aus Signalen. Es wird kein FEE-Szenenobjekt erzeugt; die Signale werden nur im Interface berücksichtigt.",
+                    isDeclaredSignalOnly ? VisualIssueSeverity.Warning : VisualIssueSeverity.Error,
+                    isDeclaredSignalOnly ? "SIGNAL_ONLY_CONTAINER" : "SIGNAL_ONLY_CONTAINER_UNDEFINED",
+                    isDeclaredSignalOnly
+                        ? $"Container '{container.Name}' ist als signal-only Typ definiert. Die Signale werden im Interface berücksichtigt, bleiben ohne FEE-Objektziel jedoch als offene Verknüpfung markiert."
+                        : $"Container '{container.Name}' besteht ausschließlich aus Signalen, obwohl der Typ kein signal-only Container ist. Wahrscheinlich fehlt eine Containerdefinition oder ein erwartetes FEE-Objekt.",
                     container.Id));
             }
         }

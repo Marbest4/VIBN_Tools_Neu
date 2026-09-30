@@ -251,6 +251,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         set
         {
             _selectedWorkstation = value;
+            ApplicationStatusContext.Instance.SelectedWorkstationName = value?.PcName;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedRemoteUser));
             OnPropertyChanged(nameof(HasSelectedWorkstation));
