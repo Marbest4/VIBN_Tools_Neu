@@ -41,9 +41,35 @@ namespace VIBN_Tools
         {
             try
             {
+                // A cooperative page cancellation cannot interrupt a native
+                // FEE SDK call. Closing the application therefore also tears
+                // down the shared SDK session, bounded so shutdown itself does
+                // not remain blocked indefinitely.
+                if (GlobalClasses.Services.ApiInstance is not null)
+                {
+                    var feeDisconnect = Task.Run(() => GlobalClasses.Services.ApiInstance.Disconnect());
+                    if (!feeDisconnect.Wait(TimeSpan.FromSeconds(2)))
+                    {
+                        Application.ApplicationLogService.Instance.Warning(
+                            "Anwendungsende",
+                            "Die FEE-Verbindung antwortete beim Beenden nicht innerhalb von zwei Sekunden; der Prozess beendet die verbleibende SDK-Arbeit.");
+                    }
+                }
+
+            }
+            catch (Exception exception)
+            {
+                Application.ApplicationLogService.Instance.Error(
+                    "Anwendungsende",
+                    "Die FEE-Verbindung konnte beim Beenden nicht sauber getrennt werden.",
+                    exception);
+            }
+
+            try
+            {
                 // WPF does not await async Exit handlers. Perform the bounded
                 // cleanup before the host exits so no tool-owned TIA bridge is
-                // left behind in the background.
+                // left behind in the background. This still runs if FEE cleanup failed.
                 Task.Run(Application.ViCoFeatureBootstrapper.ShutdownAsync)
                     .GetAwaiter()
                     .GetResult();

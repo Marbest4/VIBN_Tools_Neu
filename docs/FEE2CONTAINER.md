@@ -1,5 +1,7 @@
 # FEE2Container
 
+Die vier Tabellen dieses Prüf- und Rekonstruktionsreiters verwenden bewusst keine WPF-Zeilen- oder Spaltenvirtualisierung. Beim schnellen Rootwechsel konnte WPF andernfalls noch einen veralteten internen Zeilenindex anfordern und `ArgumentOutOfRange_IndexMustBeLess` auslösen. Kreuzmarkierungen werden erst im Dispatcher-Leerlauf angewendet und suchen ihr Gegenobjekt direkt in der stabilen Quellsammlung. Das erhöht bei sehr großen Listen den Speicherbedarf, verhindert aber, dass ein reiner Auswahlwechsel die Anwendung beendet.
+
 ## Zwei Auslesemodi
 
 Der Reiter zeigt ausschließlich FEE-`BasicFrame`-Objekte der obersten Hierarchieebene als auswählbare Hauptknoten; untergeordnete BasicFrames gehören zum jeweiligen Teilbaum und erscheinen nicht doppelt. Für einen durch **Container2FEE Visual** erzeugten Root wird weiterhin die gespeicherte Provenienz als exakter Round-Trip verwendet. Fehlt sie, rekonstruiert das Tool ein ContainerFile aus den unterstützten Objekten unterhalb des gewählten Hauptknotens sowie deren aktuellen Variablen- und Slotzuordnungen.

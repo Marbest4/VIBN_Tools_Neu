@@ -264,6 +264,12 @@ internal static class Program
             }
             var aiTrainingPage = new AITrainingTestPage();
             var aiTrainingViewModel = (AITrainingTestPageVM)aiTrainingPage.DataContext;
+            if (!aiTrainingViewModel.AiWorkflowGuide.Contains("60 %", StringComparison.Ordinal) ||
+                !aiTrainingViewModel.AiWorkflowGuide.Contains("kein ML-Modell", StringComparison.OrdinalIgnoreCase) ||
+                !aiTrainingViewModel.AiDataLocations.Contains("training_pool", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The AI page does not explain its separate data and suggestion workflows.");
+            }
             aiTrainingViewModel.RuleSuggestions.Add(new RuleSuggestion(
                 "test-rule",
                 "Testregel für WPF-Bindings",
@@ -361,6 +367,12 @@ internal static class Program
             {
                 throw new InvalidOperationException("The TIA axis workflow or exchange help is incomplete.");
             }
+            if (!tiaPortalViewModel.HmiClosedLoopPrerequisites.Contains("WinCC Runtime", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.HmiClosedLoopPrerequisites.Contains("finally", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.HmiClosedLoopPrerequisites.Contains("FEE", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The TIA HMI closed-loop workflow does not disclose its runtime prerequisites and restoration boundary.");
+            }
             tiaPortalViewModel.ToggleLibraryOperationInfoCommand.Execute(null);
             if (!tiaPortalViewModel.IsLibraryOperationInfoVisible)
                 throw new InvalidOperationException("The TIA ViCo library explanation cannot be expanded.");
@@ -369,6 +381,7 @@ internal static class Program
             if (projectQualityPage.DataContext is not ProjectQualityPageVM projectQualityViewModel ||
                 !projectQualityViewModel.Limitations.Contains("fachliche Freigabe", StringComparison.OrdinalIgnoreCase) ||
                 !projectQualityViewModel.TestInstructions.Contains("Requirements.xml", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.QualityGateQuickStart.Contains("ContainerFile", StringComparison.OrdinalIgnoreCase) ||
                 !projectQualityViewModel.TestMeaning.Contains("Laufzeit", StringComparison.OrdinalIgnoreCase) ||
                 !projectQualityViewModel.InputRequirements.Any(item =>
                     item.Input == "ContainerFile" && item.AcceptedFormat == ".xml") ||
@@ -988,7 +1001,9 @@ internal static class Program
             var container = nodes.Single(node => node.Kind == VisualNodeKind.Container);
             if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
-                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified)
+                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
+                simObject.WillGenerateObject ||
+                !container.DisplayTypeLabel.Contains("Cylinder", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     "A confirmed SimObject link did not propagate green from object to target and group.");

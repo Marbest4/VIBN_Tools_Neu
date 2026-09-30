@@ -62,7 +62,7 @@
                         <MenuItem Header="Löschen"
                                   Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
-                        <MenuItem Header="Generieren / nicht generieren"
+                        <MenuItem Header="Container im Lauf berücksichtigen / ausschließen"
                                   Command="{Binding PlacementTarget.Tag.ToggleTreeNodeGenerationCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
                         <MenuItem Header="Mehrfachfund als beabsichtigt bestätigen"
@@ -86,10 +86,19 @@
                           IsChecked="{Binding IsGenerationSelected, Mode=TwoWay}"
                           Visibility="{Binding CanSelectGeneration, Converter={StaticResource BooleanToVisibilityConverter}}"
                           ToolTip="Diesen vollständigen Container bei Generierung bzw. Link-only berücksichtigen" />
+                <CheckBox Margin="0,0,6,0" Grid.RowSpan="2" VerticalAlignment="Center"
+                          IsChecked="{Binding WillGenerateObject, Mode=OneWay}"
+                          IsHitTestVisible="False" Focusable="False"
+                          Visibility="{Binding ShowGenerationAction, Converter={StaticResource BooleanToVisibilityConverter}}"
+                          ToolTip="{Binding GenerationActionText}" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,1,0,0" FontSize="10"
-                           Foreground="#FF356A88" Text="{Binding LinkedObjectDescription}"
-                           TextTrimming="CharacterEllipsis" />
+                <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,1,0,0">
+                    <TextBlock FontSize="10" Foreground="#FF356A88"
+                               Text="{Binding LinkedObjectDescription}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="#FF5A3C00"
+                               Text="{Binding GenerationActionText}"
+                               Visibility="{Binding ShowGenerationAction, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </StackPanel>
                 <StackPanel Grid.Column="2" Grid.RowSpan="2" Margin="8,0,0,0" VerticalAlignment="Center">
                     <Button Padding="5,1" Content="Mehrfachfund bestätigen"
                             Command="{Binding DataContext.ConfirmDuplicateFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
@@ -101,7 +110,7 @@
                 </StackPanel>
                 <Border Grid.Column="3" Grid.RowSpan="2" Margin="8,0,0,0" Padding="4,1" CornerRadius="3"
                         Background="#1A000000">
-                    <TextBlock Text="{Binding Kind}" FontSize="10" Foreground="#666666" />
+                    <TextBlock Text="{Binding DisplayTypeLabel}" FontSize="10" Foreground="#666666" />
                 </Border>
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -168,6 +177,10 @@
                             ToolTip="Ordnet freie Ziele nach identischem Komponentenname und kompatiblem FEE-Typ zu." />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Abbrechen"
                             Command="{Binding CancelCommand}" />
+                    <Button Style="{StaticResource VisualToolbarButton}" MinWidth="165"
+                            Content="FEE hart trennen"
+                            Command="{Binding HardAbortFeeCommand}"
+                            ToolTip="Nur bei blockierendem SDK-Aufruf: trennt FEE nach ausdrücklicher Bestätigung. Keine Rücknahme bereits erfolgter Änderungen." />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Letzten Lauf reparieren"
                             Command="{Binding ResumeLastGenerationCommand}"
                             ToolTip="Wählt anhand des letzten Vorher-/Nachher-Manifests nur fehlgeschlagene oder offene Container erneut aus." />
@@ -235,6 +248,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Container- und Objektstruktur" />
                     <Grid Grid.Row="1" Margin="0,0,0,8">
@@ -266,6 +280,20 @@
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
+                    <Expander Grid.Row="4" Margin="0,7,0,0" Header="Legende und Signalauflösung" IsExpanded="False">
+                        <StackPanel Margin="5">
+                            <WrapPanel>
+                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFC6EFCE"/><TextBlock Margin="0,0,10,0" Text="Grün: vorhanden und vollständig verknüpft"/>
+                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFE8D9F3"/><TextBlock Margin="0,0,10,0" Text="Lila: vorhanden, Verknüpfung fehlt"/>
+                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFFFF2CC"/><TextBlock Margin="0,0,10,0" Text="Gelb: fehlt und wird erzeugt / Unknown wird verarbeitet"/>
+                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFEF9A9A"/><TextBlock Text="Rot: Fehler oder fehlt und wird nicht erzeugt"/>
+                            </WrapPanel>
+                            <TextBlock Margin="0,5,0,0" TextWrapping="Wrap"
+                                       Text="Checkbox am Container: kompletter Container wird im Lauf berücksichtigt. Schreibgeschützte Checkbox am Unterobjekt: dieses Objekt wird tatsächlich neu erzeugt; leer bedeutet wiederverwenden, nur verknüpfen oder überspringen." />
+                            <TextBlock Margin="0,5,0,0" TextWrapping="Wrap" Text="{Binding SignalResolutionHelp}"
+                                       ToolTip="{Binding SignalResolutionHelp}" ToolTipService.ShowDuration="60000" />
+                        </StackPanel>
+                    </Expander>
                 </Grid>
             </Border>
 
@@ -551,11 +579,18 @@
                                             Background="{Binding StateBackground}"
                                             ToolTip="{Binding AssignmentText}"
                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock Text="{Binding FeeType}" Foreground="#777777" FontSize="10" />
-                                            <TextBlock Text="{Binding AssignmentText}" Foreground="#356A35" FontSize="10" TextWrapping="Wrap" />
-                                        </StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding FeeType}" Foreground="#777777" FontSize="10" />
+                                                <TextBlock Text="{Binding AssignmentText}" Foreground="#356A35" FontSize="10" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Margin="6,0,0,0" Padding="5,2" Content="Löschen"
+                                                    Command="{Binding DataContext.DeleteFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="Löscht dieses SimObject nach ausdrücklicher Bestätigung dauerhaft aus FEE." />
+                                        </Grid>
                                     </Border>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>

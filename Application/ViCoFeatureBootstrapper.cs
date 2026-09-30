@@ -9,6 +9,7 @@ using VIBN_Tools.Infrastructure.Kanbanize;
 using VIBN_Tools.Infrastructure.ViCo;
 using VIBN_Tools.Tia.Client;
 using VIBN_Tools.Settings;
+using VIBN_Tools.Application.Runtime;
 
 namespace VIBN_Tools.Application;
 
@@ -57,7 +58,9 @@ public static class ViCoFeatureBootstrapper
             new TiaLibraryService(client),
             new WpfFolderSelectionService(),
             FindInstalledTiaVersions(),
-            ApplicationLogService.Instance));
+            ApplicationLogService.Instance,
+            new FeeSdkSignalCatalog(),
+            new FeeSdkSignalMonitor()));
     }
 
     /// <summary>Creates an independent bridge process for a TIA-facing page.</summary>

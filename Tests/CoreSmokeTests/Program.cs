@@ -74,6 +74,8 @@ try
     VerifyPerformanceMeasurement(temporaryRoot);
     Console.WriteLine("Running project quality automation smoke test...");
     await VerifyProjectQualityAutomationAsync(temporaryRoot);
+    Console.WriteLine("Running HMI/FEE closed-loop orchestration smoke test...");
+    await VerifyHmiClosedLoopAsync();
     Console.WriteLine("Running IBN Remote fixed in-work filter smoke test...");
     IbnRemoteSelectionSmokeTests.Verify();
     Console.WriteLine("All ViCo core smoke tests passed.");
@@ -1436,6 +1438,48 @@ static async Task VerifyProjectQualityAutomationAsync(string temporaryRoot)
         "The latest matching generation manifest must be resumable.");
 }
 
+static async Task VerifyHmiClosedLoopAsync()
+{
+    var outputGuid = Guid.NewGuid();
+    var feedbackGuid = Guid.NewGuid();
+    var triggered = false;
+    var hmi = new FakeHmiRuntimeAdapter("0", value => triggered = value == "1");
+    var fee = new FakeFeeSignalMonitor(guid => triggered
+        ? guid == outputGuid ? "1" : "true"
+        : "0");
+    var service = new HmiClosedLoopTestService(hmi, fee);
+    var result = await service.RunAsync(new HmiClosedLoopTestDefinition(
+        "HMI.Start",
+        "1",
+        outputGuid,
+        "1",
+        feedbackGuid,
+        "true",
+        TimeSpan.FromSeconds(1),
+        TimeSpan.FromMilliseconds(5)));
+    Assert(result.Success, "Closed-loop test should confirm both configured FEE reactions.");
+    Assert(result.HmiValueRestored && hmi.Value == "0",
+        "Closed-loop test must restore and verify the original HMI value.");
+    Assert(result.Observations.Any(item => item.Step == "FEE-Ausgang nach Trigger" && item.Successful) &&
+           result.Observations.Any(item => item.Step == "FEE-Rückmeldung nach Trigger" && item.Successful),
+        "Closed-loop observations must contain output and feedback evidence.");
+
+    var unchangedHmi = new FakeHmiRuntimeAdapter("false", _ => { });
+    var unchangedFee = new FakeFeeSignalMonitor(_ => "0");
+    var timeoutResult = await new HmiClosedLoopTestService(unchangedHmi, unchangedFee).RunAsync(
+        new HmiClosedLoopTestDefinition(
+            "HMI.Start",
+            "true",
+            outputGuid,
+            null,
+            null,
+            null,
+            TimeSpan.FromMilliseconds(25),
+            TimeSpan.FromMilliseconds(5)));
+    Assert(!timeoutResult.Success && timeoutResult.HmiValueRestored && unchangedHmi.Value == "false",
+        "A missing FEE transition must fail without skipping HMI restoration.");
+}
+
 static async Task VerifyTypedTiaPipeTimeoutDiagnosticAsync()
 {
     var pipeName = $"vibn-tia-timeout-test-{Guid.NewGuid():N}";
@@ -1719,6 +1763,42 @@ sealed class NoOpPathLauncher : IExternalPathLauncher
     public void Open(string path)
     {
     }
+}
+
+sealed class FakeHmiRuntimeAdapter : IHmiRuntimeAdapter
+{
+    private readonly Action<string?> _onWrite;
+
+    public FakeHmiRuntimeAdapter(string? initialValue, Action<string?> onWrite)
+    {
+        Value = initialValue;
+        _onWrite = onWrite;
+    }
+
+    public string? Value { get; private set; }
+
+    public Task<(bool Success, string Message)> ProbeAsync(CancellationToken cancellationToken) =>
+        Task.FromResult((true, "Fake runtime ready"));
+
+    public Task<string?> ReadTagAsync(string tag, CancellationToken cancellationToken) =>
+        Task.FromResult(Value);
+
+    public Task WriteTagAsync(string tag, string? value, CancellationToken cancellationToken)
+    {
+        Value = value;
+        _onWrite(value);
+        return Task.CompletedTask;
+    }
+}
+
+sealed class FakeFeeSignalMonitor : IFeeSignalMonitor
+{
+    private readonly Func<Guid, string?> _read;
+
+    public FakeFeeSignalMonitor(Func<Guid, string?> read) => _read = read;
+
+    public Task<string?> ReadAsync(Guid signalGuid, CancellationToken cancellationToken) =>
+        Task.FromResult(_read(signalGuid));
 }
 
 sealed class MemoryUserSecretStore : IUserSecretStore

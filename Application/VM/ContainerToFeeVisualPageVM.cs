@@ -124,6 +124,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             () => SetAllCreationRequested(false),
             () => HasPlan && !IsBusy);
         CancelCommand = new RelayCommand(CancelOperation, () => IsBusy);
+        HardAbortFeeCommand = new AsyncRelayCommand(
+            HardAbortFeeConnectionAsync,
+            () => IsBusy && Connection.CanUseFeeFeatures);
         UndoCommand = new RelayCommand(Undo, () => _planService.CanUndo && !IsBusy);
         RedoCommand = new RelayCommand(Redo, () => _planService.CanRedo && !IsBusy);
         DropCommand = new RelayCommand<ContainerToFeeVisualDropRequest>(
@@ -144,6 +147,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         ConfirmDuplicateFeeObjectCommand = new RelayCommand<ContainerToFeeVisualTreeNodeVM>(
             ConfirmDuplicateFeeObject,
             node => node?.CanConfirmDuplicate == true && !IsBusy);
+        DeleteFeeObjectCommand = new RelayCommand<ContainerToFeeVisualFeeObjectVM>(
+            item => _ = DeleteFeeObjectAsync(item),
+            item => item is not null && !IsBusy && Connection.CanUseFeeFeatures);
         ResumeLastGenerationCommand = new RelayCommand(
             ResumeLastGeneration,
             () => HasPlan && !IsBusy);
@@ -221,6 +227,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public ICommand CancelCommand { get; }
 
+    public ICommand HardAbortFeeCommand { get; }
+
     public ICommand UndoCommand { get; }
 
     public ICommand RedoCommand { get; }
@@ -237,6 +245,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public ICommand ConfirmDuplicateFeeObjectCommand { get; }
 
+    public ICommand DeleteFeeObjectCommand { get; }
+
     public ICommand ResumeLastGenerationCommand { get; }
 
     public string LastManifestSummary
@@ -250,6 +260,15 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         get => _lastManifestPath;
         private set { _lastManifestPath = value; OnPropertyChanged(); }
     }
+
+    public string SignalResolutionHelp =>
+        "'Signale konnten nicht eindeutig aufgelöst werden' bedeutet, dass ein Container-Signal in den " +
+        "ausgewählten Interfaces nicht genau einer FEE-Variablen widerspruchsfrei zugeordnet werden konnte. " +
+        "Eindeutig sein müssen Signalname/Tag und – sofern im ContainerFile vorhanden – Adresse bzw. Pfad; bei " +
+        "mehreren Treffern müssen zusätzlich IO-Typ und Usage unterscheiden. Eine manuell gespeicherte GUID muss " +
+        "noch existieren. Abhilfe: richtige Interfaces auswählen, FEE aktualisieren, doppelte Variablen bereinigen " +
+        "oder das korrekte Signal per Drag & Drop zuordnen. Abweichende bestehende Variablen werden absichtlich " +
+        "nicht automatisch überschrieben.";
 
     public bool HasPlan => _planService.CurrentPlan is not null;
 
@@ -473,9 +492,35 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         set
         {
             var containerId = SelectedTreeNode?.ContainerId;
-            if (containerId is null ||
-                IsCreationRequestedForSelection == value ||
-                !_planService.SetCreationRequested(containerId, value))
+            var plan = _planService.CurrentPlan;
+            if (containerId is null || plan is null || IsCreationRequestedForSelection == value)
+                return;
+
+            if (value)
+            {
+                var targetIds = plan.Targets
+                    .Where(target => string.Equals(target.ContainerId, containerId, StringComparison.Ordinal))
+                    .Select(target => target.Id)
+                    .ToHashSet(StringComparer.Ordinal);
+                var existing = plan.Assignments
+                    .Where(assignment => targetIds.Contains(assignment.TargetId))
+                    .Select(assignment => assignment.FeeObjectName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (existing.Length > 0)
+                {
+                    MessageBox.Show(
+                        "ACHTUNG: Dieser Container enthält bereits vorhandene FEE-SimObjects:\n\n" +
+                        string.Join("\n", existing.Select(name => $"• {name}")) +
+                        "\n\nDiese Option erzeugt ausschließlich fehlende Ziele; vorhandene Objekte werden wiederverwendet " +
+                        "und nicht absichtlich dupliziert. Für einen bewussten Ersatz zuerst die Zuordnung entfernen.",
+                        "Vorhandene FEE-Objekte",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+
+            if (!_planService.SetCreationRequested(containerId, value))
                 return;
 
             StatusText = value
@@ -1459,6 +1504,81 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         _log.Information(LogArea, StatusText);
     }
 
+    private async Task HardAbortFeeConnectionAsync()
+    {
+        if (!IsBusy || !Connection.CanUseFeeFeatures)
+            return;
+        var answer = MessageBox.Show(
+            "ACHTUNG: Die FEE-Verbindung wird getrennt, um einen blockierenden SDK-Aufruf zu unterbrechen. " +
+            "Eine bereits begonnene FEE-Änderung besitzt keine transaktionale Rücknahme und kann teilweise " +
+            "ausgeführt worden sein. Danach ist ein erneutes Verbinden und 'FEE aktualisieren' erforderlich.\n\n" +
+            "FEE-Verbindung jetzt hart trennen?",
+            "FEE-SDK-Aufruf hart unterbrechen",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        CancelOperation();
+        try
+        {
+            await Task.Run(() => Services.ApiInstance?.Disconnect());
+            GenerationProgressText = "FEE-Verbindung wurde getrennt.";
+            StatusText = "FEE-Verbindung hart getrennt. Projektzustand vor dem nächsten Lauf aktualisieren.";
+            _log.Warning(LogArea, StatusText);
+            AddOperationDetail("Harter Abbruch", StatusText);
+        }
+        catch (Exception exception)
+        {
+            StatusText = "Auch das Trennen der FEE-Verbindung ist fehlgeschlagen; Anwendung kontrolliert schließen.";
+            _log.Error(LogArea, StatusText, exception);
+        }
+    }
+
+    private async Task DeleteFeeObjectAsync(ContainerToFeeVisualFeeObjectVM? item)
+    {
+        if (item is null || IsBusy || !Connection.CanUseFeeFeatures)
+            return;
+        if (!Guid.TryParse(item.GuidString, out var objectGuid))
+        {
+            Reject($"FEE-SimObject '{item.Name}' besitzt keine gültige GUID und kann nicht gelöscht werden.");
+            return;
+        }
+
+        var answer = MessageBox.Show(
+            $"FEE-SimObject wirklich dauerhaft löschen?\n\nName: {item.Name}\nTyp: {item.FeeType}\n" +
+            $"Parent: {item.ParentName}\nGUID: {item.GuidString}\n\n" +
+            "Alle FEE-Verknüpfungen dieses Objekts gehen verloren. Diese Aktion kann im Tool nicht rückgängig gemacht werden.",
+            "FEE-SimObject löschen",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (answer != MessageBoxResult.Yes)
+            return;
+
+        await RunBusyAsync($"FEE-SimObject '{item.Name}' wird gelöscht …", async cancellationToken =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // Once the destructive vendor call starts it is not cancellable.
+            // Never report a cancellation after FEE may already have deleted
+            // the object; reconcile local state and live state first.
+            await Task.Run(() => Services.ApiInstance.Object.DeleteObject(objectGuid));
+            if (_planService.CurrentPlan is { } plan)
+            {
+                foreach (var assignment in plan.Assignments
+                             .Where(assignment => string.Equals(assignment.FeeObjectId, item.Id, StringComparison.Ordinal))
+                             .ToArray())
+                    _planService.RemoveAssignment(assignment.TargetId, assignment.FeeObjectId);
+            }
+            await RefreshFeeStateAsync(CancellationToken.None);
+            FeeObjectsView.Refresh();
+            StatusText = $"FEE-SimObject '{item.Name}' wurde gelöscht und die FEE-Ansicht aktualisiert.";
+            _log.Warning(LogArea, StatusText);
+            AddOperationDetail("FEE-Objekt gelöscht", $"{item.Name} ({item.GuidString})");
+        });
+    }
+
     private async Task RunBusyAsync(string status, Func<CancellationToken, Task> operation)
     {
         if (IsBusy)
@@ -1645,6 +1765,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         var feeObjectId = ResolveAssignedFeeObjectId(node, plan);
         var hasDuplicateIdentity = _planService.IsDuplicateFeeObject(feeObjectId);
         var isDuplicateConfirmed = _planService.IsDuplicateFeeObjectConfirmed(feeObjectId);
+        var containerSelected = node.Kind == VisualNodeKind.Container
+            ? plan.IsGenerationSelected(node.Id)
+            : node.ContainerId is null || plan.IsGenerationSelected(node.ContainerId);
 
         return new(
             node,
@@ -1656,6 +1779,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             feeObjectId,
             hasDuplicateIdentity,
             isDuplicateConfirmed,
+            containerSelected,
             GetNodeState(node, plan),
             GetNodeConnectionDescription(node, plan),
             GetNodeErrors(node, plan, issues),
@@ -2456,6 +2580,7 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
     private readonly Action<string, bool> _setGenerationSelected;
     private readonly Action<string, string> _setSlotOverride;
     private readonly bool _canSelectGeneration;
+    private readonly bool _containerSelected;
     private IReadOnlyList<string> _validationErrors = Array.Empty<string>();
     private ContainerToFeeVisualNodeState _executionState;
 
@@ -2469,6 +2594,7 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         string? feeObjectId,
         bool hasDuplicateIdentity,
         bool isDuplicateConfirmed,
+        bool containerSelected,
         ContainerToFeeVisualNodeState simObjectState,
         string linkedObjectDescription,
         IEnumerable<string> validationErrors,
@@ -2479,6 +2605,7 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         Children = new ObservableCollection<ContainerToFeeVisualTreeNodeVM>(children);
         _isGenerationSelected = isGenerationSelected;
         _canSelectGeneration = canSelectGeneration;
+        _containerSelected = containerSelected;
         _executionState = simObjectState;
         _linkedObjectDescription = linkedObjectDescription;
         _validationErrors = validationErrors.ToArray();
@@ -2497,6 +2624,11 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
     public string? ContainerId => Model.ContainerId;
     public string Name => Model.Name;
     public string TypeName => Model.TypeName;
+    public string DisplayTypeLabel => Kind == VisualNodeKind.Container
+        ? $"Container: {TypeName}"
+        : string.IsNullOrWhiteSpace(TypeName) || string.Equals(TypeName, Kind.ToString(), StringComparison.OrdinalIgnoreCase)
+            ? Kind.ToString()
+            : $"{Kind}: {TypeName}";
     private string _slot;
     public string Slot
     {
@@ -2527,6 +2659,16 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
     public bool IsTechnical => Model.IsTechnical;
     public bool SupportsCreation => Model.SupportsCreation;
     public bool CanSelectGeneration => _canSelectGeneration;
+    public bool ShowGenerationAction => Kind is not (VisualNodeKind.Root or VisualNodeKind.Group or VisualNodeKind.Container);
+    public bool WillGenerateObject => ShowGenerationAction && _containerSelected &&
+                                      EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Planned;
+    public string GenerationActionText => WillGenerateObject
+        ? "Wird neu erzeugt"
+        : EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Verified
+            ? "Vorhanden und vollständig verknüpft"
+            : EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked
+                ? "Vorhanden; fehlende Verknüpfung wird ergänzt"
+                : _containerSelected ? "Wird nicht erzeugt" : "Container ist abgewählt";
     public ContainerToFeeVisualNodeState SimObjectState => _executionState;
     public ContainerToFeeVisualNodeState EffectiveState => HasValidationError
         ? ContainerToFeeVisualNodeState.Missing
@@ -2564,6 +2706,8 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         OnPropertyChanged(nameof(EffectiveState));
         OnPropertyChanged(nameof(StateBackground));
         OnPropertyChanged(nameof(DisplayBackground));
+        OnPropertyChanged(nameof(WillGenerateObject));
+        OnPropertyChanged(nameof(GenerationActionText));
     }
 
     public void ApplyExecutionState(
@@ -2578,6 +2722,8 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
             OnPropertyChanged(nameof(StateBackground));
             OnPropertyChanged(nameof(DisplayBackground));
             OnPropertyChanged(nameof(SimObjectStateDescription));
+            OnPropertyChanged(nameof(WillGenerateObject));
+            OnPropertyChanged(nameof(GenerationActionText));
         }
         if (linkedObjectDescription is not null &&
             !string.Equals(_linkedObjectDescription, linkedObjectDescription, StringComparison.Ordinal))
@@ -2822,6 +2968,7 @@ public sealed class ContainerToFeeVisualFeeObjectVM
 
     public VisualFeeObject Model { get; }
     public string Id => Model.Id;
+    public string GuidString => Model.GuidString;
     public string Name => Model.Name;
     public string TypeName => Model.TypeName;
     public string FeeType => Model.FeeType;

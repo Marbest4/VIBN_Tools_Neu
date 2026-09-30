@@ -58,8 +58,8 @@
                   MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                  VirtualizingPanel.VirtualizationMode="Standard"
-                  EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                  VirtualizingPanel.IsVirtualizing="False"
+                  EnableRowVirtualization="False" EnableColumnVirtualization="False">
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Export" ToolTip="Legt fest, ob dieser oberste BasicFrame in das ContainerFile übernommen wird." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
                 <DataGridTextColumn Binding="{Binding Name}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="FEE-Root" ToolTip="Name des obersten BasicFrames, der den auszulesenden FEE-Teilbaum begrenzt." /></DataGridTextColumn.Header></DataGridTextColumn>
@@ -113,8 +113,8 @@
                           MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          VirtualizingPanel.VirtualizationMode="Standard"
-                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                          VirtualizingPanel.IsVirtualizing="False"
+                          EnableRowVirtualization="False" EnableColumnVirtualization="False">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="2*" />
@@ -147,8 +147,8 @@
                           MinColumnWidth="82" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          VirtualizingPanel.VirtualizationMode="Standard"
-                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                          VirtualizingPanel.IsVirtualizing="False"
+                          EnableRowVirtualization="False" EnableColumnVirtualization="False">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Zugeordnet zu Container" Binding="{Binding Container}" Width="2*" IsReadOnly="True" />
@@ -182,8 +182,8 @@
                           MinColumnWidth="90" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          VirtualizingPanel.VirtualizationMode="Standard"
-                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                          VirtualizingPanel.IsVirtualizing="False"
+                          EnableRowVirtualization="False" EnableColumnVirtualization="False">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="2*" IsReadOnly="True" />
                         <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="*" IsReadOnly="True" />

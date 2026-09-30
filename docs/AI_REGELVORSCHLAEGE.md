@@ -2,13 +2,15 @@
 
 ## Datenbasis
 
+Die Oberfläche zeigt den vollständigen Ablauf standardmäßig direkt über dem Log. **Train (XML)** erwartet eine Container-XML mit `Container`, `Type`, `Entry`, `Signal` und `Slot`; die Datei wird in `vibn_ai_data/training_pool` kopiert. Zusammen mit `vibn_ai_data/actions` und `Corrections.csv` trainiert sie ausschließlich das Modell zur Slotvorhersage. **Check (XML)** bewertet eine Container-XML gegen dieses Modell. Requirements.xml ist keine Trainingsdatei: Sie wird erst nach angenommenen Regelvorschlägen für Vorschau und explizites Anwenden ausgewählt.
+
 ContainerGeneration protokolliert direkte Änderungen als JSONL im Ordner `vibn_ai_data/actions`. Schema 2 enthält mindestens Zeitstempel, Aktionstyp, Eigenschaft, Vorher-/Nachherwert, stabile Signal-ID sowie einen SHA-256-basierten Quellschlüssel. Der Quellschlüssel enthält keine Klartextpfade. Alte Schema-1-Zeilen bleiben lesbar.
 
 Erfasst werden Slotwechsel, Verschieben/Hinzufügen und direkte Änderungen an Signal, ID, Adresse, Datentyp, Notiz sowie Containername/-typ. Das sichtbare Arbeitsbereichsprotokoll bleibt davon getrennt: JSONL ist die strukturierte Auswertungsquelle.
 
 ## Vorschlagslogik
 
-Die erste Stufe ist absichtlich deterministisch und nicht generativ. Sie gruppiert tatsächliche Slotkorrekturen nach:
+Die erste Stufe ist absichtlich deterministisch und nicht generativ. Regel- und Container-Vorschläge trainieren kein zweites ML-Modell, sondern werden reproduzierbar aus strukturierten Benutzeraktionen aggregiert. Die UI zeigt Basis-, Pool-, Log-, Korrektur- und Modellpfad. Fehlende Aktionslogs bedeuten deshalb auch fehlende Vorschläge, selbst wenn bereits viele Trainings-XMLs für die Slotvorhersage vorhanden sind. Die Regelanalyse gruppiert tatsächliche Slotkorrekturen nach:
 
 - Komponententyp,
 - exaktem Signaltext,

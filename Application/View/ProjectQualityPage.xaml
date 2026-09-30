@@ -45,9 +45,13 @@
         </Grid.RowDefinitions>
         <TextBlock FontSize="24" FontWeight="SemiBold" Text="Project Quality Gate" />
 
-        <Expander Grid.Row="1" Margin="0,10,0,4" Header="Anleitung und Aussagekraft des Tests" IsExpanded="False">
+        <Expander Grid.Row="1" Margin="0,10,0,4" Header="Anleitung, benötigte Dateien und Aussagekraft" IsExpanded="True">
             <Border Padding="10" Background="#FFF3F5F7" CornerRadius="4">
                 <StackPanel>
+                    <Border Margin="0,0,0,9" Padding="8" Background="#FFFFF4CE" CornerRadius="3">
+                        <TextBlock Text="{Binding QualityGateQuickStart}" TextWrapping="Wrap"
+                                   ToolTip="{Binding QualityGateQuickStart}" ToolTipService.ShowDuration="60000" />
+                    </Border>
                     <TextBlock FontWeight="SemiBold" Text="Vorgehen" />
                     <TextBlock Margin="0,3,0,8" Text="{Binding TestInstructions}" TextWrapping="Wrap" />
                     <TextBlock FontWeight="SemiBold" Text="Was das Ergebnis aussagt" />

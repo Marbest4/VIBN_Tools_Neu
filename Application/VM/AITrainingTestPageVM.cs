@@ -387,6 +387,24 @@ namespace VIBN_Tools.Application.VM
             RefreshPerformance();
         }
 
+        public string AiWorkflowGuide =>
+            "Drei getrennte Datenflüsse: (1) 'Train (XML)' erwartet eine Container-XML mit Container/Type/Entry/Signal/Slot. " +
+            "Sie wird in den Trainingspool kopiert und zusammen mit ActionLogs und Corrections.csv für das ML-Modell " +
+            "zur Slotvorhersage verwendet. 'Check (XML)' bewertet eine Container-XML gegen dieses Modell. " +
+            "(2) Regelvorschläge trainieren kein ML-Modell: Sie zählen wiederholte manuelle Slotkorrekturen mit Typ, " +
+            "Signal, altem und neuem Slot aus den JSONL-Aktionslogs. Erst Annehmen, XML-Vorschau und eine weitere " +
+            "Bestätigung dürfen eine ausgewählte Requirements-/AutoCreate-XML mit Sicherung ändern. " +
+            "(3) Container-Vorschläge zählen bestätigte Add-/Move-/ContainerAndSlot-Aktionen. Ein Muster erscheint erst " +
+            "mit mindestens zwei unterschiedlichen Containerfällen; Slots müssen in mindestens 60 % der Fälle vorkommen. " +
+            "Diese Vorschläge schreiben nie automatisch XML und erzeugen nie automatisch FEE-Objekte.";
+
+        public string AiDataLocations =>
+            $"Basis: {ModelPaths.BaseDir}{Environment.NewLine}" +
+            $"Trainings-XML: {ModelPaths.TrainingPoolDir}{Environment.NewLine}" +
+            $"Aktionslogs: {ModelPaths.ActionsDir}{Environment.NewLine}" +
+            $"Korrekturen: {ModelPaths.CorrectionsFile}{Environment.NewLine}" +
+            $"Aktives Modell: {ModelPaths.CurrentModel}";
+
         private void RefreshContainerSuggestions()
         {
             var analysis = _containerSuggestionService.Analyze(

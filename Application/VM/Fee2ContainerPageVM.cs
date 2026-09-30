@@ -185,7 +185,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             ApplyCrossListSelectionSafely(selection, revealTarget, revision);
             return;
         }
-        _ = dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        _ = dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
             ApplyCrossListSelectionSafely(selection, revealTarget, revision)));
     }
 
@@ -210,7 +210,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     signal.IsRelatedToSelection = string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal);
                 if (revealTarget)
                 {
-                    SignalRevealTarget = FoundSignalsView.Cast<Fee2ContainerFoundSignalVM>()
+                    SignalRevealTarget = FoundSignals
                         .FirstOrDefault(signal => string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal));
                 }
             }
@@ -229,7 +229,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     relatedContainer.IsRelatedToSelection = string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal);
                 if (revealTarget)
                 {
-                    ContainerRevealTarget = FoundContainersView.Cast<Fee2ContainerFoundContainerVM>()
+                    ContainerRevealTarget = FoundContainers
                         .FirstOrDefault(relatedContainer => string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal));
                 }
             }
@@ -455,7 +455,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             return;
         }
 
-        _ = dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
+        _ = dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
             RefreshSelectionDetailsSafely(selection, revision)));
     }
 
