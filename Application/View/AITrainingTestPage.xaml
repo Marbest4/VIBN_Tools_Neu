@@ -27,6 +27,8 @@
             <Setter Property="CanUserAddRows" Value="False"/>
             <Setter Property="CanUserDeleteRows" Value="False"/>
             <Setter Property="CanUserReorderColumns" Value="False"/>
+            <Setter Property="CanUserResizeColumns" Value="True"/>
+            <Setter Property="MinColumnWidth" Value="100"/>
             <Setter Property="EnableRowVirtualization" Value="True"/>
             <Setter Property="GridLinesVisibility" Value="None"/>
             <Setter Property="RowBackground" Value="#FFF9F9F9"/>

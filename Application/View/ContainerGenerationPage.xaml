@@ -440,7 +440,7 @@
             </Border>
 
             <!-- Row 3 - Container data -->
-            <DataGrid x:Name="ContainerListDataGrid" Grid.Row="3" Margin="5" AutoGenerateColumns="False" CanUserAddRows="True" Height="Auto" MinColumnWidth="75" MinRowHeight="25" ItemsSource="{Binding ContainerList}"
+            <DataGrid x:Name="ContainerListDataGrid" Grid.Row="3" Margin="5" AutoGenerateColumns="False" CanUserAddRows="True" Height="Auto" MinColumnWidth="100" MinRowHeight="25" ItemsSource="{Binding ContainerList}"
                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" EnableRowVirtualization="True" EnableColumnVirtualization="True" ScrollViewer.CanContentScroll="True"
                       AllowDrop="True">
                 <i:Interaction.Triggers>

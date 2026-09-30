@@ -5,6 +5,13 @@
              StartupUri="Application/View/MainWindow.xaml"
              ShutdownMode="OnMainWindowClose">
     <Application.Resources>
-
+        <!-- Einheitlicher Tabellenstandard: Inhalte bleiben bei kleinen Fenstern
+             horizontal erreichbar und jede Spalte kann vom Anwender angepasst werden. -->
+        <Style TargetType="{x:Type DataGrid}">
+            <Setter Property="CanUserResizeColumns" Value="True" />
+            <Setter Property="MinColumnWidth" Value="100" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+        </Style>
     </Application.Resources>
 </Application>

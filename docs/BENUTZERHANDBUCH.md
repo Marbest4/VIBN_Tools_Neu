@@ -301,6 +301,8 @@ Der Reiter liest nach einer FEE-Verbindung nur `BasicFrame`-Roots der obersten H
 
 Neben dem Programmtitel zeigt die Oberfläche die Dateiversion und den Änderungszeitpunkt der aktuell gestarteten Programmdatei. Dadurch ist direkt erkennbar, welcher Build tatsächlich läuft; die Anzeige aktualisiert sich automatisch mit einer neu gebildeten beziehungsweise ausgetauschten Programmdatei.
 
+Tabellenspalten lassen sich in allen Hauptreitern am rechten Rand des Spaltenkopfs mit der Maus verbreitern oder verkleinern. Eine einheitliche Mindestbreite verhindert unlesbar schmale Standardspalten; reicht die Fensterbreite nicht aus, bleibt der vollständige Tabellenbereich über die horizontale Scrollleiste erreichbar. Fachlich bewusst kompakte Spalten können weiterhin schmal dargestellt werden, lassen sich aber ebenfalls manuell vergrößern.
+
 ### AI-Test / Regelvorschläge
 
 Der Unterreiter **Regelvorschläge** wertet strukturierte manuelle Slotkorrekturen aus. Häufigkeit, Zahl unterschiedlicher Fälle und die daraus berechnete Konfidenz bleiben sichtbar. **Annehmen** oder **Ablehnen** speichert zunächst nur den Prüfstatus. **XML-Vorschau** prüft die angenommenen Regeln und zeigt jede Slotänderung; **XML übernehmen** verlangt nochmals eine Bestätigung, prüft zwischenzeitliche Dateiänderungen und legt eine `.vibn-backup`-Sicherung an. Über **Aktionslogs öffnen** gelangen Sie direkt zur JSONL-Datenbasis. Details stehen in [AI_REGELVORSCHLAEGE.md](AI_REGELVORSCHLAEGE.md).
