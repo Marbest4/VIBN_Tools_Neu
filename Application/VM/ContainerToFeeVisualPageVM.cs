@@ -26,6 +26,7 @@ namespace VIBN_Tools.Application.VM;
 public sealed class ContainerToFeeVisualPageVM : MvvmBase
 {
     private const string LogArea = "Container2FEE Visual";
+    private static readonly TimeSpan DeleteFeeObjectResponseTimeout = TimeSpan.FromSeconds(12);
     private readonly ContainerToFeeVisualPlanService _planService;
     private readonly ApplicationLogService _log;
     private readonly FeeConnectionService _connection;
@@ -126,7 +127,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         CancelCommand = new RelayCommand(CancelOperation, () => IsBusy);
         HardAbortFeeCommand = new AsyncRelayCommand(
             HardAbortFeeConnectionAsync,
-            () => IsBusy && Connection.CanUseFeeFeatures);
+            () => (IsBusy || HasPendingFeeSdkOperation) && Connection.CanUseFeeFeatures);
         UndoCommand = new RelayCommand(Undo, () => _planService.CanUndo && !IsBusy);
         RedoCommand = new RelayCommand(Redo, () => _planService.CanRedo && !IsBusy);
         DropCommand = new RelayCommand<ContainerToFeeVisualDropRequest>(
@@ -271,6 +272,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         "nicht automatisch überschrieben.";
 
     public bool HasPlan => _planService.CurrentPlan is not null;
+
+    private bool HasPendingFeeSdkOperation => _cancelledOperationFinishing is { IsCompleted: false };
 
     public bool HasValidationErrors => Issues.Any(issue => issue.Severity == VisualIssueSeverity.Error);
 
@@ -1312,6 +1315,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
         IReadOnlyList<VisualFeeObjectLink> simObjectLinks =
             await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
+        // Rebuild the list after both link reads so identical SimObjects are
+        // distinguished by their GUID-specific live connection state.
+        RefreshFeeObjectProjection(objects);
         ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
         ApplyDiscoveredSimObjectStates();
         ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
@@ -1506,7 +1512,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private async Task HardAbortFeeConnectionAsync()
     {
-        if (!IsBusy || !Connection.CanUseFeeFeatures)
+        if ((!IsBusy && !HasPendingFeeSdkOperation) || !Connection.CanUseFeeFeatures)
             return;
         var answer = MessageBox.Show(
             "ACHTUNG: Die FEE-Verbindung wird getrennt, um einen blockierenden SDK-Aufruf zu unterbrechen. " +
@@ -1548,7 +1554,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         var answer = MessageBox.Show(
             $"FEE-SimObject wirklich dauerhaft löschen?\n\nName: {item.Name}\nTyp: {item.FeeType}\n" +
-            $"Parent: {item.ParentName}\nGUID: {item.GuidString}\n\n" +
+            $"Parent: {item.ParentName}\nGUID: {item.GuidString}\n" +
+            $"Live-Status: {item.ConnectionStateText}\n\n" +
             "Alle FEE-Verknüpfungen dieses Objekts gehen verloren. Diese Aktion kann im Tool nicht rückgängig gemacht werden.",
             "FEE-SimObject löschen",
             MessageBoxButton.YesNo,
@@ -1563,20 +1570,63 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             // Once the destructive vendor call starts it is not cancellable.
             // Never report a cancellation after FEE may already have deleted
             // the object; reconcile local state and live state first.
-            await Task.Run(() => Services.ApiInstance.Object.DeleteObject(objectGuid));
-            if (_planService.CurrentPlan is { } plan)
+            var deleteTask = Task.Run(() => Services.ApiInstance.Object.DeleteObject(objectGuid));
+            try
             {
-                foreach (var assignment in plan.Assignments
-                             .Where(assignment => string.Equals(assignment.FeeObjectId, item.Id, StringComparison.Ordinal))
-                             .ToArray())
-                    _planService.RemoveAssignment(assignment.TargetId, assignment.FeeObjectId);
+                await deleteTask.WaitAsync(DeleteFeeObjectResponseTimeout, cancellationToken);
             }
-            await RefreshFeeStateAsync(CancellationToken.None);
-            FeeObjectsView.Refresh();
-            StatusText = $"FEE-SimObject '{item.Name}' wurde gelöscht und die FEE-Ansicht aktualisiert.";
-            _log.Warning(LogArea, StatusText);
-            AddOperationDetail("FEE-Objekt gelöscht", $"{item.Name} ({item.GuidString})");
+            catch (TimeoutException)
+            {
+                StatusText = $"FEE hat das Löschen von '{item.Name}' nach " +
+                             $"{DeleteFeeObjectResponseTimeout.TotalSeconds:0} Sekunden noch nicht bestätigt. " +
+                             "Die Oberfläche bleibt bedienbar; bis zur Rückkehr des SDK-Aufrufs wird kein weiterer FEE-Aufruf gestartet.";
+                _log.Warning(LogArea, StatusText);
+                AddOperationDetail("FEE-Löschung läuft nach", $"{item.Name} ({item.GuidString})");
+                _cancelledOperationFinishing = ObservePendingDeleteAsync(deleteTask, item);
+                InvalidateCommands();
+                return;
+            }
+
+            CompleteDeletedFeeObject(item);
         });
+    }
+
+    private async Task ObservePendingDeleteAsync(
+        Task deleteTask,
+        ContainerToFeeVisualFeeObjectVM item)
+    {
+        try
+        {
+            await deleteTask.ConfigureAwait(false);
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is null)
+                return;
+            await dispatcher.InvokeAsync(() => CompleteDeletedFeeObject(item));
+        }
+        catch (Exception exception)
+        {
+            _log.Error(
+                LogArea,
+                $"Der verzögert zurückgekehrte FEE-Löschaufruf für '{item.Name}' ist fehlgeschlagen.",
+                exception);
+        }
+        finally
+        {
+            _cancelledOperationFinishing = null;
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is not null)
+                await dispatcher.InvokeAsync(InvalidateCommands);
+        }
+    }
+
+    private void CompleteDeletedFeeObject(ContainerToFeeVisualFeeObjectVM item)
+    {
+        _planService.ForgetDeletedFeeObject(item.Id);
+        RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
+        StatusText = $"FEE-SimObject '{item.Name}' wurde gelöscht. Die lokale Ansicht ist bereinigt; " +
+                     "ein vollständiger FEE-Abgleich kann bei Bedarf separat mit 'FEE aktualisieren' gestartet werden.";
+        _log.Warning(LogArea, StatusText);
+        AddOperationDetail("FEE-Objekt gelöscht", $"{item.Name} ({item.GuidString})");
     }
 
     private async Task RunBusyAsync(string status, Func<CancellationToken, Task> operation)
@@ -2256,7 +2306,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         var plan = _planService.CurrentPlan;
         var source = objects ?? AvailableFeeObjects.Select(item => item.Model).ToArray();
         AvailableFeeObjects.ReplaceWith(
-            source.Select(item => new ContainerToFeeVisualFeeObjectVM(item, plan)));
+            source.Select(item => new ContainerToFeeVisualFeeObjectVM(
+                item,
+                plan,
+                _planService.GetFeeObjectConnectionSummary(item.Id))));
         FeeObjectsView.Refresh();
     }
 
@@ -2954,9 +3007,13 @@ public sealed class ContainerToFeeVisualFeeInterfaceVM : MvvmBase
 /// <summary>Presentation state showing whether an FEE object is already assigned.</summary>
 public sealed class ContainerToFeeVisualFeeObjectVM
 {
-    public ContainerToFeeVisualFeeObjectVM(VisualFeeObject model, VisualPlan? plan)
+    public ContainerToFeeVisualFeeObjectVM(
+        VisualFeeObject model,
+        VisualPlan? plan,
+        VisualFeeObjectConnectionSummary connectionSummary)
     {
         Model = model;
+        ConnectionSummary = connectionSummary;
         var assignments = plan?.Assignments
             .Where(assignment => assignment.FeeObjectId == model.Id)
             .ToArray() ?? [];
@@ -2967,6 +3024,7 @@ public sealed class ContainerToFeeVisualFeeObjectVM
     }
 
     public VisualFeeObject Model { get; }
+    public VisualFeeObjectConnectionSummary ConnectionSummary { get; }
     public string Id => Model.Id;
     public string GuidString => Model.GuidString;
     public string Name => Model.Name;
@@ -2976,15 +3034,43 @@ public sealed class ContainerToFeeVisualFeeObjectVM
     public bool HasExactDuplicate => Model.HasExactDuplicate;
     public IReadOnlyList<string> AssignedTargets { get; }
     public bool IsAssigned => AssignedTargets.Count > 0;
+    public bool HasLiveConnections => ConnectionSummary.HasConnections;
+    public string GuidDisplay => $"GUID: {GuidString}";
+    public string ConnectionStateText => !ConnectionSummary.WasRead
+        ? "Live-Verknüpfungen noch nicht vollständig gelesen"
+        : HasLiveConnections
+            ? $"Live verknüpft: {string.Join("; ", ConnectionSummary.Details)}"
+            : "Keine Live-Verknüpfung zu Logik, Signal oder SimObject gefunden";
+    public string DuplicateStateText => !HasExactDuplicate
+        ? string.Empty
+        : !ConnectionSummary.WasRead
+            ? "DUPLIKAT – Verknüpfungsstatus unbekannt"
+            : HasLiveConnections
+                ? "DUPLIKAT – LIVE VERKNÜPFT (vor Löschen genau prüfen)"
+                : "DUPLIKAT – UNVERKNÜPFT (möglicher Löschkandidat)";
+    public string PlanAssignmentText => IsAssigned
+        ? $"Plan-Zuordnung: {string.Join("; ", AssignedTargets)}"
+        : "Keine Plan-Zuordnung";
     public string AssignmentText => HasExactDuplicate
-        ? $"FEHLER: identischer Name, Typ und Parent mehrfach vorhanden. Parent: {ParentName}. " +
-          (IsAssigned ? $"Zuordnung: {string.Join("; ", AssignedTargets)}" : "Noch nicht zugeordnet.")
+        ? $"{DuplicateStateText}. Parent: {ParentName}. {GuidDisplay}. {ConnectionStateText}. " +
+          PlanAssignmentText + "."
         : IsAssigned
-            ? $"Verknüpft mit: {string.Join("; ", AssignedTargets)}"
-            : "Noch nicht zugeordnet";
+            ? $"{PlanAssignmentText}. {ConnectionStateText}"
+            : ConnectionStateText;
     public string StateBackground => HasExactDuplicate
-        ? "#FFFFC7CE"
-        : IsAssigned ? "#FFC6EFCE" : "Transparent";
+        ? !ConnectionSummary.WasRead
+            ? "#FFE4D7F5"
+            : HasLiveConnections ? "#FFFFE699" : "#FFFFC7CE"
+        : IsAssigned || HasLiveConnections ? "#FFC6EFCE" : "Transparent";
+    public string StateBorderBrush => HasExactDuplicate
+        ? HasLiveConnections ? "#FFC88719" : "#FFC00000"
+        : HasLiveConnections ? "#FF548235" : "Transparent";
+    public string StateForeground => HasExactDuplicate && !ConnectionSummary.WasRead
+        ? "#FF5B2C83"
+        : HasExactDuplicate && !HasLiveConnections ? "#FF9C0006" : "#FF375623";
+    public string DeleteToolTip => HasLiveConnections
+        ? $"ACHTUNG: Dieses Objekt besitzt Live-Verknüpfungen. {ConnectionStateText}. Löscht exakt GUID {GuidString} dauerhaft aus FEE."
+        : $"Löscht exakt GUID {GuidString} dauerhaft aus FEE. {ConnectionStateText}.";
 
     private static string DescribeAssignment(VisualPlan? plan, VisualAssignment assignment)
     {

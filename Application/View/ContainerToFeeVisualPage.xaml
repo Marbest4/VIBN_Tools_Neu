@@ -575,8 +575,9 @@
                             </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="7,5" Margin="1" CornerRadius="3"
+                                    <Border Padding="7,5" Margin="1" CornerRadius="3" BorderThickness="1"
                                             Background="{Binding StateBackground}"
+                                            BorderBrush="{Binding StateBorderBrush}"
                                             ToolTip="{Binding AssignmentText}"
                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
                                         <Grid>
@@ -584,12 +585,18 @@
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                                 <TextBlock Text="{Binding FeeType}" Foreground="#777777" FontSize="10" />
-                                                <TextBlock Text="{Binding AssignmentText}" Foreground="#356A35" FontSize="10" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding GuidDisplay}" Foreground="#666666" FontSize="9" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding DuplicateStateText}" Foreground="{Binding StateForeground}"
+                                                           FontSize="10" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding ConnectionStateText}" Foreground="{Binding StateForeground}"
+                                                           FontSize="10" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding PlanAssignmentText}" Foreground="#444444" FontSize="10"
+                                                           TextWrapping="Wrap" MaxHeight="42" />
                                             </StackPanel>
                                             <Button Grid.Column="1" Margin="6,0,0,0" Padding="5,2" Content="Löschen"
                                                     Command="{Binding DataContext.DeleteFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                                     CommandParameter="{Binding}"
-                                                    ToolTip="Löscht dieses SimObject nach ausdrücklicher Bestätigung dauerhaft aus FEE." />
+                                                    ToolTip="{Binding DeleteToolTip}" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

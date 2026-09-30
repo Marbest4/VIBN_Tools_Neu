@@ -162,6 +162,28 @@ public sealed class VisualFeeObject
     /// but a different GUID. Such entries are retained for diagnosis.
     /// </summary>
     public bool HasExactDuplicate { get; }
+
+    internal VisualFeeObject WithExactDuplicate(bool hasExactDuplicate) => new(
+        Id,
+        GuidString,
+        Name,
+        TypeName,
+        FeeType,
+        AssignableTypeNames,
+        ParentGuidString,
+        ParentName,
+        hasExactDuplicate);
+}
+
+/// <summary>
+/// Live FEE link information for one discovered SimObject. The details use the
+/// object's GUID as identity so exact name/type/parent duplicates stay distinct.
+/// </summary>
+public sealed record VisualFeeObjectConnectionSummary(
+    bool WasRead,
+    IReadOnlyList<string> Details)
+{
+    public bool HasConnections => Details.Count > 0;
 }
 
 /// <summary>Kind of non-draggable FEE object used to colour the generation plan.</summary>

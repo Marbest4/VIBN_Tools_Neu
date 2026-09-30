@@ -75,6 +75,53 @@ public sealed class ContainerToFeeVisualPlanService
     public IReadOnlyList<VisualFeeSignalLink> DiscoveredFeeSignalLinks => _feeSignalLinks;
     public IReadOnlyList<VisualFeeObjectLink> DiscoveredFeeSimObjectLinks => _feeSimObjectLinks;
 
+    public VisualFeeObjectConnectionSummary GetFeeObjectConnectionSummary(string feeObjectId)
+    {
+        var feeObject = FindFeeObject(feeObjectId);
+        if (feeObject is null || !Guid.TryParse(feeObject.GuidString, out var objectGuid))
+            return new VisualFeeObjectConnectionSummary(false, []);
+
+        var guid = objectGuid.ToString("D");
+        var details = new List<string>();
+        foreach (var signalLink in _feeSignalLinks.Where(link => string.Equals(
+                     link.ObjectGuidString,
+                     guid,
+                     StringComparison.OrdinalIgnoreCase)))
+        {
+            var signal = _feeSignals.FirstOrDefault(item => string.Equals(
+                item.GuidString,
+                signalLink.SignalGuidString,
+                StringComparison.OrdinalIgnoreCase));
+            details.Add(
+                $"Signal: {signal?.InterfaceName ?? "Interface unbekannt"} / " +
+                $"{signal?.Tag ?? signalLink.SignalGuidString} -> {signalLink.SlotName}" +
+                (signalLink.IsIndirect ? " (über MoveBit)" : string.Empty));
+        }
+
+        foreach (var objectLink in _feeSimObjectLinks.Where(link =>
+                     string.Equals(link.ObjectGuidString, guid, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(link.LinkedObjectGuidString, guid, StringComparison.OrdinalIgnoreCase)))
+        {
+            var isSource = string.Equals(
+                objectLink.ObjectGuidString,
+                guid,
+                StringComparison.OrdinalIgnoreCase);
+            var otherGuid = isSource
+                ? objectLink.LinkedObjectGuidString
+                : objectLink.ObjectGuidString;
+            var ownSlot = isSource ? objectLink.SlotName : objectLink.LinkedSlotName;
+            var otherSlot = isSource ? objectLink.LinkedSlotName : objectLink.SlotName;
+            details.Add($"{DescribeLinkedFeeObject(otherGuid)}: {ownSlot} <-> {otherSlot}");
+        }
+
+        return new VisualFeeObjectConnectionSummary(
+            _hasDiscoveredFeeSimObjectLinks,
+            details.Where(detail => !string.IsNullOrWhiteSpace(detail))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(detail => detail, StringComparer.OrdinalIgnoreCase)
+                .ToArray());
+    }
+
     public bool IsDuplicateFeeObject(string? feeObjectId) =>
         FindFeeObject(feeObjectId)?.HasExactDuplicate == true;
 
@@ -259,15 +306,69 @@ public sealed class ContainerToFeeVisualPlanService
             return _feeSimObjectLinks;
         }
 
-        var assignedIds = plan.Assignments.Select(item => item.FeeObjectId)
+        var relevantIds = plan.Assignments.Select(item => item.FeeObjectId)
+            .Concat(_feeObjects.Where(item => item.HasExactDuplicate).Select(item => item.Id))
             .ToHashSet(StringComparer.Ordinal);
-        var relevantObjects = _runtimeObjects.Where(item => assignedIds.Contains(item.Key))
+        var relevantObjects = _runtimeObjects.Where(item => relevantIds.Contains(item.Key))
             .Select(item => item.Value)
             .ToArray();
         var result = await _simObjectLinkDiscovery.DiscoverAsync(relevantObjects, cancellationToken);
         _feeSimObjectLinks = result.Links;
         _hasDiscoveredFeeSimObjectLinks = true;
         return _feeSimObjectLinks;
+    }
+
+    /// <summary>
+    /// Removes an object which the SDK has already deleted from the local live
+    /// snapshot. This deliberately performs no further vendor call.
+    /// </summary>
+    public bool ForgetDeletedFeeObject(string feeObjectId)
+    {
+        var deleted = FindFeeObject(feeObjectId);
+        if (deleted is null)
+            return false;
+
+        var remaining = _feeObjects.Where(item => !string.Equals(
+                item.Id,
+                feeObjectId,
+                StringComparison.Ordinal))
+            .ToArray();
+        var duplicateIdentities = remaining.GroupBy(CreateDuplicateIdentity, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _feeObjects = remaining.Select(item => item.WithExactDuplicate(
+                duplicateIdentities.Contains(CreateDuplicateIdentity(item))))
+            .ToArray();
+        _runtimeObjects = _runtimeObjects
+            .Where(item => !string.Equals(item.Key, feeObjectId, StringComparison.Ordinal))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+        _feeSimObjectLinks = _feeSimObjectLinks.Where(link =>
+                !string.Equals(link.ObjectGuidString, deleted.GuidString, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(link.LinkedObjectGuidString, deleted.GuidString, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        _feeSignalLinks = _feeSignalLinks.Where(link => !string.Equals(
+                link.ObjectGuidString,
+                deleted.GuidString,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        _confirmedDuplicateIdentities.Clear();
+
+        if (CurrentPlan is { } plan)
+        {
+            var assignments = plan.Assignments.Where(item => !string.Equals(
+                    item.FeeObjectId,
+                    feeObjectId,
+                    StringComparison.Ordinal))
+                .ToArray();
+            if (assignments.Length != plan.Assignments.Count)
+            {
+                plan.ReplaceAssignments(assignments);
+                RaisePlanChanged();
+            }
+        }
+
+        return true;
     }
 
     public async Task<IReadOnlyList<VisualFeeInterface>> DiscoverFeeInterfacesAsync(
@@ -1806,6 +1907,40 @@ public sealed class ContainerToFeeVisualPlanService
         string.IsNullOrWhiteSpace(feeObjectId)
             ? null
             : _feeObjects.FirstOrDefault(item => string.Equals(item.Id, feeObjectId, StringComparison.Ordinal));
+
+    private string DescribeLinkedFeeObject(string guidString)
+    {
+        var containerObject = _feeContainerObjects.FirstOrDefault(item => string.Equals(
+            item.GuidString,
+            guidString,
+            StringComparison.OrdinalIgnoreCase));
+        if (containerObject is not null)
+        {
+            var kind = containerObject.Kind switch
+            {
+                VisualFeeContainerObjectKind.Logic => "Logik",
+                VisualFeeContainerObjectKind.Cabinet => "Cabinet",
+                VisualFeeContainerObjectKind.CabinetElement => "CabinetElement",
+                _ => "FEE-Objekt",
+            };
+            return $"{kind}: {containerObject.Name}";
+        }
+
+        var signal = _feeSignals.FirstOrDefault(item => string.Equals(
+            item.GuidString,
+            guidString,
+            StringComparison.OrdinalIgnoreCase));
+        if (signal is not null)
+            return $"Signal: {signal.InterfaceName} / {signal.Tag}";
+
+        var simObject = _feeObjects.FirstOrDefault(item => string.Equals(
+            item.GuidString,
+            guidString,
+            StringComparison.OrdinalIgnoreCase));
+        return simObject is null
+            ? $"FEE-Objekt: {guidString}"
+            : $"SimObject: {simObject.Name}";
+    }
 
     private static string CreateDuplicateIdentity(VisualFeeObject item) => string.Join(
         "\u001f",

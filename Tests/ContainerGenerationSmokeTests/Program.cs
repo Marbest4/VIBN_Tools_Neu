@@ -712,6 +712,15 @@ internal static class Program
                 throw new InvalidOperationException(
                     "Mehrere gefundene SimObjects werden nicht mehr pro Objekt als verknüpft bzw. offen ausgewertet.");
             }
+            var linkedDuplicate = service.GetFeeObjectConnectionSummary(objects[0].Id);
+            var unlinkedDuplicate = service.GetFeeObjectConnectionSummary(objects[1].Id);
+            if (!linkedDuplicate.WasRead || !linkedDuplicate.HasConnections ||
+                !linkedDuplicate.Details.Any(detail => detail.Contains("Logik: Axis_1", StringComparison.Ordinal)) ||
+                unlinkedDuplicate.HasConnections)
+            {
+                throw new InvalidOperationException(
+                    "Exact duplicate SimObjects do not expose their GUID-specific live link state.");
+            }
             typeof(ContainerToFeeVisualPlanService)
                 .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .SetValue(service, Array.Empty<VisualFeeObjectLink>());
@@ -725,6 +734,15 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     "Removing one object from a multi-select target removed more than that assignment.");
+            }
+            if (!service.ForgetDeletedFeeObject(objects[0].Id) ||
+                service.DiscoveredFeeObjects.Count != 1 ||
+                service.DiscoveredFeeObjects[0].HasExactDuplicate ||
+                service.DiscoveredFeeSimObjectLinks.Any(link =>
+                    string.Equals(link.ObjectGuidString, objects[0].GuidString, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException(
+                    "A deleted FEE SimObject was not removed atomically from the local discovery snapshot.");
             }
         }
         finally
