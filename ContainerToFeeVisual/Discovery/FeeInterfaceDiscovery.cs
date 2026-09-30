@@ -1,3 +1,4 @@
+using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
@@ -17,7 +18,10 @@ internal sealed class FeeInterfaceDiscovery(IVisualPlanLogger logger)
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var interfaces = await FeeInterface.GetAllInterfacesAsync();
+        var cachedInterfaces = Services.FeeObjects.AllFeeObjects?.OfType<FeeInterface>().ToArray() ?? [];
+        var interfaces = cachedInterfaces.Length > 0
+            ? cachedInterfaces
+            : (await FeeInterface.GetAllInterfacesAsync()).ToArray();
         cancellationToken.ThrowIfCancellationRequested();
 
         var unique = interfaces

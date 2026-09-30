@@ -54,7 +54,11 @@ namespace VIBN_Tools.GlobalClasses
 
         public interface IContainerFactory
         {
-            Task CreateContainerAsync(ContainerBaseClass container, FeeInterface targetInterface, FeeAbstractObject parentObject);
+            Task CreateContainerAsync(
+                ContainerBaseClass container,
+                FeeInterface targetInterface,
+                FeeAbstractObject parentObject,
+                CancellationToken cancellationToken = default);
         }
 
         // Container type interfaces

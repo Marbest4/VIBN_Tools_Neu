@@ -87,6 +87,29 @@ public sealed class TiaAxisConfigurationPayload
     public List<string> AxisIds { get; set; } = new();
 }
 
+public sealed class TiaPathPayload
+{
+    public string Path { get; set; } = string.Empty;
+}
+
+public sealed class TiaAxisConfigurationTransferResult
+{
+    public int AxisCount { get; set; }
+
+    public int ParameterCount { get; set; }
+
+    public int FileCount { get; set; }
+
+    public List<string> Warnings { get; set; } = new();
+}
+
+public sealed class TiaAxisInterfaceExportResult
+{
+    public string FilePath { get; set; } = string.Empty;
+
+    public int AxisCount { get; set; }
+}
+
 public sealed class TiaAxisParameterResult
 {
     public string Name { get; set; } = string.Empty;
@@ -96,6 +119,42 @@ public sealed class TiaAxisParameterResult
     public bool Success { get; set; }
 
     public string Error { get; set; } = string.Empty;
+}
+
+public sealed class TiaCompileResult
+{
+    public string TargetName { get; set; } = string.Empty;
+
+    public string TargetType { get; set; } = string.Empty;
+
+    public string State { get; set; } = string.Empty;
+
+    public int ErrorCount { get; set; }
+
+    public int WarningCount { get; set; }
+
+    public long DurationMilliseconds { get; set; }
+
+    public List<TiaCompileMessage> Messages { get; set; } = new();
+
+    public bool Success => ErrorCount == 0 &&
+                           State.IndexOf("Error", StringComparison.OrdinalIgnoreCase) < 0 &&
+                           State.IndexOf("Failed", StringComparison.OrdinalIgnoreCase) < 0;
+}
+
+public sealed class TiaCompileMessage
+{
+    public string Path { get; set; } = string.Empty;
+
+    public string State { get; set; } = string.Empty;
+
+    public string Description { get; set; } = string.Empty;
+
+    public int ErrorCount { get; set; }
+
+    public int WarningCount { get; set; }
+
+    public List<TiaCompileMessage> Children { get; set; } = new();
 }
 
 /// <summary>

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.ComponentModel;
 using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -13,6 +14,8 @@ using VIBN_Tools.Application.VM;
 using VIBN_Tools.Core.Kanbanize;
 using VIBN_Tools.Core.ViCo;
 using VIBN_Tools.ContainerGeneration.AI;
+using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
+using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerGeneration.Utils;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.GlobalClasses;
@@ -127,6 +130,25 @@ internal static class Program
                 throw new InvalidOperationException("Load Data must require a loaded Requirements XML.");
             if (containerGenerationViewModel.CanCompareContainerFile)
                 throw new InvalidOperationException("ContainerFile comparison must require an active workspace.");
+            VerifyContainerReviewFilterScope(containerGenerationViewModel);
+
+            var rockwellPage = new RockwellPage();
+            if (rockwellPage.DataContext is not RockwellPageVM rockwellViewModel)
+                throw new InvalidOperationException("The Rockwell page has no Rockwell view model.");
+            if (rockwellViewModel.SelectedStandard?.Id != "GCCS" ||
+                !rockwellViewModel.WorkflowHelp.Contains("Studio 5000", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The Rockwell page must select its explicit GCCS standard and disclose the Studio 5000 prerequisite.");
+            }
+            var noStandard = rockwellViewModel.Standards.SingleOrDefault(item => item.Id == "NONE");
+            if (noStandard is null || noStandard.SupportsGeneration)
+                throw new InvalidOperationException("Rockwell must offer an explicit no-standard, no-mutation option.");
+            rockwellViewModel.SelectedStandard = noStandard;
+            if (!rockwellViewModel.SelectedStandardDescription.Contains("keine Änderung", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("The no-standard Rockwell option does not disclose its no-mutation behavior.");
+            rockwellViewModel.SelectedStandard = rockwellViewModel.Standards.Single(item => item.Id == "GCCS");
+            ExerciseDeferredTemplates(rockwellPage);
 
             var specialDevicePage = new SpecialDevicePage();
             var specialDeviceViewModel = (SpecialDevicePageVM)specialDevicePage.DataContext;
@@ -177,14 +199,33 @@ internal static class Program
 
             var visualPlanService = VerifyContainerToFeeVisualPlan();
             var visualContainerViewModel = new ContainerToFeeVisualPageVM(visualPlanService);
+            if (visualContainerViewModel.TreeStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Unassigned) ||
+                visualContainerViewModel.FeeSignalStatusFilters.All(item => item.Key != VisualStatusFilterKey.Error))
+            {
+                throw new InvalidOperationException("The visual Container2FEE status filters are incomplete.");
+            }
+            var duplicateInterfaceGuid = Guid.NewGuid().ToString("D");
+            var duplicateInterface = new VisualFeeInterface(duplicateInterfaceGuid, "Duplicate", "Test", 2);
+            visualContainerViewModel.AvailableFeeInterfaces.Add(new ContainerToFeeVisualFeeInterfaceVM(duplicateInterface));
+            visualContainerViewModel.AvailableFeeInterfaces.Add(new ContainerToFeeVisualFeeInterfaceVM(duplicateInterface));
+            visualContainerViewModel.GetType()
+                .GetMethod("RefreshFeeInterfaceProjection", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(visualContainerViewModel, [null]);
+            if (visualContainerViewModel.AvailableFeeInterfaces.Any(item => item.IsNone) ||
+                visualContainerViewModel.AvailableFeeInterfaces.Count(item =>
+                    item.GuidString == duplicateInterfaceGuid) != 1)
+            {
+                throw new InvalidOperationException("The refreshed visual interface selector contains transient duplicates.");
+            }
+            VerifyVisualSimObjectColorAggregation();
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
                 .First(node => node.Kind == VisualNodeKind.Container);
-            if (visualContainerViewModel.SelectedTreeNode.StateBackground != "#FFEF9A9A" ||
-                visualContainerViewModel.AvailableFeeInterfaces.All(item => !item.IsNone))
+            if (visualContainerViewModel.SelectedTreeNode.StateBackground != "#FFEF9A9A")
             {
                 throw new InvalidOperationException(
-                    "Visual container status or explicit no-interface selection is incorrect.");
+                    "Visual container status is incorrect.");
             }
             visualContainerViewModel.CollapseAllCommand.Execute(null);
             if (visualContainerViewModel.TreeRoots
@@ -308,13 +349,34 @@ internal static class Program
             var tiaPortalPage = new TiaPortalPage();
             var tiaPortalViewModel = (TiaPortalPageVM)tiaPortalPage.DataContext;
             if (!tiaPortalViewModel.LibraryOperationInfo.Contains("überschrieben", StringComparison.OrdinalIgnoreCase) ||
-                !tiaPortalViewModel.LibraryOperationInfo.Contains("automatisch gespeichert", StringComparison.OrdinalIgnoreCase))
+                !tiaPortalViewModel.LibraryOperationInfo.Contains("automatisch gespeichert", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.LibraryOperationInfo.Contains("Projektlaufwerk", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("The TIA ViCo library help does not disclose its write and save effects.");
+            }
+            if (!tiaPortalViewModel.AxisExchangeInfo.Contains("ToConfig", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.AxisExchangeInfo.Contains("AxisValueTags.xlsx", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.AxisConfigurationInfo.Contains("_Programm/Axis", StringComparison.OrdinalIgnoreCase) ||
+                !ReferenceEquals(tiaPortalViewModel.Axes, tiaPortalViewModel.FoundAxes))
+            {
+                throw new InvalidOperationException("The TIA axis workflow or exchange help is incomplete.");
             }
             tiaPortalViewModel.ToggleLibraryOperationInfoCommand.Execute(null);
             if (!tiaPortalViewModel.IsLibraryOperationInfoVisible)
                 throw new InvalidOperationException("The TIA ViCo library explanation cannot be expanded.");
+
+            var projectQualityPage = new ProjectQualityPage();
+            if (projectQualityPage.DataContext is not ProjectQualityPageVM projectQualityViewModel ||
+                !projectQualityViewModel.Limitations.Contains("fachliche Freigabe", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.TestInstructions.Contains("Requirements.xml", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.TestMeaning.Contains("Laufzeit", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.InputRequirements.Any(item =>
+                    item.Input == "ContainerFile" && item.AcceptedFormat == ".xml") ||
+                !projectQualityViewModel.InputRequirements.Any(item =>
+                    item.Input == "TIA-Version" && item.Check.Contains("keinen HMI-Laufzeittest", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException("The Project Quality page does not disclose its live-verification boundary.");
+            }
 
             var settingsPage = new SettingsPage();
             var settingsViewModel = (SettingsPageVM)settingsPage.DataContext;
@@ -339,6 +401,7 @@ internal static class Program
                 searchPage,
                 new ViCoCopyPage(),
                 tiaPortalPage,
+                rockwellPage,
                 administrationPage,
                 kanbanizeCardPage,
                 specialDevicePage,
@@ -347,6 +410,7 @@ internal static class Program
                 aiTrainingPage,
                 settingsPage,
                 interfaceOperationPage,
+                projectQualityPage,
                 new DiagnosticsPanel()
             ];
 
@@ -389,6 +453,11 @@ internal static class Program
                     "WPF binding errors were detected:" + Environment.NewLine +
                     string.Join(Environment.NewLine, bindingErrors.Messages));
             }
+
+            ViCoFeatureBootstrapper.ShutdownAsync().GetAwaiter().GetResult();
+            // The application exit fallback may run after a page has already
+            // disposed itself. Repeating shutdown must therefore be harmless.
+            ViCoFeatureBootstrapper.ShutdownAsync().GetAwaiter().GetResult();
 
             Console.WriteLine("All integrated WPF views initialized without binding errors.");
             return 0;
@@ -662,6 +731,29 @@ internal static class Program
                 loaded.Plan.Edges.Count == 0)
                 throw new InvalidOperationException("Visual plan does not contain the expected target, signal and edges.");
 
+            var logic = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Logic);
+            var signalGroup = loaded.Plan.Nodes.Single(node =>
+                node.Kind == VisualNodeKind.Group && node.Name == "Signals");
+            var simObjectGroup = loaded.Plan.Nodes.Single(node =>
+                node.Kind == VisualNodeKind.Group && node.Name == "SimObjects");
+            if (logic.ParentId != loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container).Id ||
+                signalGroup.ParentId != logic.ParentId || simObjectGroup.ParentId != logic.ParentId ||
+                loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Signal).ParentId != signalGroup.Id ||
+                loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.SimObjectTarget).ParentId != simObjectGroup.Id)
+            {
+                throw new InvalidOperationException(
+                    "Visual plan hierarchy must show Logic, Signals and SimObjects as sibling groups below the container.");
+            }
+            var existingLogicPresence = VisualFeeContainerPresenceResolver.Resolve(
+                loaded.Plan,
+                [new VisualFeeContainerObject(
+                    Guid.NewGuid().ToString("D"),
+                    "Sensor_1",
+                    VisualFeeContainerObjectKind.Logic,
+                    @"Definitions\Grob_Sensor.xml")]);
+            if (existingLogicPresence[logic.Id].Kind != VisualFeeNodePresenceKind.Found)
+                throw new InvalidOperationException("An existing component/definition-matched FEE logic was not detected.");
+
             var container = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container);
             var signalNode = loaded.Plan.Nodes.Single(node => node.Kind == VisualNodeKind.Signal);
             if (!service.SetSlotOverride(signalNode.Id, "PLC_IN_PartPresent_Ch1") ||
@@ -709,8 +801,16 @@ internal static class Program
                 "Existing PLC Interface",
                 "Test Provider",
                 1);
-            if (!service.SetExistingInterface(selectedInterface))
-                throw new InvalidOperationException("Visual existing-interface selection could not be stored.");
+            var secondInterface = new VisualFeeInterface(
+                Guid.NewGuid().ToString("D"),
+                "Second PLC Interface",
+                "Test Provider",
+                2);
+            if (!service.SetExistingInterfaces([selectedInterface, secondInterface]) ||
+                service.CurrentPlan.ExistingInterfaceSelections.Count != 2)
+            {
+                throw new InvalidOperationException("Visual multi-interface selection could not be stored.");
+            }
 
             service.SaveSidecarAsync().GetAwaiter().GetResult();
             var restored = new ContainerToFeeVisualPlanService();
@@ -721,8 +821,12 @@ internal static class Program
                 restored.CurrentPlan?.IsCreationRequested(container.Id) != false ||
                 restored.CurrentPlan.IsGenerationSelected(container.Id) ||
                 restored.CurrentPlan.GetEffectiveSlot(signalNode) != "PLC_IN_PartPresent_Ch1" ||
-                restored.CurrentPlan.ExistingInterfaceSelection?.InterfaceGuid != selectedInterface.GuidString)
+                restored.CurrentPlan.ExistingInterfaceSelections.Count != 2 ||
+                restored.CurrentPlan.ExistingInterfaceSelections[0].InterfaceGuid != selectedInterface.GuidString ||
+                restored.CurrentPlan.ExistingInterfaceSelections[1].InterfaceGuid != secondInterface.GuidString)
                 throw new InvalidOperationException("Visual sidecar was not restored correctly.");
+
+            VerifyCabinetAndUnknownPresence(directory);
 
             return restored;
         }
@@ -731,6 +835,267 @@ internal static class Program
             if (Directory.Exists(directory))
                 Directory.Delete(directory, recursive: true);
         }
+    }
+
+    private static void VerifyContainerReviewFilterScope(ContainerGenerationPageVM viewModel)
+    {
+        var mainNeedsReview = new ContainerData
+        {
+            Id = "review",
+            Component = "Review",
+            Type = "Sensor",
+            IsValid = false,
+        };
+        var mainRegular = new ContainerData
+        {
+            Id = "regular",
+            Component = "Regular",
+            Type = "Sensor",
+            IsValid = true,
+        };
+        viewModel.ContainerList.Add(mainNeedsReview);
+        viewModel.ContainerList.Add(mainRegular);
+        viewModel.UnassignedEntries.Add(new ContainerEntry
+        {
+            Signal = "UnassignedReview",
+            ReviewState = ContainerEntryReviewState.NeedsReview,
+        });
+        viewModel.UnassignedEntries.Add(new ContainerEntry { Signal = "UnassignedRegular" });
+        viewModel.FilteredEntries.Add(new ContainerEntry
+        {
+            Signal = "FilteredReview",
+            ReviewState = ContainerEntryReviewState.NeedsReview,
+        });
+        viewModel.FilteredEntries.Add(new ContainerEntry { Signal = "FilteredRegular" });
+
+        viewModel.SelectedReviewFilter = viewModel.ReviewFilterOptions.Single(option =>
+            option.Value == WorkspaceReviewFilter.NeedsReview);
+
+        var mainView = CollectionViewSource.GetDefaultView(viewModel.ContainerList);
+        var unassignedView = CollectionViewSource.GetDefaultView(viewModel.UnassignedEntries);
+        var filteredView = CollectionViewSource.GetDefaultView(viewModel.FilteredEntries);
+        var mainFilter = mainView.Filter;
+        if (mainFilter is null ||
+            !mainFilter(mainNeedsReview) ||
+            mainFilter(mainRegular) ||
+            unassignedView.Filter is not null ||
+            filteredView.Filter is not null)
+        {
+            throw new InvalidOperationException(
+                "The review dropdown must filter only the main container grid, not Unassigned or Filtered Data.");
+        }
+
+        viewModel.SelectedReviewFilter = viewModel.ReviewFilterOptions.Single(option =>
+            option.Value == WorkspaceReviewFilter.All);
+        viewModel.ContainerList.Clear();
+        viewModel.UnassignedEntries.Clear();
+        viewModel.FilteredEntries.Clear();
+
+        var manualSignal = new ContainerEntry { Signal = "Manual Sensor 01" };
+        viewModel.UnassignedEntries.Add(manualSignal);
+        viewModel.GetType()
+            .GetMethod("MoveData", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(viewModel, [null, manualSignal]);
+        var manualContainer = viewModel.ContainerList.SingleOrDefault();
+        if (manualContainer?.Component != "Manual Sensor 01" ||
+            !manualContainer.DataList.Contains(manualSignal) ||
+            viewModel.UnassignedEntries.Contains(manualSignal))
+        {
+            throw new InvalidOperationException(
+                "Dropping an unassigned signal on empty container space did not create a named container.");
+        }
+        viewModel.ContainerList.Clear();
+    }
+
+    private static void VerifyVisualSimObjectColorAggregation()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-visual-colors-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var xmlPath = Path.Combine(directory, "Container.xml");
+        try
+        {
+            File.WriteAllText(xmlPath, """
+                <ContainerFile>
+                  <Container id="motion">
+                    <Component>Axis_1</Component><Type>Cylinder</Type><DataList>
+                      <Entry><ID>A</ID><Address>%Q0.0</Address><DataType>Bool</DataType><Signal>Move</Signal><Slot>PLC_OUT_ToWorkPos</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var load = service.LoadXmlAsync(xmlPath).GetAwaiter().GetResult();
+            if (!load.Success || load.Plan is null)
+                throw new InvalidOperationException("Visual colour aggregation plan could not be loaded.");
+
+            var logicGuid = Guid.NewGuid();
+            var jointGuid = Guid.NewGuid();
+            var visualObjectConstructor = typeof(VisualFeeObject).GetConstructors(
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                .Single();
+            var visualJoint = (VisualFeeObject)visualObjectConstructor.Invoke(
+            [
+                $"fee:{jointGuid:D}",
+                jointGuid.ToString("D"),
+                "Axis_1",
+                typeof(FeeJoint).FullName!,
+                "MotionJoint",
+                new[] { nameof(FeeJoint), typeof(FeeJoint).FullName! },
+                "11111111-1111-1111-1111-111111111111",
+                "Axes",
+                false,
+            ]);
+            SetPrivateField(service, "_feeObjects", new[] { visualJoint });
+            SetPrivateField(service, "_hasDiscoveredFeeObjects", true);
+            SetPrivateField(
+                service,
+                "_feeContainerObjects",
+                new[]
+                {
+                    new VisualFeeContainerObject(
+                        logicGuid.ToString("D"),
+                        "Axis_1",
+                        VisualFeeContainerObjectKind.Logic,
+                        "Grob_Cylinder")
+                });
+            SetPrivateField(
+                service,
+                "_runtimeObjects",
+                new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal)
+                {
+                    [visualJoint.Id] = new FeeJoint { Guid = jointGuid, Name = "Axis_1" }
+                });
+            if (service.AutoAssignMatches() != 1)
+                throw new InvalidOperationException("Visual colour test could not auto-assign its MotionJoint.");
+            SetPrivateField(
+                service,
+                "_feeSimObjectLinks",
+                new[]
+                {
+                    new VisualFeeObjectLink(
+                        jointGuid.ToString("D"),
+                        "InTarget",
+                        logicGuid.ToString("D"),
+                        "SIM_TargetPosition")
+                });
+            SetPrivateField(service, "_hasDiscoveredFeeSimObjectLinks", true);
+
+            var viewModel = new ContainerToFeeVisualPageVM(service);
+            var nodes = viewModel.TreeRoots.SelectMany(root => root.SelfAndDescendants()).ToArray();
+            var simObject = nodes.Single(node => node.Kind == VisualNodeKind.SimObject);
+            var target = nodes.Single(node => node.Kind == VisualNodeKind.SimObjectTarget);
+            var group = nodes.Single(node => node.Kind == VisualNodeKind.Group && node.Name == "SimObjects");
+            var container = nodes.Single(node => node.Kind == VisualNodeKind.Container);
+            if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
+                target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
+                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified)
+            {
+                throw new InvalidOperationException(
+                    "A confirmed SimObject link did not propagate green from object to target and group.");
+            }
+
+            foreach (var node in nodes)
+                node.ApplyExecutionState(ContainerToFeeVisualNodeState.Verified);
+            InvokePrivate(viewModel, "RefreshAggregateTreeStates");
+            if (container.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified)
+                throw new InvalidOperationException("An all-green visual subtree did not produce a green container.");
+            viewModel.SelectedTreeStatusFilter = viewModel.TreeStatusFilters.Single(option =>
+                option.Key == VisualStatusFilterKey.Verified);
+            if (!container.IsVisible)
+                throw new InvalidOperationException("The green status filter hid an all-green container.");
+
+            SetPrivateField(service, "_feeSimObjectLinks", Array.Empty<VisualFeeObjectLink>());
+            InvokePrivate(viewModel, "ApplyDiscoveredSimObjectStates");
+            if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked ||
+                target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked ||
+                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked ||
+                container.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.FoundUnlinked)
+            {
+                throw new InvalidOperationException(
+                    "A missing SimObject link did not propagate purple to object, target, group and container.");
+            }
+            viewModel.SelectedTreeStatusFilter = viewModel.TreeStatusFilters.Single(option =>
+                option.Key == VisualStatusFilterKey.Verified);
+            if (container.IsVisible)
+                throw new InvalidOperationException("The green status filter still showed a purple container.");
+            viewModel.SelectedTreeStatusFilter = viewModel.TreeStatusFilters.Single(option =>
+                option.Key == VisualStatusFilterKey.LinkMissing);
+            if (!container.IsVisible)
+                throw new InvalidOperationException("The missing-link filter hid a purple container.");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void SetPrivateField(object target, string fieldName, object value) =>
+        target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(target, value);
+
+    private static void InvokePrivate(object target, string methodName) =>
+        target.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(target, null);
+
+    private static void VerifyCabinetAndUnknownPresence(string directory)
+    {
+        var cabinetPath = Path.Combine(directory, "Cabinet.xml");
+        File.WriteAllText(cabinetPath, """
+            <AutoCreate>
+              <Container id="switch-1">
+                <Component>Selector_1</Component><Type>Switch</Type>
+                <Entries><Entry><Slot>PLC_IN_NO1</Slot><Signal>Selector_NO</Signal><Address>%I12.0</Address><DataType>Bool</DataType><ID>SW1</ID></Entry></Entries>
+              </Container>
+            </AutoCreate>
+            """);
+        var cabinetService = new ContainerToFeeVisualPlanService();
+        var cabinetLoad = cabinetService.LoadXmlAsync(cabinetPath).GetAwaiter().GetResult();
+        if (!cabinetLoad.Success || cabinetLoad.Plan is null)
+            throw new InvalidOperationException("Cabinet visual plan could not be loaded.");
+        var cabinetPresence = VisualFeeContainerPresenceResolver.Resolve(
+            cabinetLoad.Plan,
+            [
+                new VisualFeeContainerObject(
+                    Guid.NewGuid().ToString("D"),
+                    "Cabinet Switches",
+                    VisualFeeContainerObjectKind.Cabinet,
+                    string.Empty),
+                new VisualFeeContainerObject(
+                    Guid.NewGuid().ToString("D"),
+                    "Selector_1",
+                    VisualFeeContainerObjectKind.CabinetElement,
+                    @"\CabinetDefinitions\Grob_2PositionSwitch.xml"),
+            ]);
+        var cabinetHelpers = cabinetLoad.Plan.Nodes
+            .Where(node => node.Kind == VisualNodeKind.TechnicalHelper)
+            .ToArray();
+        if (cabinetHelpers.Length != 2 || cabinetHelpers.Any(node =>
+                !cabinetPresence.TryGetValue(node.Id, out var presence) ||
+                presence.Kind != VisualFeeNodePresenceKind.Found))
+        {
+            throw new InvalidOperationException("Existing cabinet and CabinetElement nodes were not detected as present.");
+        }
+
+        var unknownPath = Path.Combine(directory, "Unknown.xml");
+        File.WriteAllText(unknownPath, """
+            <AutoCreate>
+              <Container id="unknown-1">
+                <Component>Legacy_1</Component><Type>FutureContainer</Type>
+                <Entries><Entry><Slot>PLC_IN_X</Slot><Signal>Legacy_X</Signal><Address>%I13.0</Address><DataType>Bool</DataType><ID>U1</ID></Entry></Entries>
+              </Container>
+            </AutoCreate>
+            """);
+        var unknownService = new ContainerToFeeVisualPlanService();
+        var unknownLoad = unknownService.LoadXmlAsync(unknownPath).GetAwaiter().GetResult();
+        if (!unknownLoad.Success || unknownLoad.Plan is null)
+            throw new InvalidOperationException("Unknown-container visual plan could not be loaded.");
+        var unknownViewModel = new ContainerToFeeVisualPageVM(unknownService);
+        var unknownSignal = unknownViewModel.TreeRoots
+            .SelectMany(root => root.SelfAndDescendants())
+            .Single(node => node.Kind == VisualNodeKind.UnknownSignal);
+        if (unknownSignal.StateBackground != "#FFFFF2CC")
+            throw new InvalidOperationException("An Unknown signal awaiting creation must be yellow, not red.");
     }
 
     private static void VerifyInstalledFeeVersionRequiresSdk()
@@ -909,6 +1274,7 @@ internal static class Program
                 "A successfully created configuration subtask would be posted again on Enter.");
         }
     }
+
 
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
     {

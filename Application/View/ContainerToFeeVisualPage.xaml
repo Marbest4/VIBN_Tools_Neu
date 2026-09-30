@@ -42,6 +42,7 @@
                         <TextBlock Text="{Binding Slot, StringFormat=Slot: {0}}" />
                         <TextBlock Text="{Binding SourceLocation, StringFormat=Quelle: {0}}" />
                         <TextBlock Text="{Binding SimObjectStateDescription}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding LinkedObjectDescription}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding ExecutionDescription}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding ValidationErrorText}" Foreground="#FFC62828" FontWeight="SemiBold" TextWrapping="Wrap" />
                     </StackPanel>
@@ -51,22 +52,54 @@
 
         <HierarchicalDataTemplate DataType="{x:Type vm:ContainerToFeeVisualTreeNodeVM}"
                                   ItemsSource="{Binding Children}">
-            <Grid Margin="2" Background="{Binding StateBackground}"
+            <Grid Margin="2" Background="{Binding DisplayBackground}"
+                  Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                   behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
                   behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
                   behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
+                <Grid.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Löschen"
+                                  Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                        <MenuItem Header="Generieren / nicht generieren"
+                                  Command="{Binding PlacementTarget.Tag.ToggleTreeNodeGenerationCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                        <MenuItem Header="Mehrfachfund als beabsichtigt bestätigen"
+                                  Command="{Binding PlacementTarget.Tag.ConfirmDuplicateFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                    </ContextMenu>
+                </Grid.ContextMenu>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <CheckBox Margin="0,0,6,0"
+                          Grid.RowSpan="2"
                           VerticalAlignment="Center"
                           IsChecked="{Binding IsGenerationSelected, Mode=TwoWay}"
                           Visibility="{Binding CanSelectGeneration, Converter={StaticResource BooleanToVisibilityConverter}}"
                           ToolTip="Diesen vollständigen Container bei Generierung bzw. Link-only berücksichtigen" />
                 <TextBlock Grid.Column="1" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                <Border Grid.Column="2" Margin="8,0,0,0" Padding="4,1" CornerRadius="3"
+                <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,1,0,0" FontSize="10"
+                           Foreground="#FF356A88" Text="{Binding LinkedObjectDescription}"
+                           TextTrimming="CharacterEllipsis" />
+                <StackPanel Grid.Column="2" Grid.RowSpan="2" Margin="8,0,0,0" VerticalAlignment="Center">
+                    <Button Padding="5,1" Content="Mehrfachfund bestätigen"
+                            Command="{Binding DataContext.ConfirmDuplicateFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                            CommandParameter="{Binding}"
+                            Visibility="{Binding CanConfirmDuplicate, Converter={StaticResource BooleanToVisibilityConverter}}"
+                            ToolTip="Bestätigt diesen konkreten FEE-Treffer. Bei Single-Select wird er eindeutig ausgewählt; bei Multi-Select bleiben die Mehrfachzuordnungen erhalten." />
+                    <TextBlock FontSize="10" Foreground="#FF2E7D32" Text="Mehrfachfund bestätigt"
+                               Visibility="{Binding IsDuplicateConfirmed, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </StackPanel>
+                <Border Grid.Column="3" Grid.RowSpan="2" Margin="8,0,0,0" Padding="4,1" CornerRadius="3"
                         Background="#1A000000">
                     <TextBlock Text="{Binding Kind}" FontSize="10" Foreground="#666666" />
                 </Border>
@@ -97,6 +130,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -114,6 +149,9 @@
                             Command="{Binding LoadPlanCommand}" />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Plan speichern"
                             Command="{Binding SavePlanCommand}" />
+                    <Button Style="{StaticResource VisualToolbarButton}" Content="Container.xml speichern"
+                            Command="{Binding SaveContainerXmlCommand}"
+                            ToolTip="Speichert den für die Generierung wirksamen Stand mit Slotkorrekturen, ergänzten Signalen und aktuell ausgewählten Containern." />
                 </StackPanel>
 
                 <WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
@@ -130,6 +168,9 @@
                             ToolTip="Ordnet freie Ziele nach identischem Komponentenname und kompatiblem FEE-Typ zu." />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Abbrechen"
                             Command="{Binding CancelCommand}" />
+                    <Button Style="{StaticResource VisualToolbarButton}" Content="Letzten Lauf reparieren"
+                            Command="{Binding ResumeLastGenerationCommand}"
+                            ToolTip="Wählt anhand des letzten Vorher-/Nachher-Manifests nur fehlgeschlagene oder offene Container erneut aus." />
 
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Alle selektieren"
                             Command="{Binding SelectAllCommand}" />
@@ -154,6 +195,11 @@
                             ToolTip="{Binding LinkSignalsOnlyUnavailableReason}"
                             ToolTipService.ShowOnDisabled="True" />
                 </WrapPanel>
+                <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,7,0,0"
+                           Foreground="#FF245B78" Text="{Binding FeeRefreshHint}" TextWrapping="Wrap" />
+                <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,4,0,0"
+                           Foreground="#FF5A3C00" Text="{Binding LastManifestSummary}" TextWrapping="Wrap"
+                           ToolTip="{Binding LastManifestPath}" />
             </Grid>
         </Border>
 
@@ -173,13 +219,13 @@
             </Border.Style>
         </Border>
 
-        <Grid Grid.Row="2" Margin="0,8,0,8">
+        <Grid Grid.Row="2" Margin="0,8,0,8" MinHeight="0">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="380" MinWidth="280" />
+                <ColumnDefinition Width="1.05*" MinWidth="220" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="*" MinWidth="360" />
+                <ColumnDefinition Width="1.25*" MinWidth="300" />
                 <ColumnDefinition Width="5" />
-                <ColumnDefinition Width="450" MinWidth="340" />
+                <ColumnDefinition Width="1.7*" MinWidth="400" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -191,19 +237,34 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Container- und Objektstruktur" />
-                    <TextBox Grid.Row="1" Margin="0,0,0,8" MinHeight="29"
-                             Text="{Binding TreeFilter, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Nach Name, Typ oder Slot filtern" />
+                    <Grid Grid.Row="1" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="175" />
+                            <ColumnDefinition Width="175" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox MinHeight="29" Text="{Binding TreeFilter, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Nach Name, Typ oder Slot filtern" />
+                        <ComboBox Grid.Column="1" Margin="6,0,0,0" ItemsSource="{Binding TreeStatusFilters}"
+                                  SelectedItem="{Binding SelectedTreeStatusFilter}" DisplayMemberPath="DisplayName"
+                                  ToolTip="Containerbaum nach Ausführungs- und Verknüpfungszustand filtern" />
+                        <ComboBox Grid.Column="2" Margin="6,0,0,0" ItemsSource="{Binding TreeSortOptions}"
+                                  SelectedItem="{Binding SelectedTreeSort}" DisplayMemberPath="DisplayName"
+                                  ToolTip="Container nach Typ oder Name sortieren" />
+                    </Grid>
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,7">
                         <Button Content="Alles aufklappen" Command="{Binding ExpandAllCommand}" Padding="8,2" />
                         <Button Content="Alles zuklappen" Command="{Binding CollapseAllCommand}" Padding="8,2" Margin="5,0,0,0" />
                     </StackPanel>
                     <TreeView Grid.Row="3" ItemsSource="{Binding TreeRoots}"
                               ItemContainerStyle="{StaticResource VisualTreeItemStyle}"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                               ScrollViewer.CanContentScroll="True"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
+                              behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
                 </Grid>
             </Border>
@@ -215,11 +276,10 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="2*" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
                     <Grid Grid.Row="0" Margin="0,0,0,8">
@@ -267,6 +327,8 @@
                     <ListBox Grid.Row="2" ItemsSource="{Binding Targets}"
                              SelectedItem="{Binding SelectedTarget, Mode=TwoWay}"
                              BorderThickness="0" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                              ScrollViewer.CanContentScroll="True"
                              VirtualizingPanel.IsVirtualizing="True"
                              VirtualizingPanel.VirtualizationMode="Recycling">
@@ -308,8 +370,9 @@
                                         <ItemsControl Grid.Row="3" ItemsSource="{Binding Assignments}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Margin="0,2" Padding="7,4" Background="White"
+                                                    <Border Margin="0,2" Padding="7,4" Background="{Binding StateBackground}"
                                                             BorderBrush="#B6C9E0" BorderThickness="1" CornerRadius="3"
+                                                            ToolTip="{Binding ToolTipText}"
                                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
@@ -335,56 +398,11 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,8,0,5"
-                               Text="Verknüpfungen" />
-                    <DataGrid Grid.Row="4" ItemsSource="{Binding VisibleEdges}" AutoGenerateColumns="False"
-                              IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
-                              HeadersVisibility="Column" SelectionMode="Single"
-                              EnableRowVirtualization="True" EnableColumnVirtualization="True">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="Art" Binding="{Binding Kind, Mode=OneWay}" Width="130" />
-                            <DataGridTextColumn Header="Verknüpfung" Binding="{Binding Label, Mode=OneWay}" Width="*" />
-                            <DataGridTextColumn Header="Quelle" Binding="{Binding SourceId, Mode=OneWay}" Width="160" />
-                            <DataGridTextColumn Header="Ziel" Binding="{Binding TargetId, Mode=OneWay}" Width="160" />
-                        </DataGrid.Columns>
-                    </DataGrid>
-                </Grid>
-            </Border>
-
-            <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" Background="Transparent" />
-
-            <Border Grid.Column="4" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="2*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Verfügbare FEE-SimObjects" />
-                    <TextBox Grid.Row="1" MinHeight="29" Margin="0,0,0,6"
-                             Text="{Binding FeeObjectFilter, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Nach Name oder Typ filtern" />
-                    <CheckBox Grid.Row="2" Margin="0,0,0,6" Content="Nur kompatible Objekte"
-                              IsChecked="{Binding ShowOnlyCompatibleFeeObjects}" />
-
-                    <TextBlock Grid.Row="3" Margin="0,2,0,3" FontSize="11" FontWeight="SemiBold"
-                               Text="Bevorzugtes Interface (optional)" />
-                    <ComboBox Grid.Row="4" MinHeight="28" Margin="0,0,0,7"
-                              ItemsSource="{Binding AvailableFeeInterfaces}"
-                              SelectedItem="{Binding SelectedExistingInterface, Mode=TwoWay}"
-                              DisplayMemberPath="DisplayName"
-                              ToolTip="Keins ist zulässig. Die Generierung durchsucht immer alle Interfaces; fehlende Signale werden im Grob Generation Interface erzeugt." />
-
-                    <ListBox Grid.Row="5" ItemsSource="{Binding FeeObjectsView}"
+                    <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,8,0,4"
+                               Text="Signalslots des ausgewählten Containers" />
+                    <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}" MinHeight="190"
+                             BorderThickness="0" Background="Transparent"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                              ScrollViewer.CanContentScroll="True"
                              VirtualizingPanel.IsVirtualizing="True"
                              VirtualizingPanel.VirtualizationMode="Recycling">
@@ -392,78 +410,259 @@
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                 <Setter Property="Padding" Value="0" />
+                                <Setter Property="Margin" Value="0,0,0,7" />
                             </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="7,5" Margin="1" CornerRadius="3"
+                                <Border Padding="9" BorderBrush="#C7D7EA" BorderThickness="1" CornerRadius="4"
                                         Background="{Binding StateBackground}"
-                                        behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding FeeType}" Foreground="#777777" FontSize="10" />
-                                        <TextBlock Text="{Binding AssignmentText}" Foreground="#356A35" FontSize="10" TextWrapping="Wrap" />
-                                    </StackPanel>
+                                        ToolTip="{Binding ToolTipText}"
+                                        behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
+                                        behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
+                                        behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <Grid Grid.Row="0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Slot}" />
+                                            <TextBlock Grid.Column="1" Foreground="#666666" FontSize="11"
+                                                       Text="{Binding SelectionMode}" />
+                                        </Grid>
+                                        <TextBlock Grid.Row="1" Margin="0,2,0,5" FontSize="11" FontWeight="SemiBold"
+                                                   Text="{Binding AssignmentState}" />
+                                        <ItemsControl Grid.Row="2" ItemsSource="{Binding Assignments}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,2" Padding="7,4" Background="{Binding StateBackground}"
+                                                            BorderBrush="#B6C9E0" BorderThickness="1" CornerRadius="3"
+                                                            ToolTip="{Binding ToolTipText}"
+                                                            behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock FontWeight="SemiBold" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock FontSize="10" Foreground="#666666" Text="{Binding AssignedFeeSignal}" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                            <Button Grid.Column="1" MinWidth="26" MinHeight="24" Margin="6,0,0,0"
+                                                                    Content="×" ToolTip="{Binding RemoveToolTip}"
+                                                                    Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                                    CommandParameter="{Binding}" />
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <TextBlock Grid.Row="6" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
-                               Text="Gefundene FEE-Signale" />
-                    <TextBox Grid.Row="7" MinHeight="27" Margin="0,0,0,5"
-                             Text="{Binding FeeSignalFilter, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Signale nach Tag, Adresse/Pfad, Interface oder Datentyp filtern" />
-                    <ListBox Grid.Row="8" ItemsSource="{Binding FeeSignalsView}"
-                             ScrollViewer.CanContentScroll="True"
-                             VirtualizingPanel.IsVirtualizing="True"
-                             VirtualizingPanel.VirtualizationMode="Recycling">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="1" Padding="6,4" CornerRadius="3" Background="#FFF3F5F7"
-                                        behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
-                                        ToolTip="{Binding GuidString, StringFormat={}Signal-GUID: {0}}">
-                                    <StackPanel>
-                                        <TextBlock FontWeight="SemiBold" Text="{Binding Tag}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock FontSize="10" Foreground="#666666" Text="{Binding Location}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock FontSize="10" Foreground="#777777" Text="{Binding InterfaceName, StringFormat=Interface: {0}}" TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-
-                    <TextBlock Grid.Row="9" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
-                               Text="Validierung" />
-                    <ListBox Grid.Row="10" ItemsSource="{Binding Issues}" ScrollViewer.CanContentScroll="True"
-                             VirtualizingPanel.IsVirtualizing="True">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,2" Padding="6" CornerRadius="3">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="#FFE8F1FA" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Severity}" Value="{x:Static visual:VisualIssueSeverity.Warning}">
-                                                    <Setter Property="Background" Value="#FFFFF2CC" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Severity}" Value="{x:Static visual:VisualIssueSeverity.Error}">
-                                                    <Setter Property="Background" Value="#FFFFC7CE" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <StackPanel>
-                                        <TextBlock FontWeight="SemiBold" Text="{Binding Severity}" />
-                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding Code}" Foreground="#777777" FontSize="10" />
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                    <Expander Grid.Row="5" Margin="0,8,0,0" MaxHeight="260"
+                              Header="Technische Verknüpfungen (Details)" IsExpanded="False">
+                        <Grid MinHeight="190">
+                            <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <DataGrid ItemsSource="{Binding VisibleEdges}" AutoGenerateColumns="False"
+                                  IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  HeadersVisibility="Column" SelectionMode="Single"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                  EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow"><Setter Property="ToolTip" Value="{Binding Description}"/></Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Art" Binding="{Binding Kind, Mode=OneWay}" Width="Auto" MinWidth="80" />
+                                <DataGridTextColumn Header="Quelle" Binding="{Binding Source, Mode=OneWay}" Width="2*" MinWidth="120" />
+                                <DataGridTextColumn Header="Ziel" Binding="{Binding Target, Mode=OneWay}" Width="2*" MinWidth="120" />
+                                <DataGridTextColumn Header="Bedeutung" Binding="{Binding Description, Mode=OneWay}" Width="3*" MinWidth="150" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                            <TextBlock Grid.Row="1" Margin="0,7,0,3" FontWeight="SemiBold" Text="Vorgangsprotokoll" />
+                            <ListBox Grid.Row="2" ItemsSource="{Binding OperationDetails}" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Margin="2" TextTrimming="CharacterEllipsis" ToolTip="{Binding ToolTipText}">
+                                            <Run Text="{Binding TimestampText, Mode=OneWay}"/><Run Text=" · "/><Run FontWeight="SemiBold" Text="{Binding Category, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Message, Mode=OneWay}"/>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Grid>
+                    </Expander>
                 </Grid>
             </Border>
+
+            <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" Background="Transparent" />
+
+            <Grid Grid.Column="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" MinWidth="190" />
+                    <ColumnDefinition Width="5" />
+                    <ColumnDefinition Width="*" MinWidth="190" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Verfügbare FEE-SimObjects" />
+                        <TextBox Grid.Row="1" MinHeight="29" Margin="0,0,0,6"
+                                 Text="{Binding FeeObjectFilter, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Nach Name oder Typ filtern" />
+                        <CheckBox Grid.Row="2" Margin="0,0,0,6" Content="Nur kompatible Objekte"
+                                  IsChecked="{Binding ShowOnlyCompatibleFeeObjects}" />
+                        <ComboBox Grid.Row="3" MinHeight="28" Margin="0,0,0,6"
+                                  ItemsSource="{Binding FeeObjectStatusFilters}"
+                                  SelectedItem="{Binding SelectedFeeObjectStatusFilter}"
+                                  DisplayMemberPath="DisplayName"
+                                  ToolTip="SimObjects nach Zuordnungszustand filtern" />
+                        <ListBox Grid.Row="4" ItemsSource="{Binding FeeObjectsView}"
+                                 SelectionMode="Extended"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.CanContentScroll="True"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Padding" Value="0" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="7,5" Margin="1" CornerRadius="3"
+                                            Background="{Binding StateBackground}"
+                                            ToolTip="{Binding AssignmentText}"
+                                            behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding FeeType}" Foreground="#777777" FontSize="10" />
+                                            <TextBlock Text="{Binding AssignmentText}" Foreground="#356A35" FontSize="10" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                <Border Grid.Column="2" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="2*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Gefundene FEE-Signale" />
+                        <Expander Grid.Row="1" Margin="0,0,0,6" MaxHeight="145"
+                                  Header="{Binding SelectedExistingInterfacesSummary}"
+                                  ToolTip="Ein oder mehrere vorhandene Interfaces auswählen. Nur deren Signale werden durchsucht und automatisch verknüpft.">
+                            <Border Margin="0,4,0,0" Padding="4" BorderBrush="#FFD0D0D0" BorderThickness="1" CornerRadius="3">
+                                <ListBox ItemsSource="{Binding AvailableFeeInterfaces}"
+                                         MaxHeight="105"
+                                         BorderThickness="0"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         ScrollViewer.CanContentScroll="True"
+                                         VirtualizingPanel.IsVirtualizing="True"
+                                         VirtualizingPanel.VirtualizationMode="Recycling">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Margin="2" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                      Content="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                        </Expander>
+                        <TextBox Grid.Row="2" MinHeight="29" Margin="0,0,0,6"
+                                  Text="{Binding FeeSignalFilter, UpdateSourceTrigger=PropertyChanged}"
+                                  ToolTip="Nach Tag, Adresse/Pfad, Interface oder Datentyp filtern" />
+                        <ComboBox Grid.Row="3" MinHeight="28" Margin="0,0,0,6"
+                                  ItemsSource="{Binding FeeSignalStatusFilters}"
+                                  SelectedItem="{Binding SelectedFeeSignalStatusFilter}"
+                                  DisplayMemberPath="DisplayName"
+                                  ToolTip="Signale nach Zuordnung, Fehlern oder Duplikaten filtern" />
+                        <ListBox Grid.Row="4" ItemsSource="{Binding FeeSignalsView}"
+                                 SelectionMode="Extended"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.CanContentScroll="True"
+                                 VirtualizingPanel.IsVirtualizing="True"
+                                 VirtualizingPanel.VirtualizationMode="Recycling">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="1" Padding="6,4" CornerRadius="3" Background="{Binding StateBackground}"
+                                            behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
+                                            ToolTip="{Binding ToolTipText}">
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Tag}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="10" Foreground="#666666" Text="{Binding Location}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="10" Foreground="#777777" Text="{Binding InterfaceName, StringFormat=Interface: {0}}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock FontSize="10" Foreground="#FF356A35" Text="{Binding AssignmentText}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBlock Grid.Row="5" Style="{StaticResource VisualPanelHeader}" Margin="0,10,0,5"
+                                   Text="Validierung" />
+                        <ListBox Grid.Row="6" ItemsSource="{Binding Issues}"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,2" Padding="6" CornerRadius="3"
+                                            ToolTip="{Binding Message}"
+                                            ToolTipService.ShowDuration="60000">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="#FFE8F1FA" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="{x:Static visual:VisualIssueSeverity.Warning}">
+                                                        <Setter Property="Background" Value="#FFFFF2CC" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="{x:Static visual:VisualIssueSeverity.Error}">
+                                                        <Setter Property="Background" Value="#FFFFC7CE" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Severity}" />
+                                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Code}" Foreground="#777777" FontSize="10" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </Grid>
         </Grid>
 
         <Grid Grid.Row="3" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">

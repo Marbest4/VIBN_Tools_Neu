@@ -8,6 +8,8 @@ using System.IO.Pipes;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using VIBN_Tools.Core.Diagnostics;
+using VIBN_Tools.Quality;
 
 var temporaryRoot = Path.Combine(Path.GetTempPath(), $"vibn-vico-tests-{Guid.NewGuid():N}");
 
@@ -30,6 +32,8 @@ try
     VerifyUserCredentialConfiguration();
     Console.WriteLine("Running ViCo auto-refresh preference smoke test...");
     await VerifyAutoRefreshPreferencesAsync(temporaryRoot);
+    Console.WriteLine("Running ViCo last-active snapshot smoke test...");
+    await VerifyLastActiveSnapshotStoreAsync(temporaryRoot);
     Console.WriteLine("Running ViCo project identity and path smoke test...");
     VerifyProjectIdentityAndPaths(temporaryRoot);
     Console.WriteLine("Running Remote Desktop profile smoke test...");
@@ -48,10 +52,14 @@ try
     await VerifyWorkstationConfigurationWriteScopeAsync();
     Console.WriteLine("Running Kanbanize refresh/subtask API smoke test...");
     await VerifyKanbanizeRefreshApiAsync(temporaryRoot);
+    Console.WriteLine("Running Kanbanize invalid-refresh cache protection smoke test...");
+    await VerifyKanbanizeInvalidRefreshProtectionAsync(temporaryRoot);
     Console.WriteLine("Running role store and update smoke test...");
     await VerifyRoleStoreAndUpdateAsync(temporaryRoot);
     Console.WriteLine("Running administration identity smoke test...");
     await VerifyAdministrationIdentityAsync();
+    Console.WriteLine("Running administration tool-directory boundary smoke test...");
+    VerifyAdministrationToolDirectories(temporaryRoot);
     Console.WriteLine("Running TIA library workflow smoke test...");
     await VerifyTiaLibraryWorkflowAsync(temporaryRoot);
     Console.WriteLine("Running TIA axis selection and result smoke test...");
@@ -60,6 +68,14 @@ try
     await VerifyTypedTiaPipeProtocolAsync();
     Console.WriteLine("Running typed TIA pipe timeout diagnostic smoke test...");
     await VerifyTypedTiaPipeTimeoutDiagnosticAsync();
+    Console.WriteLine("Running Rockwell L5X editing smoke test...");
+    await RockwellSmokeTests.VerifyAsync(temporaryRoot);
+    Console.WriteLine("Running measurable performance-mode smoke test...");
+    VerifyPerformanceMeasurement(temporaryRoot);
+    Console.WriteLine("Running project quality automation smoke test...");
+    await VerifyProjectQualityAutomationAsync(temporaryRoot);
+    Console.WriteLine("Running IBN Remote fixed in-work filter smoke test...");
+    IbnRemoteSelectionSmokeTests.Verify();
     Console.WriteLine("All ViCo core smoke tests passed.");
     return 0;
 }
@@ -200,6 +216,10 @@ static async Task VerifyLegacyWorkstationCatalogAsync(string temporaryRoot)
         "Structured project start/deadline data was not retained from the workstation cache.");
     Assert(new ViCoWorkstationSearch().Search(snapshot.Workstations, "GM9000", ViCoSearchMode.Project).Count == 1,
         "Project-oriented workstation search failed.");
+    Assert(new ViCoWorkstationSearch()
+            .SearchWithMatches(snapshot.Workstations, "GM9000", ViCoSearchMode.All)
+            .All(hit => !hit.MatchedColumns.Contains("Robotik", StringComparer.OrdinalIgnoreCase)),
+        "Robot metadata must not add the internal 'Robotik' label to ViCo search results.");
 }
 
 static void VerifyWorkstationOccupancyAndUnifiedSearch()
@@ -231,6 +251,10 @@ static void VerifyWorkstationOccupancyAndUnifiedSearch()
         "Unified search must find a Kanbanize user without selecting a separate mode.");
     Assert(search.Search(new[] { free, occupied }, "GM1000/01-001", ViCoSearchMode.All).Single() == free,
         "Unified search must continue to find project numbers.");
+    var dotted = free with { PcName = "PC1.2", DisplayName = "PC1.2" };
+    var plain = occupied with { PcName = "PC12", DisplayName = "PC12" };
+    Assert(search.Search(new[] { dotted, plain }, "1.2", ViCoSearchMode.All).Single() == dotted,
+        "A dot in the query must remain significant and must not match the punctuation-free value.");
 
     var configuration = new ViCoWorkstationConfiguration(
         701,
@@ -260,6 +284,12 @@ static void VerifyWorkstationOccupancyAndUnifiedSearch()
         ViCoSearchMode.All).Single();
     Assert(hiddenHit.MatchedColumns.Contains("Kanbanize-Details"),
         "Hidden Kanbanize details must be searchable and identify the matching logical column.");
+    Assert(search.SearchWithMatches(
+               new[] { configured },
+               "nur-in-kanbanize-details",
+               ViCoSearchMode.All,
+               new[] { "PC", "Projekt Planung", "Projekt In Arbeit" }).Count == 0,
+        "Visible-column-only search must exclude values from hidden logical columns.");
     Assert(search.Search(new[] { configured }, "GM2000, TIA V20", ViCoSearchMode.All).Single() == configured,
         "Comma-separated positive terms must use AND semantics across all searchable columns.");
     Assert(search.Search(new[] { configured }, "GM2000, !Sensor, !Alt", ViCoSearchMode.All).Single() == configured,
@@ -453,7 +483,7 @@ static void VerifyRemoteDesktopProfile()
         "GM12345",
         "zkds-simulation-p01",
         new[] { 0, 2 },
-        3);
+        new[] { 0, 1, 2 });
     Assert(lines.Contains("username:s:zkds-simulation-p01"),
         "The normalized Kanbanize user was not written to the RDP profile.");
     Assert(lines.Contains("prompt for credentials:i:0"),
@@ -474,12 +504,27 @@ static void VerifyRemoteDesktopProfile()
         "GM12345",
         string.Empty,
         new[] { 0 },
-        1,
+        new[] { 0 },
         promptForCredentials: true);
     Assert(promptedLines.Contains("prompt for credentials:i:1"),
         "The separate RDP button must open the Windows credential dialog.");
     Assert(!promptedLines.Any(line => line.StartsWith("username:s:", StringComparison.OrdinalIgnoreCase)),
         "The prompted RDP profile must not inject an automatic user name.");
+
+    var machineSpecificIds = RemoteDesktopProfileBuilder.Build(
+        "GM12345",
+        "zkds-simulation-p01",
+        new[] { 7, 4 },
+        new[] { 4, 7, 9 });
+    Assert(machineSpecificIds.Contains("selectedmonitors:s:7,4"),
+        "RDP must preserve the selected mstsc /l IDs and their primary-monitor order.");
+
+    var monitorOptions = new[] { 0, 4, 5 }
+        .Select((id, index) => new RemoteDesktopMonitorOption(id, index == 0))
+        .ToArray();
+    Assert(monitorOptions.Select(option => option.Id).SequenceEqual(new[] { 0, 4, 5 }) &&
+           monitorOptions[0].IsSelected && !monitorOptions[1].IsSelected,
+        "The dynamic monitor selector must expose IDs 4, 5 and higher without a four-monitor cap.");
 }
 
 static async Task VerifyRoleStoreAndUpdateAsync(string temporaryRoot)
@@ -889,16 +934,18 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
 
     Assert(handler.Requests.Any(url =>
                url.StartsWith("/api/v2/cards?board_ids=1541", StringComparison.Ordinal) &&
-               url.Contains("fields=card_id,title,deadline", StringComparison.OrdinalIgnoreCase)),
-        "The workstation card query must explicitly request deadline without positional fields.");
+               !url.Contains("fields=", StringComparison.OrdinalIgnoreCase)),
+        "The workstation card query must retain lane/column data by avoiding the tenant-incompatible fields reduction.");
     Assert(handler.Requests.Any(url => url.Contains("expand=custom_fields", StringComparison.OrdinalIgnoreCase)) &&
            handler.Requests.Contains("/api/v2/cards/501/subtasks", StringComparer.Ordinal),
         "The workstation query must load project start fields while the authoritative card-level endpoint remains responsible for KONFIGURATION subtasks.");
+    Assert(handler.AllRequestsDisableCaching,
+        "A manual board refresh must bypass intermediary HTTP caches so changed Kanbanize cards are visible immediately.");
 
     using var cache = JsonDocument.Parse(await File.ReadAllTextAsync(
         Path.Combine(cacheRoot, "WorkstationBoardCache.json")));
     var cards = cache.RootElement.GetProperty("cards");
-    Assert(cards.GetArrayLength() == 2,
+    Assert(cards.GetArrayLength() == 3,
         "All cards returned for the workstation lane must be retained in the structured cache.");
     var configuration = cards.EnumerateArray().Single(card => card.GetProperty("id").GetInt32() == 501);
     Assert(configuration.GetProperty("subtasks").GetArrayLength() == 2 &&
@@ -909,6 +956,68 @@ static async Task VerifyKanbanizeRefreshApiAsync(string temporaryRoot)
     Assert(project.GetProperty("startDate").GetDateTimeOffset().Day == 1 &&
            project.GetProperty("deadline").GetDateTimeOffset().Day == 30,
         "Kanbanize project dates were not retained in the structured workstation cache.");
+    var detailProject = cards.EnumerateArray().Single(card => card.GetProperty("id").GetInt32() == 503);
+    Assert(detailProject.GetProperty("deadline").GetDateTimeOffset().Day == 15 &&
+           detailProject.GetProperty("laneId").GetString() == "28125" &&
+           handler.Requests.Contains("/api/v2/cards/503", StringComparer.Ordinal) &&
+           handler.Requests.Contains("/api/v2/cards/503?fields=card_id,deadline", StringComparer.Ordinal),
+        "A position/deadline omitted by the list endpoint must be recovered from the card detail endpoints.");
+}
+
+static async Task VerifyLastActiveSnapshotStoreAsync(string temporaryRoot)
+{
+    var path = Path.Combine(temporaryRoot, "vico-last-active.json");
+    var store = new JsonViCoLastActiveSnapshotStore(path);
+    var updatedAt = new DateTimeOffset(2026, 9, 29, 10, 15, 0, TimeSpan.FromHours(2));
+    var workstation = new ViCoWorkstation(
+        "GM17128 Testplatz",
+        "GM17128",
+        "test-user",
+        "TIA V20",
+        string.Empty,
+        string.Empty,
+        new[] { "[W] GM17128/01-100" },
+        new[] { "[W] GM17128/01-100" });
+
+    await store.SaveAsync(new ViCoLastActiveSnapshot(updatedAt, new[] { workstation }));
+    var loaded = await store.LoadAsync();
+
+    Assert(loaded is not null, "The last-active workstation snapshot was not persisted.");
+    Assert(loaded!.UpdatedAt == updatedAt, "The last-active snapshot timestamp changed during persistence.");
+    Assert(loaded.Workstations.Count == 1 && loaded.Workstations[0].PcName == "GM17128",
+        "The last-active workstation snapshot did not restore the workstation list.");
+
+    await store.SaveAsync(new ViCoLastActiveSnapshot(updatedAt.AddMinutes(5), Array.Empty<ViCoWorkstation>()));
+    loaded = await store.LoadAsync();
+    Assert(loaded!.Workstations.Count == 1,
+        "An empty refresh must not overwrite the last non-empty workstation snapshot.");
+}
+
+static async Task VerifyKanbanizeInvalidRefreshProtectionAsync(string temporaryRoot)
+{
+    var cacheRoot = Path.Combine(temporaryRoot, "kanbanize-invalid-refresh");
+    Directory.CreateDirectory(cacheRoot);
+    var lanesPath = Path.Combine(cacheRoot, "AllPCLaneInfosWithChilds.txt");
+    var cardsPath = Path.Combine(cacheRoot, "AllCardsOfPCsV2.txt");
+    await File.WriteAllLinesAsync(lanesPath, new[] { "old-lane", "GM11111 Tool PC" });
+    await File.WriteAllLinesAsync(cardsPath, new[] { "#Working#GM1000/01-001", "old-lane" });
+
+    using var handler = new KanbanizeRefreshHttpMessageHandler(emptyWorkstationCards: true);
+    using var client = new HttpClient(handler);
+    var rejected = false;
+    try
+    {
+        await new KanbanizeRefreshService(client, "test-only-key", cacheRoot).RefreshAsync();
+    }
+    catch (InvalidDataException exception)
+    {
+        rejected = exception.Message.Contains("nicht überschrieben", StringComparison.OrdinalIgnoreCase);
+    }
+
+    Assert(rejected, "An empty/unjoinable Businessmap response must be rejected before replacing the ViCo cache.");
+    Assert((await File.ReadAllLinesAsync(lanesPath)).SequenceEqual(new[] { "old-lane", "GM11111 Tool PC" }) &&
+           (await File.ReadAllLinesAsync(cardsPath)).SequenceEqual(new[] { "#Working#GM1000/01-001", "old-lane" }),
+        "A rejected Kanbanize refresh replaced a previously usable cache.");
 }
 
 static async Task VerifyAdministrationIdentityAsync()
@@ -932,6 +1041,18 @@ static async Task VerifyAdministrationIdentityAsync()
         "The mandatory lutzma Level9 role must be present in the administration view.");
 }
 
+static void VerifyAdministrationToolDirectories(string temporaryRoot)
+{
+    var directories = VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.CreateDefault();
+    Assert(directories.Count >= 6 &&
+           directories.All(item => VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.IsApprovedPath(item.Path)),
+        "All administration directory rows must be explicitly allow-listed before deletion is enabled.");
+    Assert(!VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.IsApprovedPath(temporaryRoot) &&
+           !VIBN_Tools.Application.VM.ManagedToolDirectoryCatalog.IsApprovedPath(
+               Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
+        "Administration must reject arbitrary or broad user folders.");
+}
+
 static async Task VerifyTiaLibraryWorkflowAsync(string temporaryRoot)
 {
     var library = Path.Combine(temporaryRoot, "library");
@@ -945,6 +1066,14 @@ static async Task VerifyTiaLibraryWorkflowAsync(string temporaryRoot)
 
     var client = new FakeTiaBridgeClient();
     var service = new TiaLibraryService(client);
+    var standaloneAxisArtifacts = await service.CreateAxisArtifactsAsync(
+        Path.Combine(temporaryRoot, "axis-artifacts"),
+        ["AxisX", "AxisY"],
+        "V18");
+    Assert(standaloneAxisArtifacts.AxisCount == 2 &&
+           File.Exists(standaloneAxisArtifacts.DataBlockPath) &&
+           File.Exists(standaloneAxisArtifacts.FunctionPath),
+        "The explicit TIA axis button must be able to create AxisDB/AxisFC without importing a library.");
     await service.ImportAsync(library, configureAxes: true, "V18");
 
     Assert(client.Saved, "TIA library import should save the project.");
@@ -962,6 +1091,23 @@ static async Task VerifyTiaLibraryWorkflowAsync(string temporaryRoot)
         "TIA block export structure is incorrect.");
     Assert(File.Exists(Path.Combine(exportPath, "_Datatype", "VICOBIB", "Type.xml")),
         "TIA data type export structure is incorrect.");
+}
+
+static void VerifyPerformanceMeasurement(string temporaryRoot)
+{
+    var service = new PerformanceMeasurementService(
+        Path.Combine(temporaryRoot, "performance"),
+        enabled: true);
+    using (service.Start("Test", "Successful operation"))
+    {
+    }
+    using (var failed = service.Start("Test", "Failed operation"))
+        failed.MarkFailed();
+    var summaries = service.GetSummaries();
+    Assert(summaries.Count == 2 && summaries.Sum(item => item.FailureCount) == 1,
+        "Performance mode must aggregate successful and failed workflows separately.");
+    Assert(Directory.GetFiles(service.LogDirectory, "performance-*.jsonl").Length == 1,
+        "Performance mode must persist JSONL measurements when explicitly enabled.");
 }
 
 static void VerifyTiaAxisSelectionModel()
@@ -1021,7 +1167,7 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
         using var reader = new StreamReader(server, leaveOpen: true);
         using var writer = new StreamWriter(server, leaveOpen: true) { AutoFlush = true };
 
-        for (var requestIndex = 0; requestIndex < 5; requestIndex++)
+        for (var requestIndex = 0; requestIndex < 9; requestIndex++)
         {
             var requestLine = await reader.ReadLineAsync();
             var request = JsonSerializer.Deserialize<TiaRequestEnvelope>(requestLine!);
@@ -1031,6 +1177,10 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
                 1 => TiaCommands.ListHardware,
                 2 => TiaCommands.ListAxes,
                 3 => TiaCommands.ConfigureAxes,
+                4 => TiaCommands.ExportAxisConfigurations,
+                5 => TiaCommands.ImportAxisConfigurations,
+                6 => TiaCommands.ExportAxisInterfaceWorkbook,
+                7 => TiaCommands.CompileSelectedPlc,
                 _ => TiaCommands.Close
             };
             Assert(request?.Command == expectedCommand, $"Typed TIA pipe command '{expectedCommand}' was not received.");
@@ -1097,6 +1247,43 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
                             ]
                         }
                     }),
+                    4 => JsonSerializer.Serialize(new TiaAxisConfigurationTransferResult
+                    {
+                        AxisCount = 1,
+                        ParameterCount = 42,
+                        FileCount = 1,
+                    }),
+                    5 => JsonSerializer.Serialize(new TiaAxisConfigurationTransferResult
+                    {
+                        AxisCount = 1,
+                        ParameterCount = 40,
+                        FileCount = 1,
+                        Warnings = ["Two read-only parameters"],
+                    }),
+                    6 => JsonSerializer.Serialize(new TiaAxisInterfaceExportResult
+                    {
+                        AxisCount = 1,
+                        FilePath = "C:\\Exchange\\AxisValueTags.xlsx",
+                    }),
+                    7 => JsonSerializer.Serialize(new TiaCompileResult
+                    {
+                        TargetName = "PLC_1",
+                        TargetType = "Device",
+                        State = "Warning",
+                        ErrorCount = 0,
+                        WarningCount = 1,
+                        DurationMilliseconds = 1234,
+                        Messages =
+                        [
+                            new TiaCompileMessage
+                            {
+                                Path = "PLC_1/Program blocks/FB1",
+                                State = "Warning",
+                                WarningCount = 1,
+                                Description = "Test warning",
+                            },
+                        ],
+                    }),
                     _ => JsonSerializer.Serialize((object?)null)
                 }
             };
@@ -1131,6 +1318,18 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
         var configuredAxes = await client.ConfigureAxesAsync(new[] { axes[0].Id });
         Assert(configuredAxes.Count == 1 && configuredAxes[0].ParameterResults.Single().Success,
             "Selective TIA axis configuration results must survive the typed pipe boundary.");
+        var exported = await client.ExportAxisConfigurationsAsync("C:\\Exchange");
+        Assert(exported.AxisCount == 1 && exported.ParameterCount == 42 && exported.FileCount == 1,
+            "TIA TO export results must survive the typed pipe boundary.");
+        var imported = await client.ImportAxisConfigurationsAsync("C:\\Exchange");
+        Assert(imported.AxisCount == 1 && imported.ParameterCount == 40 && imported.Warnings.Count == 1,
+            "TIA TO import diagnostics must survive the typed pipe boundary.");
+        var interfaceExport = await client.ExportAxisInterfaceWorkbookAsync("C:\\Exchange\\AxisValueTags.xlsx");
+        Assert(interfaceExport.AxisCount == 1 && interfaceExport.FilePath.EndsWith("AxisValueTags.xlsx", StringComparison.Ordinal),
+            "TIA axis interface workbook results must survive the typed pipe boundary.");
+        var compile = await client.CompileSelectedPlcAsync();
+        Assert(compile.Success && compile.WarningCount == 1 && compile.Messages.Single().Path.Contains("FB1", StringComparison.Ordinal),
+            "TIA compile evidence must survive the typed pipe boundary.");
     }
     finally
     {
@@ -1138,6 +1337,103 @@ static async Task VerifyTypedTiaPipeProtocolAsync()
     }
 
     await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+}
+
+static async Task VerifyProjectQualityAutomationAsync(string temporaryRoot)
+{
+    var qualityRoot = Path.Combine(temporaryRoot, "quality");
+    Directory.CreateDirectory(qualityRoot);
+    var requirementsPath = Path.Combine(qualityRoot, "Requirements.xml");
+    var containerPath = Path.Combine(qualityRoot, "Container.xml");
+    await File.WriteAllTextAsync(requirementsPath, "<Requirements><Type Name=\"Cylinder\" /></Requirements>");
+    await File.WriteAllTextAsync(containerPath,
+        "<Root><Container><Component>Cylinder_1</Component><Type>Cylinder</Type>" +
+        "<Entry><ID>S1</ID><Signal>Home</Signal><Slot>PLC_IN_HOME</Slot><Address>E0.0</Address><DataType>Bool</DataType></Entry>" +
+        "<Entry><ID>S2</ID><Signal>Move</Signal><Slot>PLC_OUT_MOVE</Slot><Address>A0.0</Address><DataType>Bool</DataType></Entry>" +
+        "</Container></Root>");
+
+    var profilePath = Path.Combine(qualityRoot, "profiles.json");
+    var profileStore = new JsonProjectProfileStore(profilePath);
+    var profile = ProjectProfile.Create("Quality Test") with
+    {
+        ProjectRoot = qualityRoot,
+        RequirementsPath = requirementsPath,
+        ContainerPath = containerPath,
+        AllowedContainerTypes = ["Cylinder"],
+        NamingRules = new Dictionary<string, string> { ["Signal"] = "^[A-Z].+$" },
+        SignalAddressRanges = ["E0-E9", "A0-A9"],
+        SimulationTools =
+        [
+            new SimulationToolConfiguration("Emulate3D", true, qualityRoot, containerPath),
+        ],
+    };
+    profileStore.Save(new ProjectProfileCollection(profile.Id, [profile]));
+    Assert(profileStore.Load().Profiles.Single().ContainerPath == containerPath,
+        "Project profiles must roundtrip atomically.");
+
+    var signalReader = new ContainerSignalObservationReader();
+    var observations = signalReader.Read(containerPath);
+    Assert(observations.Count == 2 && observations.Any(item => item.SignalId == "S1" && item.Address == "E0.0"),
+        "Container signals must be read namespace-independently.");
+    var registryPath = Path.Combine(qualityRoot, "signals.json");
+    var registry = new SignalIdentityRegistry(registryPath);
+    var initial = registry.Reconcile(observations);
+    Assert(initial.Added == 2 && initial.Conflicts == 0 && File.Exists(registryPath),
+        "The first signal reconciliation must persist stable identities.");
+    var changed = registry.Reconcile(observations.Select(item => item.SignalId == "S1" ? item with { Address = "E4.0" } : item));
+    Assert(changed.Updated == 1 && changed.Identities.Single(item => item.SignalId == "S1").PreviousAddresses.Contains("E0.0"),
+        "Address changes must preserve signal identity and history.");
+    var conflict = registry.Reconcile(observations.Select(item => item.SignalId == "S1" ? item with { DataType = "DInt" } : item), persist: false);
+    Assert(conflict.Conflicts == 1 && conflict.Findings.Any(item => item.Code == "SIGNAL_IDENTITY_CONFLICT"),
+        "Datatype identity conflicts must not be silently merged.");
+
+    var scenarios = new SimulationTestScenarioGenerator().Generate(containerPath);
+    Assert(scenarios.Scenarios.Count == 1 && scenarios.Scenarios[0].RequiresDomainReview,
+        "A cylinder must create a reviewable neutral simulation scenario.");
+
+    var adapter = new ExternalSimulationReadinessAdapter(
+        "Emulate3D", "Emulate3D", [SimulationCapability.DiscoverModel]);
+    var probe = await adapter.ProbeAsync(profile);
+    Assert(probe.IsAvailable && !probe.IsLiveVerified,
+        "External adapter readiness must never be presented as a live API test.");
+
+    var evidenceStore = new QualityEvidenceStore(Path.Combine(qualityRoot, "evidence.json"));
+    var evidenceChanged = false;
+    evidenceStore.EvidenceChanged += (_, _) => evidenceChanged = true;
+    evidenceStore.Upsert(new QualityEvidence("TIA Compile", "PLC_1", QualityStatus.Passed,
+        "0 errors", DateTimeOffset.UtcNow, []));
+    Assert(evidenceChanged, "Quality evidence changes must be observable by an already open Quality Gate page.");
+    var gate = new ProjectQualityGateService(adapters: [adapter], evidenceStore: evidenceStore);
+    var gateResult = await gate.RunAsync(profile);
+    Assert(gateResult.Report.OverallStatus == QualityStatus.Warning && gateResult.Report.GeneratedScenarioCount == 1 &&
+           gateResult.Report.Evidence.Single().Area == "TIA Compile" &&
+           gateResult.Report.Findings.Any(item => item.Code == "PROFILE_POLICY_PASSED"),
+        "The central quality gate must combine structural checks, scenarios, adapters and evidence.");
+    evidenceStore.Upsert(new QualityEvidence("Alter Lauf", "PLC_OLD", QualityStatus.Passed,
+        "historical", DateTimeOffset.UtcNow.AddDays(-2), []));
+    var gateWithStaleEvidence = await gate.RunAsync(profile);
+    Assert(gateWithStaleEvidence.Report.Findings.Any(item => item.Code == "EVIDENCE_STALE"),
+        "Evidence older than 24 hours must be marked stale instead of being presented as current.");
+    var reportPaths = new QualityGateReportWriter().Write(gateResult.Report, Path.Combine(qualityRoot, "reports"));
+    Assert(File.Exists(reportPaths.JsonPath) && File.Exists(reportPaths.HtmlPath),
+        "Quality Gate JSON and HTML reports must be written.");
+
+    var manifestBuilder = new GenerationManifestBuilder();
+    var before = new[] { new GenerationObjectObservation("C1", "N1", "Signal", "Home", "Planned", string.Empty) };
+    var after = new[] { new GenerationObjectObservation("C1", "N1", "Signal", "Home", "Verified", "fee-guid") };
+    var manifest = manifestBuilder.Build(containerPath, "fingerprint", DateTimeOffset.UtcNow, true,
+        "done", before, after, []);
+    Assert(manifest.Items.Single().Action == GenerationManifestAction.CreatedOrCompleted && manifest.UnresolvedContainerIds.Count == 0,
+        "Generation manifests must classify completed work.");
+    var unfinished = manifestBuilder.Build(containerPath, "unfinished", DateTimeOffset.UtcNow, false,
+        "pending", before, before, []);
+    Assert(unfinished.Items.Single().Action == GenerationManifestAction.Pending &&
+           unfinished.UnresolvedContainerIds.SequenceEqual(["C1"]),
+        "An unchanged planned node must remain resumable rather than appearing complete.");
+    var manifestStore = new GenerationManifestStore(Path.Combine(qualityRoot, "manifests"));
+    _ = manifestStore.Save(manifest);
+    Assert(manifestStore.LoadLatest("fingerprint")?.Items.Count == 1,
+        "The latest matching generation manifest must be resumable.");
 }
 
 static async Task VerifyTypedTiaPipeTimeoutDiagnosticAsync()
@@ -1237,9 +1533,10 @@ sealed class RecordingHttpMessageHandler : HttpMessageHandler
     }
 }
 
-sealed class KanbanizeRefreshHttpMessageHandler : HttpMessageHandler
+sealed class KanbanizeRefreshHttpMessageHandler(bool emptyWorkstationCards = false) : HttpMessageHandler
 {
     public List<string> Requests { get; } = new();
+    public bool AllRequestsDisableCaching { get; private set; } = true;
 
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -1248,11 +1545,21 @@ sealed class KanbanizeRefreshHttpMessageHandler : HttpMessageHandler
         cancellationToken.ThrowIfCancellationRequested();
         var url = request.RequestUri?.PathAndQuery ?? string.Empty;
         Requests.Add(url);
+        AllRequestsDisableCaching &= request.Headers.CacheControl?.NoCache == true &&
+                                     request.Headers.CacheControl.NoStore &&
+                                     request.Headers.Pragma.Any(value =>
+                                         string.Equals(value.Name, "no-cache", StringComparison.OrdinalIgnoreCase));
         var json = url switch
         {
             "/api/v2/boards/1541/lanes" => "{\"data\":[{\"lane_id\":28125,\"name\":\"GM12345 Tool PC\"}]}",
             var value when value.StartsWith("/api/v2/cards?board_ids=1541", StringComparison.Ordinal) =>
-                "{\"data\":{\"data\":[{\"card_id\":501,\"lane_id\":28125,\"column_id\":29373,\"title\":\"Arbeitsplatz KONFIGURATION\",\"subtasks\":[{\"card_id\":601,\"description\":\"STANDORT: Werk 1\"}]},{\"card_id\":502,\"lane_id\":28125,\"column_id\":29375,\"title\":\"GM9000/01-001\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-01T00:00:00Z\"}],\"deadline\":\"2026-09-30T00:00:00Z\"}],\"pagination\":{\"all_pages\":1}}}",
+                emptyWorkstationCards
+                    ? "{\"data\":{\"data\":[],\"pagination\":{\"all_pages\":1}}}"
+                    : "{\"data\":{\"data\":[{\"card_id\":501,\"lane_id\":28125,\"column_id\":29373,\"title\":\"Arbeitsplatz KONFIGURATION\",\"subtasks\":[{\"card_id\":601,\"description\":\"STANDORT: Werk 1\"}]},{\"card_id\":502,\"lane_id\":28125,\"column_id\":29375,\"title\":\"GM9000/01-001\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-01T00:00:00Z\"}],\"deadline\":\"2026-09-30T00:00:00Z\"},{\"card_id\":503,\"title\":\"GM9000/01-002\",\"custom_fields\":[{\"field_id\":508,\"value\":\"2026-09-02T00:00:00Z\"}]}],\"pagination\":{\"all_pages\":1}}}",
+            "/api/v2/cards/503" =>
+                "{\"data\":{\"card_id\":503,\"title\":\"GM9000/01-002\",\"current_position\":{\"lane_id\":28125,\"column_id\":29374}}}",
+            "/api/v2/cards/503?fields=card_id,deadline" =>
+                "{\"data\":{\"card_id\":503,\"deadline\":{\"value\":\"2026-10-15T00:00:00Z\"}}}",
             "/api/v2/cards/501/subtasks" =>
                 "{\"data\":{\"subtasks\":{\"601\":{\"subtask_id\":601,\"description\":\"STANDORT: Werk 1\"},\"602\":{\"description\":{\"text\":\"SW: TIA V20\"}}}}}",
             var value when value.StartsWith("/api/v2/cards?board_ids=846", StringComparison.Ordinal) =>

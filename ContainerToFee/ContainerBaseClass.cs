@@ -107,6 +107,20 @@ namespace VIBN_Tools.ContainerToFee
         public IEnumerable<FeeInterfaceSignal> EnumerateAssignedSignals() =>
             _signalsBySlot.Values.SelectMany(signals => signals);
 
+        /// <summary>
+        /// Reports the actual parsed slot content even when a scalar signal
+        /// property intentionally remains empty because a PLC_IN slot is
+        /// represented by multiple MoveBit fan-in branches.
+        /// </summary>
+        public bool HasAssignedSignalsForProperty(string propertyName)
+        {
+            var slots = SlotAssignment
+                .Where(item => string.Equals(item.Value?.Name, propertyName, StringComparison.Ordinal))
+                .Select(item => item.Key);
+            return slots.Any(slot =>
+                _signalsBySlot.TryGetValue(slot, out var signals) && signals.Count > 0);
+        }
+
         public IReadOnlyList<PlcInputFanInAssignment> GetAdditionalInputFanIns() =>
             _additionalInputFanIns
                 .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)

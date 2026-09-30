@@ -4,9 +4,10 @@ namespace VIBN_Tools.Core.ViCo;
 public sealed record ViCoAutoRefreshSettings(
     int IntervalMinutes,
     bool ShowExtendedInformation = false,
-    IReadOnlyList<string>? VisibleColumns = null)
+    IReadOnlyList<string>? VisibleColumns = null,
+    bool SearchVisibleColumnsOnly = false)
 {
-    public static ViCoAutoRefreshSettings Default { get; } = new(5, false, null);
+    public static ViCoAutoRefreshSettings Default { get; } = new(5, false, null, false);
 }
 
 public static class ViCoAutoRefreshPolicy

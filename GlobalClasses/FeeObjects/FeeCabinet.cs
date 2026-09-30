@@ -34,7 +34,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
         public Task CheckObjectIssuesAsync(IEnumerable<FeeAbstractObject> newObjects)
         {
-            throw new NotImplementedException();
+            return Task.CompletedTask;
         }
 
 

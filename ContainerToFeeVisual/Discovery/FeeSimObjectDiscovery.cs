@@ -1,14 +1,14 @@
-using FS.SDK;
-using FS.SDK.Scene.Objects;
-using VIBN_Tools.ContainerToFee;
+using System.Xml.Linq;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
+using static VIBN_Tools.GlobalClasses.Interfaces;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
 
 internal sealed record VisualFeeDiscoveryResult(
     IReadOnlyList<VisualFeeObject> Objects,
-    IReadOnlyDictionary<string, FeeAbstractObject> RuntimeObjects);
+    IReadOnlyDictionary<string, FeeAbstractObject> RuntimeObjects,
+    IReadOnlyList<VisualFeeContainerObject> ContainerObjects);
 
 /// <summary>Reads selectable FEE objects and keeps SDK instances out of the view model.</summary>
 internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
@@ -16,13 +16,15 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
     public async Task<VisualFeeDiscoveryResult> DiscoverAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var runtimeObjects = (await ContainerToFeeService.GetSimObjectsFromSimultionAsync())
-            .Where(item => item is not null)
-            .ToList();
-
-        // The unchanged legacy search omits Button although Button_Container
-        // exposes a target. Add it only for the new visual workflow.
-        runtimeObjects.AddRange(await ReadAdditionalTypeAsync(nameof(Button), cancellationToken));
+        // Reuse the canonical batched snapshot used by ModelValidation. The
+        // previous parallel type queries raced the stateful vendor client and
+        // could leave large projects waiting indefinitely.
+        await Services.FeeObjects.UpdateFeeDataAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+        var allObjects = Services.FeeObjects.AllFeeObjects ?? [];
+        var runtimeObjects = allObjects
+            .Where(item => item is IAssignableSimObject)
+            .ToArray();
 
         var uniqueRuntimeObjects = runtimeObjects
             .Where(item => !string.IsNullOrWhiteSpace(item.GuidString))
@@ -31,9 +33,16 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.FeeType, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        // FeeObjectService already populated the slot assignments from its XML
+        // snapshot, so a second project-wide XML read is unnecessary.
 
         var byId = new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
         var objects = new List<VisualFeeObject>(uniqueRuntimeObjects.Length);
+        var duplicateIdentities = uniqueRuntimeObjects
+            .GroupBy(CreateIdentity, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var runtimeObject in uniqueRuntimeObjects)
         {
             var id = CreateFeeObjectId(runtimeObject.GuidString);
@@ -44,15 +53,55 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 runtimeObject.Name ?? string.Empty,
                 runtimeObject.GetType().FullName ?? runtimeObject.GetType().Name,
                 runtimeObject.FeeType ?? string.Empty,
-                GetAssignableTypeNames(runtimeObject.GetType())));
+                GetAssignableTypeNames(runtimeObject.GetType()),
+                runtimeObject.Parent?.GuidString ?? string.Empty,
+                runtimeObject.Parent?.Name ?? string.Empty,
+                duplicateIdentities.Contains(CreateIdentity(runtimeObject))));
         }
 
-        logger.Information($"{objects.Count} zuweisbare FEE-SimObjects gelesen.");
-        return new VisualFeeDiscoveryResult(objects, byId);
+        var containerObjects = allObjects.OfType<FeeLogic>()
+            .Select(item => new VisualFeeContainerObject(
+                item.Guid.ToString("D"),
+                item.Name ?? string.Empty,
+                VisualFeeContainerObjectKind.Logic,
+                item.LogicDefinitionName ?? string.Empty))
+            .Concat(allObjects.OfType<FeeCabinetElement>().Select(item => new VisualFeeContainerObject(
+                item.Guid.ToString("D"),
+                item.Name ?? string.Empty,
+                VisualFeeContainerObjectKind.CabinetElement,
+                item.ElementType ?? string.Empty)))
+            .Concat(allObjects.OfType<FeeCabinet>().Select(item => new VisualFeeContainerObject(
+                item.Guid.ToString("D"),
+                item.Name ?? string.Empty,
+                VisualFeeContainerObjectKind.Cabinet,
+                string.Empty)))
+            .ToArray();
+
+        logger.Information(
+            $"{objects.Count} zuweisbare FEE-SimObjects und {containerObjects.Length} vorhandene Logik-/Cabinet-Objekte gelesen.");
+        return new VisualFeeDiscoveryResult(objects, byId, containerObjects);
     }
 
     internal static string CreateFeeObjectId(string guidString) =>
         $"fee:{guidString.Trim().ToLowerInvariant()}";
+
+    internal static Dictionary<string, Guid> ParseSlotAssignments(XElement xml)
+    {
+        var slots = xml.Element("Slots") ?? xml.Element("IOSlots") ??
+                    xml.Descendants("Slots").FirstOrDefault() ??
+                    xml.Descendants("IOSlots").FirstOrDefault();
+        if (slots is null)
+            return new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        return slots.Descendants("Assignment")
+            .Select(item => new
+            {
+                Name = item.Element("SlotName")?.Value?.Trim() ?? string.Empty,
+                Guid = Guid.TryParse(item.Element("AssignedGuid")?.Value, out var guid) ? guid : Guid.Empty,
+            })
+            .Where(item => item.Name.Length > 0 && item.Guid != Guid.Empty)
+            .GroupBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Guid, StringComparer.OrdinalIgnoreCase);
+    }
 
     private static IReadOnlyCollection<string> GetAssignableTypeNames(Type runtimeType)
     {
@@ -72,32 +121,11 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
         return names;
     }
 
-    private static async Task<IReadOnlyList<FeeAbstractObject>> ReadAdditionalTypeAsync(
-        string objectType,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var guids = await Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(objectType);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (!guids.Any())
-            return [];
+    private static string CreateIdentity(FeeAbstractObject item) => string.Join(
+        "\u001f",
+        item.Name?.Trim() ?? string.Empty,
+        item.GetType().FullName ?? item.GetType().Name,
+        item.FeeType?.Trim() ?? string.Empty,
+        item.Parent?.GuidString?.Trim() ?? string.Empty);
 
-        var guidArray = guids.ToArray();
-        var names = (await Services.ApiInstance.Object.GetPropertiesAsync(
-            guidArray,
-            nameof(SceneObject.Name))).ToArray();
-        var types = (await Services.ApiInstance.Object.GetPropertiesAsync(
-            guidArray,
-            nameof(SceneObject.Type))).ToArray();
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return guidArray
-            .Zip(names, (guid, name) => new { Guid = guid, Name = name })
-            .Zip(types, (item, type) => FeeObjectFactory.Create(
-                type,
-                Services.ApiInstance.XmlHelper.ConvertToString(item.Name),
-                item.Guid))
-            .Where(item => item is not null)
-            .ToArray()!;
-    }
 }

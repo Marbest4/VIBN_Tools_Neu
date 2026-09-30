@@ -49,6 +49,14 @@ Separate IBN-Remote-Einzeldatei (kein FEE-SDK und kein Inno Setup erforderlich):
 .\scripts\Publish-IbnRemote.ps1
 ```
 
+Das Skript fragt Filter, API-Key und RDP-Passwort in der Konsole ab; die beiden Zugangswerte werden verdeckt eingegeben. Alternativ können die Buildwerte für automatisierte Testläufe bewusst als Parameter übergeben werden, zum Beispiel mit `-InWorkFilter 'GM7283' -ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'`. Bei der interaktiven Eingabe gelangen die Werte nicht in Shell-Verlauf oder `dotnet`-Befehlszeile, stehen danach aber weiterhin auslesbar in der EXE. Das ist eine Konfigurationsmöglichkeit, kein Secret-Speicher.
+
+Das Skript schreibt den Filter als Assembly-Metadatum in die erzeugte EXE. Auf ausdrücklichen Wunsch enthält die IBN-EXE außerdem die **absichtlich ungültigen Testplatzhalter** `12345` als Kanbanize-API-Key und `67890` als RDP-Passwort. Dadurch kann das Verhalten einer vollständig vorkonfigurierten Einzeldatei getestet werden, ohne echte Zugangsdaten einzuchecken. Zur Laufzeit hält der Prozess den API-Key nur im Arbeitsspeicher. Das RDP-Passwort wird unmittelbar vor dem RDP-Start temporär über `cmdkey` hinterlegt und anschließend wieder entfernt.
+
+Wichtig: Assembly-Metadaten und andere in einer .NET-EXE eingebettete Zeichenfolgen sind auslesbar. Diese Technik ist daher **nur für die genannten ungültigen Platzhalter** zulässig und kein sicherer Speicher für echte Zugangsdaten. Für eine produktive Verteilung mit echten Werten muss wieder ein benutzer- oder gerätegebundener Secret-Speicher (beispielsweise Windows Credential Manager beziehungsweise DPAPI) verwendet werden.
+
+Zur Laufzeit besitzt IBN Remote keine Oberfläche zum Ändern von Zugangsdaten oder Kanbanize-Daten. Es aktualisiert Kanbanize ausschließlich lesend, filtert nur die Projekttitel der Spalte `In Arbeit` und zeigt ausschließlich PC, Online, In Arbeit, Ende In Arbeit, Standort, Sonstiges und Software. RDP verwendet den Benutzer aus KONFIGURATION und den eingebetteten Testplatzhalter automatisch.
+
 `Build-Installer.ps1` führt Restore und self-contained Publish genau einmal aus und ruft danach den Inno-Compiler auf. Dabei wird kein zwischenzeitliches ZIP mehr erzeugt. Inno Setup 6 ist ausschließlich der Verpacker für Dateien, Verknüpfungen und Deinstallation; die Anwendung wird bereits vorher durch `dotnet publish` gebaut. Für das portable ZIP ist Inno Setup nicht erforderlich.
 
 Ergebnisse:
@@ -66,3 +74,7 @@ Ergebnisse:
 4. SHA-256 veröffentlicht und geprüft.
 5. Installation auf sauberem Windows-x64-PC getestet.
 6. Start, Konfiguration, ViCo/Kanbanize, TIA-Bridge und Deinstallation getestet.
+
+## Produktversion
+
+`VibnToolsVersion` in `Directory.Build.props` ist die einzige Versionsquelle für `VIBN_Tools.exe`, `VIBN_Tools_IBN.exe` und den durch `Build-Installer.ps1` erzeugten Installer. Die Version wird bewusst in dem Release-Commit erhöht: Patch für kompatible Fehlerkorrekturen, Minor für neue Funktionen, Major für inkompatible Änderungen. Die Hauptoberfläche liest die Dateiversion der laufenden EXE und zeigt zusätzlich deren letzten Schreibzeitpunkt als Buildzeit an.

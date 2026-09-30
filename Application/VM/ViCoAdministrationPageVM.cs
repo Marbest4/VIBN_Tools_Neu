@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
 using VIBN_Tools.Core.ViCo;
 using VIBN_Tools.GlobalClasses;
@@ -45,6 +46,7 @@ public sealed class ViCoAdministrationPageVM : MvvmBase
         SaveRoleCommand = GetCommandBindingAsync(SaveSelectedRoleAsync);
         RemoveUserCommand = GetCommandBindingAsync(RemoveSelectedUserAsync);
         OpenUpdateCommand = GetCommandBinding(OpenUpdate);
+        RefreshToolDirectories();
     }
 
     public ObservableCollection<UpcomingMeeting> Meetings { get; } = new();
@@ -52,6 +54,8 @@ public sealed class ViCoAdministrationPageVM : MvvmBase
     public ObservableCollection<ViCoUserRole> RoleEntries { get; } = new();
 
     public ObservableCollection<string> RoleLevels { get; } = new();
+
+    public ObservableCollection<ManagedToolDirectoryVM> ToolDirectories { get; } = new();
 
     public ICommand RefreshCommand { get; }
 
@@ -62,6 +66,64 @@ public sealed class ViCoAdministrationPageVM : MvvmBase
     public ICommand RemoveUserCommand { get; }
 
     public ICommand OpenUpdateCommand { get; }
+
+    public void RefreshToolDirectories()
+    {
+        ToolDirectories.ReplaceWith(ManagedToolDirectoryCatalog.CreateDefault()
+            .Select(item => new ManagedToolDirectoryVM(item)));
+    }
+
+    public void OpenToolDirectory(ManagedToolDirectoryVM? directory)
+    {
+        if (directory is null || !directory.Exists)
+        {
+            StatusText = "Der ausgewählte Tool-Ordner ist nicht vorhanden.";
+            return;
+        }
+
+        try
+        {
+            _launcher.Open(directory.Path);
+            StatusText = $"Ordner '{directory.Name}' wurde geöffnet.";
+        }
+        catch (Exception exception)
+        {
+            StatusText = $"Ordner '{directory.Name}' konnte nicht geöffnet werden.";
+            _log.Error("Verwaltung", StatusText, exception);
+        }
+    }
+
+    public bool DeleteToolDirectory(ManagedToolDirectoryVM? directory)
+    {
+        if (directory is null || !directory.Exists)
+        {
+            StatusText = "Der ausgewählte Tool-Ordner ist nicht vorhanden.";
+            return false;
+        }
+
+        if (!ManagedToolDirectoryCatalog.IsApprovedPath(directory.Path))
+        {
+            StatusText = "Der Ordner liegt außerhalb der freigegebenen Tool-Pfade und wurde nicht gelöscht.";
+            _log.Warning("Verwaltung", StatusText, directory.Path);
+            return false;
+        }
+
+        try
+        {
+            Directory.Delete(directory.Path, recursive: true);
+            StatusText = $"Ordner '{directory.Name}' wurde gelöscht und wird bei Bedarf neu angelegt.";
+            _log.Information("Verwaltung", $"Tool-Ordner gelöscht: {directory.Path}");
+            RefreshToolDirectories();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            StatusText = $"Ordner '{directory.Name}' konnte nicht vollständig gelöscht werden. Möglicherweise wird eine Datei noch verwendet.";
+            _log.Error("Verwaltung", StatusText, exception);
+            RefreshToolDirectories();
+            return false;
+        }
+    }
 
     public bool IsRoleStoreConfigured => _roles.IsConfigured;
 
@@ -218,6 +280,7 @@ public sealed class ViCoAdministrationPageVM : MvvmBase
                 : $"{_currentUser} wurde mit {CurrentLevel} erkannt.";
         StatusText = "ViCo-Verwaltung aktualisiert.";
         _log.Information("Verwaltung", RoleStatus);
+        RefreshToolDirectories();
     }
 
     private async Task AddUserAsync()
@@ -376,4 +439,84 @@ public sealed class ViCoAdministrationPageVM : MvvmBase
         }
     }
 
+}
+
+public sealed class ManagedToolDirectoryVM
+{
+    public ManagedToolDirectoryVM(ManagedToolDirectory directory)
+    {
+        Name = directory.Name;
+        Path = directory.Path;
+        Description = directory.Description;
+        Exists = Directory.Exists(directory.Path);
+    }
+
+    public string Name { get; }
+
+    public string Path { get; }
+
+    public string Description { get; }
+
+    public bool Exists { get; }
+
+    public string StateText => Exists ? "Vorhanden" : "Nicht angelegt";
+}
+
+public sealed record ManagedToolDirectory(string Name, string Path, string Description);
+
+public static class ManagedToolDirectoryCatalog
+{
+    private static readonly string LocalAppData =
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private static readonly string RoamingAppData =
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    private static readonly string Documents =
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+    public static IReadOnlyList<ManagedToolDirectory> CreateDefault() =>
+    [
+        new("Anwendungslogs",
+            Path.Combine(LocalAppData, "GROB", "VIBN_Tools", "Logs"),
+            "NLog- und Diagnoseausgaben der Desktop-Anwendung."),
+        new("Rechnerübersicht/ViCo-Cache",
+            Path.Combine(LocalAppData, "GROB", "VIBN_Tools", "ViCo"),
+            "Lokaler Arbeitscache und benutzerspezifische Aktualisierungseinstellungen."),
+        new("Project-Quality-Daten",
+            Path.Combine(LocalAppData, "VIBN_Tools", "quality"),
+            "Projektprofile, Signalregister, Nachweise und Generierungsmanifest."),
+        new("Performance-Messungen",
+            Path.Combine(LocalAppData, "VIBN_Tools", "diagnostics", "performance"),
+            "Optionale JSONL-Laufzeitmessungen und Performance-Einstellungen."),
+        new("AI-Modelldaten",
+            Path.Combine(AppContext.BaseDirectory, "vibn_ai_data"),
+            "Lokale Aktionen, Modelle, Korrekturen und Trainingsdaten der Container-KI."),
+        new("AI-Noise-Filter",
+            Path.Combine(RoamingAppData, "VIBN_Tools", "NoiseFilter"),
+            "Benutzerspezifische Noise-Filter-Konfiguration."),
+        new("Quality-Berichte (Standardpfad)",
+            Path.Combine(Documents, "VIBN_Tools", "QualityReports"),
+            "Exportierte HTML- und JSON-Berichte ohne konfigurierte Projektwurzel."),
+    ];
+
+    public static bool IsApprovedPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        string candidate;
+        try
+        {
+            candidate = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return false;
+        }
+
+        return CreateDefault().Any(item =>
+            string.Equals(
+                Path.GetFullPath(item.Path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                candidate,
+                StringComparison.OrdinalIgnoreCase));
+    }
 }

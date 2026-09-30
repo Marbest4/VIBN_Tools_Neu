@@ -41,6 +41,22 @@ namespace VIBN_Tools.Application.View
             }
         }
 
+        private void OpenReimportComparisonWindow_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new ReimportComparisonWindow
+            {
+                DataContext = DataContext,
+                Owner = Window.GetWindow(this)
+            };
+            window.Show();
+        }
+
+        private void AuxiliaryDataExpander_Expanded(object sender, RoutedEventArgs e) =>
+            AuxiliaryDataRow.Height = new GridLength(1, GridUnitType.Star);
+
+        private void AuxiliaryDataExpander_Collapsed(object sender, RoutedEventArgs e) =>
+            AuxiliaryDataRow.Height = GridLength.Auto;
+
 
     }
 }

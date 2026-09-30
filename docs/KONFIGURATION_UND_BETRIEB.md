@@ -96,7 +96,7 @@ In **ViCo → PC-/Projektsuche → Arbeitsplatz-Konfiguration** speichert Enter 
 
 ### Kanbanize meldet 400 bei `fields`
 
-`subtasks`, Positionsfelder und Custom Fields sind in dieser Instanz keine zulässigen Werte des Kartenparameters `fields`. Die Arbeitsplatzabfrage verzichtet deshalb auf `fields`, paginiert über alle Seiten und verwendet `expand=subtasks`. Für jede gefundene KONFIGURATION-Karte wird zusätzlich der autoritative Endpunkt `/cards/{card_id}/subtasks` gelesen und mit der Expansion zusammengeführt. Dadurch werden auch direkt in der Businessmap-Oberfläche erzeugte oder nur teilweise expandierte Unteraufgaben übernommen.
+`subtasks`, Positionsfelder und Custom Fields sind in dieser Instanz keine zulässigen Werte des Kartenparameters `fields`. Die Arbeitsplatzabfrage verzichtet deshalb vollständig auf `fields`, paginiert über alle Seiten und verwendet nur `expand=custom_fields` für das Startdatum. Fehlende Lane-/Spaltenwerte werden über `/cards/{card_id}` nachgeladen. Für jede gefundene KONFIGURATION-Karte wird zusätzlich der autoritative Endpunkt `/cards/{card_id}/subtasks` gelesen. Ein Antwortstand ohne mindestens eine zuordenbare Arbeitsplatz-Lane und Karte wird vor dem Schreiben abgewiesen, damit ein bestehender gemeinsamer Cache erhalten bleibt.
 
 ### Kanbanize-Vorschau zeigt Konflikt
 

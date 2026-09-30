@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Xml.Linq;
 using SixLabors.Fonts;
 using VIBN_Tools.ContainerGeneration.BusinessLogic;
@@ -8,6 +9,8 @@ using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.RequirementsXml;
 using VIBN_Tools.ContainerGeneration.Utils;
+using VIBN_Tools.Application.VM;
+using VIBN_Tools.Application.Behaviors;
 using VIBN_Tools.ContainerToFee;
 using VIBN_Tools.ContainerToFee.GrobStandard;
 using VIBN_Tools.ContainerToFeeVisual;
@@ -47,16 +50,28 @@ internal static class Program
         await ValidateSensorXAndSlotValidationAsync();
 
         ValidateWorkspacePersistenceAndAutoSaveSettings();
+        ValidateGroupingPreview();
+        ValidateGroupingExamplesAgainstProvidedSignals();
+        ValidateReimportDecisionStaging();
         ValidateWorkspaceBlockingMarker();
         ValidateSlotMultiplicityPolicy();
         await ValidateContainerToFeeModelContractsAsync();
+        await ValidateVisualMotionJointReuseAsync();
+        await ValidateVisualFeeSignalStatusAsync();
+        await ValidateForcedUnknownSlotProjectionAsync();
+        ValidateFee2ContainerSelectionHighlighting();
+        ValidateRapidFee2ContainerRootSwitching();
+        ValidateWpfVirtualizationExceptionPolicy();
         ValidatePlcInputFanInParsing();
         ValidateContainerFileComparison();
         await ValidateFee2ContainerProvenanceRoundTripAsync();
+        await ValidateFee2ContainerVisualTypeCoverageAsync();
         ValidateFee2ContainerLiveReconstruction();
         ValidateTopLevelBasicFrameSelection();
         ValidateFee2SpecialDevicesProvenanceRoundTrip();
         ValidateRuleSuggestionWorkflow();
+        ValidateContainerTemplateSuggestions();
+        ValidateAutomaticCoverageMatrix();
         await ValidateRequirementsRulePatchWorkflowAsync();
 
         Console.WriteLine(
@@ -398,6 +413,10 @@ internal static class Program
         var sensorSignal2 = Guid.NewGuid();
         var buttonSignal = Guid.NewGuid();
         var returnSignal = Guid.NewGuid();
+        var switchGuid = Guid.NewGuid();
+        var fuseGuid = Guid.NewGuid();
+        var switchSignal = Guid.NewGuid();
+        var fuseSignal = Guid.NewGuid();
         var result = FeeContainerLiveReconstructor.Reconstruct(
             rootGuid,
             "Existing main frame",
@@ -406,6 +425,10 @@ internal static class Program
                 new FeeContainerLiveObject(buttonGuid, "Button_1", "Button"),
                 new FeeContainerLiveObject(notGuid, "Return_1", "BoolNot"),
                 new FeeContainerLiveObject(unassignedGuid, "Air_1", "VersionedLogic", "Grob_PneumaticSupply"),
+                new FeeContainerLiveObject(switchGuid, "SwitchRaw;%I13.0", "FS.SDK.Scene.Objects.CabinetElement",
+                    CabinetDefinition: @"Definitions\Grob_2PositionSwitch.xml", Label: "Selector_1"),
+                new FeeContainerLiveObject(fuseGuid, "FuseRaw;%I14.0", "CabinetElement",
+                    CabinetDefinition: @"definitions/Grob_Fuse.XML", Label: "Fuse_1"),
                 new FeeContainerLiveObject(ignoredGuid, "Unrelated", "Decoration"),
             ],
             [
@@ -413,17 +436,24 @@ internal static class Program
                 new FeeContainerLiveVariable(sensorSignal2, "Sensor B", "%I10.1", "", "Bool", "S2"),
                 new FeeContainerLiveVariable(buttonSignal, "Button NO", "%I11.0", "", "Bool", "B1"),
                 new FeeContainerLiveVariable(returnSignal, "Return", "%Q12.0", "", "Bool", "R1"),
+                new FeeContainerLiveVariable(switchSignal, "Selector NO", "%I13.0", "", "Bool", "SW1"),
+                new FeeContainerLiveVariable(fuseSignal, "Fuse NC", "%I14.0", "", "Bool", "F1"),
             ],
             [
                 new FeeContainerLiveAssignment(sensorSignal1, sensorGuid, "PLC_IN_PartPresent_Ch1"),
                 new FeeContainerLiveAssignment(sensorSignal2, sensorGuid, "PLC_IN_PartPresent_Ch1"),
                 new FeeContainerLiveAssignment(buttonSignal, buttonGuid, "Pressed"),
                 new FeeContainerLiveAssignment(returnSignal, notGuid, "Input 01"),
+                new FeeContainerLiveAssignment(switchSignal, switchGuid, "NO1"),
+                new FeeContainerLiveAssignment(fuseSignal, fuseGuid, "NC"),
             ]);
 
         var containers = result.Snapshot.ContainerDocument.Descendants("Container").ToArray();
-        if (result.Snapshot.ContainerCount != 4 || result.Snapshot.SignalCount != 4 ||
+        if (result.Snapshot.ContainerCount != 6 || result.Snapshot.SignalCount != 6 ||
             result.IgnoredObjectCount != 1 || result.Issues.Count != 2 ||
+            result.UnmappedObjects.Count != 1 ||
+            result.UnmappedObjects.Single().Guid != ignoredGuid ||
+            result.UnmappedObjects.Single().Name != "Unrelated" ||
             containers.Single(item => item.Element("Type")?.Value == "Sensor")
                 .Descendants("Entry").Count() != 2 ||
             containers.Single(item => item.Element("Type")?.Value == "Button")
@@ -431,7 +461,13 @@ internal static class Program
             containers.Single(item => item.Element("Type")?.Value == "ReturnCircuit")
                 .Descendants("Slot").Single().Value != "PLC_OUT_Signal" ||
             containers.Single(item => item.Element("Type")?.Value == "PneumaticSupply")
-                .Descendants("Note").Single().Value.Contains("PRÜFEN", StringComparison.Ordinal) == false)
+                .Descendants("Note").Single().Value.Contains("PRÜFEN", StringComparison.Ordinal) == false ||
+            containers.Single(item => item.Element("Type")?.Value == "Switch")
+                .Element("Component")?.Value != "Selector_1" ||
+            containers.Single(item => item.Element("Type")?.Value == "Switch")
+                .Descendants("Slot").Single().Value != "PLC_IN_NO1" ||
+            containers.Single(item => item.Element("Type")?.Value == "Fuse")
+                .Descendants("Slot").Single().Value != "PLC_IN_NC")
         {
             throw new InvalidOperationException(
                 "Existing FEE BasicFrame reconstruction lost a supported container, fan-in, or slot mapping.");
@@ -443,6 +479,37 @@ internal static class Program
             root.Attribute("source") is not null || root.Attribute("feeRootGuid") is not null)
         {
             throw new InvalidOperationException("Reconstructed ContainerFile does not match the production CAAResult schema attributes.");
+        }
+
+        var editableRoot = new Fee2ContainerRoot(
+            rootGuid,
+            "Editable",
+            result.Snapshot,
+            0,
+            0,
+            0,
+            0,
+            UsesExactProvenance: false,
+            result.InspectedObjectCount,
+            result.IgnoredObjectCount,
+            result.Issues,
+            result.UnmappedObjects);
+        var editor = new Fee2ContainerRootEditor(editableRoot);
+        editor.Containers[0].IsIncluded = false;
+        var unmapped = editor.NonContainerObjects.Single();
+        unmapped.TargetComponent = "ManuallyReviewed";
+        unmapped.TargetContainerType = "Sensor";
+        var manualContainer = editor.AddObjectAsContainer(unmapped);
+        var editedSnapshot = editor.CreateSnapshot();
+        if (!manualContainer.Id.StartsWith("manual:", StringComparison.Ordinal) ||
+            editedSnapshot.ContainerCount != result.Snapshot.ContainerCount ||
+            !editedSnapshot.ContainerDocument.Descendants("Component")
+                .Any(item => item.Value == "ManuallyReviewed") ||
+            editedSnapshot.ContainerDocument.Descendants("Container")
+                .Any(item => item.Attribute("id")?.Value == editor.Containers[0].Id))
+        {
+            throw new InvalidOperationException(
+                "FEE2Container review edits were not projected into the exported snapshot.");
         }
 
         var versionedId = "container:versioned-sensor";
@@ -474,6 +541,541 @@ internal static class Program
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (!legacyTypes.SetEquals(["Sensor", "Stop"]))
             throw new InvalidOperationException("Legacy Sensor/Floor objects were not exposed as reviewable containers.");
+
+        var knownLogicTypes = FeeContainerLiveReconstructor.Reconstruct(
+            rootGuid,
+            "Known logics",
+            [
+                new(Guid.NewGuid(), "Belt", "LogicObject", "Grob_BeltControl"),
+                new(Guid.NewGuid(), "Clamp", "LogicObject", "Grob_Clamping"),
+                new(Guid.NewGuid(), "Conveyor", "LogicObject", "Grob_Conveyor"),
+                new(Guid.NewGuid(), "Cylinder", "LogicObject", "Grob_Cylinder"),
+                new(Guid.NewGuid(), "Gripper", "LogicObject", "Grob_GripperBasic"),
+                new(Guid.NewGuid(), "Vacuum", "LogicObject", "Grob_GripperVacuum"),
+                new(Guid.NewGuid(), "Lift", "LogicObject", "Grob_LiftUnit"),
+                new(Guid.NewGuid(), "Air", "LogicObject", "Grob_PneumaticSupply"),
+                new(Guid.NewGuid(), "Door", "LogicObject", "Grob_SafetyDoor"),
+                new(Guid.NewGuid(), "Sensor", "LogicObject", "Grob_Sensor"),
+                new(Guid.NewGuid(), "Stop", "LogicObject", "Grob_Stop"),
+            ],
+            [],
+            []);
+        var reconstructedLogicTypes = knownLogicTypes.Snapshot.ContainerDocument
+            .Descendants("Type")
+            .Select(item => item.Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expectedLogicTypes = new HashSet<string>(
+            ["BeltControl", "Clamping", "Conveyor", "Cylinder", "GripperBasic", "GripperVacuum",
+             "LiftUnit", "PneumaticSupply", "SafetyDoor", "Sensor", "Stop"],
+            StringComparer.OrdinalIgnoreCase);
+        if (!reconstructedLogicTypes.SetEquals(expectedLogicTypes))
+        {
+            throw new InvalidOperationException(
+                "FEE2Container did not reconstruct every distinct catalogued Grob logic type.");
+        }
+
+        var liftLogicGuid = Guid.NewGuid();
+        var liftJointGuid = Guid.NewGuid();
+        var jointAssociation = FeeContainerLiveReconstructor.Reconstruct(
+            rootGuid,
+            "Motion association",
+            [
+                new(liftLogicGuid, "Lift_1", "LogicObject", "Grob_LiftUnit"),
+                new(liftJointGuid, "Lift_1", "MotionJoint"),
+            ],
+            [],
+            []);
+        if (jointAssociation.ObjectAssociations.Count != 1 ||
+            jointAssociation.ObjectAssociations[0].ObjectGuid != liftJointGuid ||
+            jointAssociation.ObjectAssociations[0].ContainerObjectGuid != liftLogicGuid ||
+            jointAssociation.UnmappedObjects.Any(item => item.Guid == liftJointGuid))
+        {
+            throw new InvalidOperationException(
+                "FEE2Container did not associate a unique same-name MotionJoint with its compatible LiftUnit container.");
+        }
+    }
+
+    private static async Task ValidateVisualMotionJointReuseAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-motion-reuse-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "motion.container.xml");
+        try
+        {
+            File.WriteAllText(path, """
+                <ContainerFile>
+                  <Container id="motion">
+                    <Component>Axis_1</Component><Type>Cylinder</Type><DataList>
+                      <Entry><ID>A</ID><Address>%Q0.0</Address><DataType>Bool</DataType><Signal>Move</Signal><Slot>PLC_OUT_ToWorkPos</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var loaded = await service.LoadXmlAsync(path);
+            if (!loaded.Success || loaded.Plan is null)
+                throw new InvalidOperationException("MotionJoint reuse plan could not be loaded.");
+
+            var visualObjectConstructor = typeof(VisualFeeObject).GetConstructors(
+                    BindingFlags.Instance | BindingFlags.NonPublic)
+                .Single();
+            var logicGuid = Guid.NewGuid();
+            VisualFeeObject CreateJoint()
+            {
+                var objectGuid = Guid.NewGuid();
+                return (VisualFeeObject)visualObjectConstructor.Invoke(
+                [
+                    $"fee:{objectGuid:D}",
+                    objectGuid.ToString("D"),
+                    "Axis_1",
+                    typeof(FeeJoint).FullName!,
+                    "MotionJoint",
+                    new[] { nameof(FeeJoint), typeof(FeeJoint).FullName! },
+                    "11111111-1111-1111-1111-111111111111",
+                    "Axes",
+                    true,
+                ]);
+            }
+            var objects = new[] { CreateJoint(), CreateJoint() };
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, objects);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_hasDiscoveredFeeObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, true);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeContainerObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[]
+                {
+                    new VisualFeeContainerObject(logicGuid.ToString("D"), "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder")
+                });
+            var runtimeObjects = objects.ToDictionary(
+                item => item.Id,
+                item => (FeeAbstractObject)new FeeJoint
+                {
+                    Guid = Guid.Parse(item.GuidString),
+                    Name = item.Name,
+                    Slots = new Dictionary<string, Guid> { ["InTarget"] = logicGuid },
+                },
+                StringComparer.Ordinal);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_runtimeObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, runtimeObjects);
+
+            var added = service.AutoAssignMatches();
+            var target = loaded.Plan.Targets.Single(item => item.AllowMultiSelect);
+            if (added != 2 || loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 2)
+            {
+                throw new InvalidOperationException(
+                    "Existing same-name MotionJoints were not reused for a multi-select visual target.");
+            }
+            var duplicateIssue = service.Validate().Issues.SingleOrDefault(issue =>
+                issue.Code == "DUPLICATE_FEE_SIMOBJECT_IDENTITY");
+            if (duplicateIssue is null ||
+                !duplicateIssue.Message.Contains("2 identische FEE-SimObjects", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Exact same-name/type/parent FEE SimObject duplicates were not exposed as a validation error.");
+            }
+            var confirmation = service.ConfirmDuplicateAssignment(target.Id, objects[0].Id);
+            var confirmedIssue = service.Validate().Issues.SingleOrDefault(issue =>
+                issue.Code == "DUPLICATE_FEE_SIMOBJECT_IDENTITY");
+            if (!confirmation.Success ||
+                loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 2 ||
+                confirmedIssue?.Severity != VisualIssueSeverity.Warning ||
+                !service.IsDuplicateFeeObjectConfirmed(objects[1].Id))
+            {
+                throw new InvalidOperationException(
+                    "An explicitly confirmed duplicate multi-select identity was not retained and downgraded to a warning.");
+            }
+            var objectLinks = objects.Select(item => new VisualFeeObjectLink(
+                    item.GuidString,
+                    "InTarget",
+                    logicGuid.ToString("D"),
+                    "SIM_TargetPosition"))
+                .ToArray();
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, objectLinks);
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_hasDiscoveredFeeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, true);
+            if (!service.GetSimObjectConnectionState(target.Id).IsVerified)
+                throw new InvalidOperationException("A linked existing MotionJoint was not verified as green in the visual plan.");
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[] { objectLinks[0] });
+            if (service.GetSimObjectConnectionState(target.Id).IsVerified ||
+                !service.GetSimObjectConnectionState(target.Id, objects[0].Id).IsVerified ||
+                service.GetSimObjectConnectionState(target.Id, objects[1].Id).IsVerified)
+            {
+                throw new InvalidOperationException(
+                    "Mehrere gefundene SimObjects werden nicht mehr pro Objekt als verknüpft bzw. offen ausgewertet.");
+            }
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, Array.Empty<VisualFeeObjectLink>());
+            if (service.GetSimObjectConnectionState(target.Id).IsVerified)
+            {
+                throw new InvalidOperationException(
+                    "An existing but unlinked MotionJoint was incorrectly verified as green in the visual plan.");
+            }
+            if (!service.RemoveAssignment(target.Id, objects[0].Id).Success ||
+                loaded.Plan.Assignments.Count(item => item.TargetId == target.Id) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Removing one object from a multi-select target removed more than that assignment.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task ValidateVisualFeeSignalStatusAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-signal-status-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "signals.container.xml");
+        try
+        {
+            File.WriteAllText(path, """
+                <ContainerFile>
+                  <Container id="sensor">
+                    <Component>Sensor_1</Component><Type>Sensor</Type><DataList>
+                      <Entry><ID>A</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>DetectedA</Signal><Slot>PLC_IN_PartPresent_Ch1</Slot></Entry>
+                      <Entry><ID>B</ID><Address>%I0.1</Address><DataType>Bool</DataType><Signal>DetectedB</Signal><Slot>PLC_IN_PartPresent_Ch1</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var loaded = await service.LoadXmlAsync(path);
+            if (!loaded.Success || loaded.Plan is null)
+                throw new InvalidOperationException("Signal status plan could not be loaded.");
+
+            var sharedGuid = Guid.NewGuid().ToString("D");
+            var duplicateGuid = Guid.NewGuid().ToString("D");
+            var addedGuid = Guid.NewGuid().ToString("D");
+            var interfaceGuid = Guid.NewGuid().ToString("D");
+            var signals = new[]
+            {
+                new VisualFeeSignal(sharedGuid, interfaceGuid, "PLC", "Shared", "%I0.0", "", "Bool", "Input"),
+                new VisualFeeSignal(duplicateGuid, interfaceGuid, "PLC", "Shared", "%I0.1", "", "Bool", "Input"),
+                new VisualFeeSignal(addedGuid, interfaceGuid, "PLC", "Added", "%I0.2", "", "Bool", "Input"),
+            };
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSignals", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, signals);
+            service.SetExistingInterface(new VisualFeeInterface(interfaceGuid, "PLC", "Test", signals.Length));
+            var signalNodes = loaded.Plan.Nodes
+                .Where(item => item.Kind == VisualNodeKind.Signal)
+                .ToArray();
+            foreach (var node in signalNodes)
+            {
+                if (!service.TryAssignSignal(node.Id, sharedGuid).Success)
+                    throw new InvalidOperationException("Test signal could not be assigned.");
+            }
+
+            var logicGuid = Guid.NewGuid().ToString("D");
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeContainerObjects", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[]
+                {
+                    new VisualFeeContainerObject(
+                        logicGuid,
+                        "Sensor_1",
+                        VisualFeeContainerObjectKind.Logic,
+                        "Grob_Sensor"),
+                });
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSignalLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[]
+                {
+                    new VisualFeeSignalLink(
+                        sharedGuid,
+                        logicGuid,
+                        "LogicObject",
+                        "PLC_IN_PartPresent_Ch1",
+                        false),
+                });
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_hasDiscoveredFeeSignalLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, true);
+            var verifiedNodes = service.FindVerifiedSignalNodeIds(sharedGuid);
+            if (verifiedNodes.Count != signalNodes.Length ||
+                service.GetSignalConnectionState(signalNodes[0].Id, sharedGuid).Kind !=
+                    VisualSignalConnectionKind.Linked)
+            {
+                throw new InvalidOperationException(
+                    "Existing FEE signal-to-logic links were not recognized as verified visual assignments.");
+            }
+
+            var assigned = new ContainerToFeeVisualFeeSignalVM(
+                signals[0],
+                signals,
+                loaded.Plan,
+                verifiedNodes);
+            var duplicate = new ContainerToFeeVisualFeeSignalVM(signals[1], signals, loaded.Plan);
+            if (!assigned.IsAssigned || !assigned.HasDuplicateAssignment || !assigned.HasDuplicateName ||
+                assigned.StateBackground != "#FFFFCDD2" || !duplicate.HasDuplicateName)
+            {
+                throw new InvalidOperationException(
+                    "FEE signal assignment/duplicate state is not presented with the required error status. " +
+                    $"Assigned={assigned.IsAssigned}, DuplicateAssignment={assigned.HasDuplicateAssignment}, " +
+                    $"DuplicateName={assigned.HasDuplicateName}, Background={assigned.StateBackground}, " +
+                    $"SecondDuplicateName={duplicate.HasDuplicateName}, Nodes={signalNodes.Length}, " +
+                    $"NodeIds={string.Join(",", signalNodes.Select(item => item.Id))}, " +
+                    $"Assignments={loaded.Plan.SignalAssignments.Count}.");
+            }
+
+            var container = loaded.Plan.Nodes.Single(item => item.Kind == VisualNodeKind.Container);
+            var addedResult = service.AddSignals(container.Id, [addedGuid]);
+            if (!addedResult.Success || loaded.Plan.AddedSignals.Count != 1 ||
+                !service.Validate().Issues.Any(issue => issue.Code == "ADDED_SIGNAL_SLOT_REQUIRED"))
+            {
+                throw new InvalidOperationException(
+                    "A drag/drop signal was not added as a visible, slot-required plan entry.");
+            }
+            var addedNode = loaded.Plan.FindNode(loaded.Plan.AddedSignals.Single().NodeId)!;
+            if (!service.SetSlotOverride(addedNode.Id, "PLC_IN_PartPresent") ||
+                service.Validate().Issues.Any(issue =>
+                    issue.Code == "ADDED_SIGNAL_SLOT_REQUIRED" && issue.NodeId == addedNode.Id))
+            {
+                throw new InvalidOperationException(
+                    "The added signal did not become valid after selecting an allowed PLC_IN slot.");
+            }
+
+            var effectivePath = Path.Combine(directory, "effective.container.xml");
+            await service.SaveEffectiveContainerXmlAsync(effectivePath);
+            var effectiveDocument = XDocument.Load(effectivePath);
+            if (!effectiveDocument.Descendants("Signal").Any(item => item.Value == "Added"))
+                throw new InvalidOperationException("Effective Container.xml export lost a dynamically added signal.");
+            if (!service.RemoveSignal(addedNode.Id).Success || loaded.Plan.AddedSignals.Count != 0 ||
+                loaded.Plan.FindNode(addedNode.Id) is not null)
+            {
+                throw new InvalidOperationException("Removing a dynamically added signal left stale plan state behind.");
+            }
+            var slotAssignment = service.AssignSignalsToSlot(
+                container.Id,
+                "PLC_IN_PartPresent",
+                [addedGuid]);
+            var slotAssignedNode = loaded.Plan.AddedSignals.SingleOrDefault();
+            if (!slotAssignment.Success || slotAssignedNode is null ||
+                !string.Equals(
+                    loaded.Plan.GetEffectiveSlot(loaded.Plan.FindNode(slotAssignedNode.NodeId)!),
+                    "PLC_IN_PartPresent",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Dropping an existing FEE signal onto an empty declared signal slot did not create a correctly slotted plan entry.");
+            }
+            var movedSlotAssignment = service.AssignSignalsToSlot(
+                container.Id,
+                "PLC_IN_PartPresent_Ch2",
+                [addedGuid]);
+            if (!movedSlotAssignment.Success || loaded.Plan.AddedSignals.Count != 1 ||
+                loaded.Plan.AddedSignals[0].NodeId != slotAssignedNode.NodeId ||
+                !string.Equals(
+                    loaded.Plan.GetEffectiveSlot(loaded.Plan.FindNode(slotAssignedNode.NodeId)!),
+                    "PLC_IN_PartPresent_Ch2",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Moving an already assigned FEE signal to another slot duplicated its plan entry.");
+            }
+            if (!service.RemoveSignal(slotAssignedNode.NodeId).Success)
+                throw new InvalidOperationException("The signal-slot test entry could not be removed again.");
+            if (!service.RemoveSignal(signalNodes[0].Id).Success ||
+                !loaded.Plan.IsSignalRemoved(signalNodes[0].Id))
+            {
+                throw new InvalidOperationException("Removing an imported signal did not persist the effective deletion.");
+            }
+            await service.SaveEffectiveContainerXmlAsync(effectivePath);
+            effectiveDocument = XDocument.Load(effectivePath);
+            if (effectiveDocument.Descendants("Signal").Any(item => item.Value == signalNodes[0].Name))
+                throw new InvalidOperationException("Effective Container.xml export still contains a removed imported signal.");
+            var sidecarPath = Path.Combine(directory, "removed-signals.visual.json");
+            await service.SaveSidecarAsync(sidecarPath);
+            var reloadedService = new ContainerToFeeVisualPlanService();
+            var reloaded = await reloadedService.LoadSidecarAsync(sidecarPath);
+            if (!reloaded.Success || reloaded.Plan is null ||
+                !reloaded.Plan.IsSignalRemoved(signalNodes[0].Id))
+            {
+                throw new InvalidOperationException("Sidecar schema did not restore an imported signal deletion.");
+            }
+            if (!service.Undo() || loaded.Plan.IsSignalRemoved(signalNodes[0].Id))
+                throw new InvalidOperationException("Undo did not restore an imported signal removed from the visual plan.");
+
+            var warning = FeeTagPropertyWriteResult.Unconfirmed(new InvalidOperationException("test"));
+            if (warning.Confirmed || !warning.Warning.Contains("fortgesetzt", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "An unconfirmed TagComponent write no longer explicitly permits generation to continue.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task ValidateForcedUnknownSlotProjectionAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-forced-slot-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "invalid-slot.container.xml");
+            await File.WriteAllTextAsync(path, """
+                <ContainerFile>
+                  <Container id="sensor-invalid">
+                    <Component>Sensor_Invalid</Component><Type>Sensor</Type><DataList>
+                      <Entry><ID>OK</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>Detected</Signal><Slot>PLC_IN_PartPresent_Ch1</Slot></Entry>
+                      <Entry><ID>OLD</ID><Address>%I0.1</Address><DataType>Bool</DataType><Signal>Legacy</Signal><Slot>PLC_IN_REMOVED_SLOT</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var service = new ContainerToFeeVisualPlanService();
+            var loaded = await service.LoadXmlAsync(path);
+            if (loaded.Plan is null ||
+                !loaded.Plan.Issues.Any(issue => issue.Code == "SIGNAL_SLOT_UNKNOWN"))
+            {
+                throw new InvalidOperationException("The invalid-slot plan did not preserve its explicit validation error.");
+            }
+
+            var binderType = typeof(ContainerToFeeVisualPlanService).Assembly.GetType(
+                "VIBN_Tools.ContainerToFeeVisual.RuntimeVisualPlanBinder",
+                throwOnError: true)!;
+            var createDocument = binderType.GetMethod(
+                "CreateEffectiveDocument",
+                BindingFlags.Static | BindingFlags.NonPublic)!;
+            var normal = (XDocument)createDocument.Invoke(null, [loaded.Plan, false])!;
+            var forced = (XDocument)createDocument.Invoke(null, [loaded.Plan, true])!;
+            if (!normal.Descendants("Slot").Any(slot => slot.Value == "PLC_IN_REMOVED_SLOT") ||
+                forced.Descendants("Slot").Any(slot => slot.Value == "PLC_IN_REMOVED_SLOT") ||
+                !forced.Descendants("Slot").Any(slot => slot.Value == "PLC_IN_PartPresent_Ch1"))
+            {
+                throw new InvalidOperationException(
+                    "A confirmed best-effort run must omit only unknown slot entries while retaining valid container data.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void ValidateFee2ContainerSelectionHighlighting()
+    {
+        var viewModel = new Fee2ContainerPageVM();
+        var firstContainer = new Fee2ContainerFoundContainerVM("c-1", "Cylinder_1", "Cylinder", 2);
+        var secondContainer = new Fee2ContainerFoundContainerVM("c-2", "Sensor_1", "Sensor", 1);
+        var firstSignal = new Fee2ContainerFoundSignalVM(
+            "c-1", "Cylinder_1", "Cylinder", "Home", "PLC_IN_InHomePos",
+            "%I0.0", "Bool", "A", string.Empty, null);
+        var secondSignal = new Fee2ContainerFoundSignalVM(
+            "c-2", "Sensor_1", "Sensor", "Detected", "PLC_IN_PartPresent",
+            "%I0.1", "Bool", "B", string.Empty, null);
+        viewModel.FoundContainers.Add(firstContainer);
+        viewModel.FoundContainers.Add(secondContainer);
+        viewModel.FoundSignals.Add(firstSignal);
+        viewModel.FoundSignals.Add(secondSignal);
+
+        viewModel.SelectedFoundContainer = firstContainer;
+        if (!firstSignal.IsRelatedToSelection || secondSignal.IsRelatedToSelection ||
+            !ReferenceEquals(viewModel.SignalRevealTarget, firstSignal))
+            throw new InvalidOperationException("Container selection did not highlight exactly its FEE2Container signals.");
+
+        viewModel.SelectedFoundSignal = secondSignal;
+        if (!secondContainer.IsRelatedToSelection || firstContainer.IsRelatedToSelection ||
+            viewModel.SelectedFoundContainer is not null ||
+            !ReferenceEquals(viewModel.ContainerRevealTarget, secondContainer))
+        {
+            throw new InvalidOperationException("Signal selection did not highlight exactly its FEE2Container container.");
+        }
+
+        viewModel.ContainerSearchText = "sensor";
+        viewModel.SignalSearchText = "%I0.1";
+        if (viewModel.FoundContainersView.Cast<object>().Count() != 1 ||
+            viewModel.FoundSignalsView.Cast<object>().Count() != 1)
+        {
+            throw new InvalidOperationException("FEE2Container list search does not filter all visible fields.");
+        }
+    }
+
+    private static void ValidateWpfVirtualizationExceptionPolicy()
+    {
+        var indexError = new ArgumentOutOfRangeException("index");
+        const string wpfDiagnostic =
+            "System.ThrowHelper.ThrowArgumentOutOfRange_IndexMustBeLessException() at " +
+            "System.Windows.Controls.ItemContainerGenerator.ContainerFromIndex(Int32 index)";
+        if (!WpfVirtualizationExceptionPolicy.IsRecoverable(indexError, wpfDiagnostic))
+            throw new InvalidOperationException("The known WPF DataGrid virtualization race was not recognized.");
+        if (WpfVirtualizationExceptionPolicy.IsRecoverable(
+                indexError,
+                "System.ThrowHelper.ThrowArgumentOutOfRange_IndexMustBeLessException() at UserCode.Index(Int32 index)"))
+        {
+            throw new InvalidOperationException("A non-WPF index error was incorrectly suppressed.");
+        }
+    }
+
+    private static void ValidateRapidFee2ContainerRootSwitching()
+    {
+        static Fee2ContainerRootSelectionVM CreateRoot(string name, string component)
+        {
+            var document = XDocument.Parse($"""
+                <CAAMergeResult>
+                  <ContainerList>
+                    <Container id="{name}">
+                      <Component>{component}</Component>
+                      <Type>Sensor</Type>
+                      <DataList>
+                        <Entry><ID>A</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>Detected</Signal><Slot>PLC_IN_PartPresent</Slot><Note /></Entry>
+                      </DataList>
+                    </Container>
+                  </ContainerList>
+                </CAAMergeResult>
+                """);
+            var snapshot = new FeeContainerProvenanceSnapshot(
+                new Dictionary<string, string>(),
+                document,
+                Array.Empty<FeeContainerSignalBinding>(),
+                1,
+                1,
+                name);
+            return new Fee2ContainerRootSelectionVM(new Fee2ContainerRoot(
+                Guid.NewGuid(),
+                name,
+                snapshot,
+                1,
+                0,
+                1,
+                0));
+        }
+
+        var viewModel = new Fee2ContainerPageVM();
+        var first = CreateRoot("Root-A", "Sensor A");
+        var second = CreateRoot("Root-B", "Sensor B");
+        viewModel.Roots.Add(first);
+        viewModel.Roots.Add(second);
+        for (var index = 0; index < 50; index++)
+            viewModel.SelectedRoot = index % 2 == 0 ? first : second;
+        viewModel.SelectedRoot = second;
+
+        if (viewModel.FoundContainers.Count != 1 ||
+            viewModel.FoundContainers[0].Component != "Sensor B" ||
+            viewModel.ContainerRevealTarget is not null ||
+            viewModel.SignalRevealTarget is not null)
+        {
+            throw new InvalidOperationException(
+                "Rapid FEE2Container root switching retained stale rows or queued cross-list navigation.");
+        }
     }
 
     private static void ValidateTopLevelBasicFrameSelection()
@@ -629,6 +1231,34 @@ internal static class Program
                 throw new InvalidOperationException(
                     "Existing PLC_IN list mapping must keep both signals without a duplicate fan-in pass.");
             }
+
+            File.WriteAllText(path, """
+                <ContainerFile>
+                  <Container id="1">
+                    <Component>FanInCylinderBothPositions</Component>
+                    <Type>Cylinder</Type>
+                    <DataList>
+                      <Entry><ID>1</ID><Address>%Q0.0</Address><DataType>Bool</DataType><Signal>ToHome</Signal><Slot>PLC_OUT_ToHomePos</Slot></Entry>
+                      <Entry><ID>2</ID><Address>%Q0.1</Address><DataType>Bool</DataType><Signal>ToWork</Signal><Slot>PLC_OUT_ToWorkPos</Slot></Entry>
+                      <Entry><ID>3</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>HomeA</Signal><Slot>PLC_IN_InHomePos</Slot></Entry>
+                      <Entry><ID>4</ID><Address>%I0.1</Address><DataType>Bool</DataType><Signal>HomeB</Signal><Slot>PLC_IN_InHomePos</Slot></Entry>
+                      <Entry><ID>5</ID><Address>%I0.2</Address><DataType>Bool</DataType><Signal>WorkA</Signal><Slot>PLC_IN_InWorkPos</Slot></Entry>
+                      <Entry><ID>6</ID><Address>%I0.3</Address><DataType>Bool</DataType><Signal>WorkB</Signal><Slot>PLC_IN_InWorkPos</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+            var (completeCylinderContainers, _) = ContainerToFeeService.ReadInContainerXmlData(path);
+            var completeCylinder = (GrobCylinder_Container)completeCylinderContainers.Single();
+            completeCylinder.IsCreationRequested = true;
+            var preflight = ContainerModelValidationPreflight.Validate(completeCylinder);
+            if (preflight.Any(issue => issue.Code == "CYLINDER_STATUS_MISSING") ||
+                completeCylinder.Signals_InHomePos.Count != 2 ||
+                completeCylinder.Signals_InWorkPos.Count != 2)
+            {
+                throw new InvalidOperationException(
+                    "Multiple InHomePos/InWorkPos inputs were incorrectly reported as an incomplete cylinder status mapping.");
+            }
         }
         finally
         {
@@ -639,6 +1269,9 @@ internal static class Program
 
     private static void ValidateWorkspacePersistenceAndAutoSaveSettings()
     {
+        if (new ContainerGenerationSettings().AutoSaveIntervalMinutes != 10)
+            throw new InvalidOperationException("Container Generation autosave must default to 10 minutes.");
+
         var settings = new ContainerGenerationSettings
         {
             AutoSaveEnabled = true,
@@ -666,6 +1299,150 @@ internal static class Program
         {
             if (File.Exists(path))
                 File.Delete(path);
+        }
+    }
+
+    private static void ValidateGroupingPreview()
+    {
+        var signal = new ContainerEntry
+        {
+            ID = "Motor_17",
+            Address = "%I12.3",
+            Signal = "MotorReady",
+        };
+        var settings = new ContainerGenerationSettings
+        {
+            GroupByAddress = true,
+            RegexAddress = @"^[%]?[IEAQM](\d+)\.",
+            SelectedOption = ContainerGenerationSettings.IdOption,
+            RegexSubstitution = @"^(.+?)[._-]\d+$",
+        };
+
+        var preview = settings.CreateGroupingPreview(signal, "Motor", "Cylinder");
+        if (preview.GroupKey.Contains("12", StringComparison.Ordinal) is false ||
+            preview.ContainerName != "Motor" ||
+            preview.Signal != "MotorReady" ||
+            !string.IsNullOrWhiteSpace(preview.Error))
+        {
+            throw new InvalidOperationException(
+                "Die Grouping-Vorschau verwendet nicht dieselben Adress- und Substitutionsregeln wie die Generierung.");
+        }
+    }
+
+    private static void ValidateGroupingExamplesAgainstProvidedSignals()
+    {
+        var universalId = new ContainerGenerationSettings
+        {
+            GroupById = true,
+            RegexId = @"=([A-Z0-9a-z_]{9})",
+        };
+        foreach (var sample in new[]
+                 {
+                     (Id: "=080DT_004-KF120X101:4", Expected: "080DT_004"),
+                     (Id: "=080RFS001-BZ1:4", Expected: "080RFS001"),
+                     (Id: "=050ABS001-BZ1.1:4", Expected: "050ABS001"),
+                     (Id: "=010VRE007-QM3MM1BG21:4", Expected: "010VRE007"),
+                     (Id: "=010HTM002-QM3MM1BG21:4", Expected: "010HTM002"),
+                 })
+        {
+            var preview = universalId.CreateGroupingPreview(new ContainerEntry
+            {
+                ID = sample.Id,
+                Signal = "Test",
+            });
+            if (!preview.GroupKey.Contains(sample.Expected, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Universal ID grouping did not extract {sample.Expected}.");
+        }
+
+        var addressRange = new ContainerGenerationSettings
+        {
+            GroupByAddress = true,
+            RegexAddress = @"^[%]?[IEAQM](\d{2})\d{2}\.",
+        };
+        foreach (var address in new[] { "I2700.0", "I2720.0", "Q2760.1" })
+        {
+            var preview = addressRange.CreateGroupingPreview(new ContainerEntry
+            {
+                Address = address,
+                Signal = "Test",
+            });
+            if (!preview.GroupKey.Contains("27", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Address range grouping did not group {address} into 27xx.");
+        }
+
+        var externalPreset = ContainerGenerationPageVM.TryCreateGroupingPreset(
+            Path.Combine(Path.GetTempPath(), "Customer grouping.xml"),
+            XDocument.Parse("""
+                <CAASettings>
+                  <PresetName>Kunden-ID</PresetName>
+                  <RegexAddress></RegexAddress>
+                  <RegexSubstitution>^(.+?)-\d+$</RegexSubstitution>
+                  <RegexId>=([A-Z0-9_]{9})</RegexId>
+                  <GroupByComponent>true</GroupByComponent>
+                  <GroupByType>false</GroupByType>
+                  <GroupById>true</GroupById>
+                  <GroupByAddress>false</GroupByAddress>
+                  <SelectedOption>ID</SelectedOption>
+                </CAASettings>
+                """));
+        if (externalPreset is null || !externalPreset.IsUserPreset || externalPreset.Name != "Kunden-ID" ||
+            externalPreset.RegexId != @"=([A-Z0-9_]{9})" || !externalPreset.GroupByComponent ||
+            !externalPreset.GroupById || externalPreset.GroupByAddress ||
+            externalPreset.SelectedOption != ContainerGenerationSettings.IdOption)
+        {
+            throw new InvalidOperationException("An external CAASettings grouping preset was not parsed for the dropdown.");
+        }
+        if (ContainerGenerationPageVM.TryCreateGroupingPreset(
+                "invalid.xml",
+                XDocument.Parse("<NotCAASettings />")) is not null)
+        {
+            throw new InvalidOperationException("A non-CAASettings XML was accepted as a grouping preset.");
+        }
+    }
+
+    private static void ValidateReimportDecisionStaging()
+    {
+        var viewModel = new ContainerGenerationPageVM();
+        var first = new ReimportDifference(
+            ReimportChangeKind.SourceChanged,
+            "Adresse",
+            "Sensor A",
+            "%I0.0",
+            "%I0.1",
+            false);
+        var second = new ReimportDifference(
+            ReimportChangeKind.NewFromSource,
+            "Neu",
+            "Sensor B",
+            string.Empty,
+            "%I0.2",
+            false);
+        viewModel.PendingReimportChanges.Add(first);
+        viewModel.PendingReimportChanges.Add(second);
+
+        viewModel.SelectedReimportCriterion = first.Category;
+        if (viewModel.PendingReimportChangesView.Cast<object>().Count() != 1)
+            throw new InvalidOperationException("Reimport criterion filter did not restrict the comparison list.");
+        viewModel.SelectedReimportCriterion = "Alle";
+        viewModel.ReimportSearchText = "Sensor B";
+        if (viewModel.PendingReimportChangesView.Cast<ReimportDifference>().SingleOrDefault() != second)
+            throw new InvalidOperationException("Reimport full-text search did not find the expected change.");
+        viewModel.ReimportSearchText = string.Empty;
+
+        viewModel.AcceptReimportChange.Execute(first);
+        if (!first.IsAccepted || viewModel.PendingReimportChanges.Count != 2 ||
+            !first.TemporaryDecision.Contains("übernehmen", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Staging a single reimport change removed the comparison list or lost its decision.");
+        }
+
+        viewModel.RejectReimportChange.Execute(first);
+        if (first.IsAccepted || viewModel.PendingReimportChanges.Count != 2 ||
+            !first.TemporaryDecision.Contains("nicht übernehmen", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "Rejecting one reimport change removed or changed another comparison row.");
         }
     }
 
@@ -805,6 +1582,22 @@ internal static class Program
                 projection.UpdatedSlots != 2 || projection.UnresolvedSlotVariableGuids.Count != 0)
                 throw new InvalidOperationException("Current FEE variable values were not projected completely.");
 
+            var staleProjection = FeeContainerVariableProjector.Apply(
+                decoded with
+                {
+                    SignalBindings =
+                    [
+                        new FeeContainerSignalBinding(99, 0, variableA),
+                        new FeeContainerSignalBinding(0, 99, variableB),
+                    ]
+                },
+                [
+                    new(variableA, "HomeA", "%I0.0", string.Empty, "Bool", "A"),
+                    new(variableB, "HomeB", "%I0.1", string.Empty, "Bool", "B"),
+                ]);
+            if (staleProjection.UpdatedEntries != 0 || staleProjection.MissingVariableGuids.Count != 2)
+                throw new InvalidOperationException("Stale FEE2Container provenance indexes were not rejected safely.");
+
             FeeContainerProvenanceCodec.SaveAtomically(projection.Snapshot, exportedPath);
             var (containers, unknownSignals) = ContainerToFeeService.ReadInContainerXmlData(exportedPath);
             var cylinder = (GrobCylinder_Container)containers.Single();
@@ -820,10 +1613,92 @@ internal static class Program
                     "Container → provenance → Container lost the selected container or PLC_IN fan-in.");
             }
 
+            var combined = await new Fee2ContainerService().CreateCombinedExportAsync([
+                new Fee2ContainerRoot(Guid.NewGuid(), "Root A", projection.Snapshot, 2, 0, 2, 0),
+                new Fee2ContainerRoot(Guid.NewGuid(), "Root B", projection.Snapshot, 2, 0, 2, 0),
+            ]);
+            if (combined.Snapshot.ContainerCount != 2 ||
+                combined.Snapshot.SignalBindings.Count != 4 ||
+                combined.Snapshot.SignalBindings.Max(binding => binding.ContainerIndex) != 1)
+            {
+                throw new InvalidOperationException(
+                    "Multi-root FEE2Container export did not merge only the selected root snapshots correctly.");
+            }
+
             var damagedTags = encoded.Tags.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
             damagedTags[FeeContainerProvenanceCodec.HashKey] = new string('0', 64);
             if (FeeContainerProvenanceCodec.TryRead(damagedTags, out _, out _))
                 throw new InvalidOperationException("Damaged provenance checksum was accepted.");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task ValidateFee2ContainerVisualTypeCoverageAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-fee-types-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var sourcePath = Path.Combine(directory, "all-visual-types.xml");
+        try
+        {
+            var supportedTypes = FeeContainerLiveReconstructor.SupportedContainerTypes;
+            var source = new XDocument(
+                new XElement("ContainerFile",
+                    supportedTypes.Select((type, index) =>
+                        new XElement("Container",
+                            new XAttribute("id", $"type-{index}"),
+                            new XElement("Component", $"Component_{type}"),
+                            new XElement("Type", type),
+                            new XElement("DataList")))));
+            source.Save(sourcePath);
+
+            var planService = new ContainerToFeeVisualPlanService();
+            var loaded = await planService.LoadXmlAsync(sourcePath);
+            if (!loaded.Success || loaded.Plan is null)
+                throw new InvalidOperationException(
+                    $"The complete Container2FEE Visual type catalog could not be parsed: {loaded.Message}");
+            var selectedIds = loaded.Plan.Nodes
+                .Where(node => node.Kind == VisualNodeKind.Container)
+                .Select(node => node.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            if (selectedIds.Count != supportedTypes.Count ||
+                loaded.Issues.Any(issue => issue.Code == "CONTAINER_TYPE_UNKNOWN"))
+            {
+                throw new InvalidOperationException(
+                    "Container2FEE Visual and FEE2Container expose different supported type sets.");
+            }
+
+            var encoded = FeeContainerProvenanceCodec.Create(
+                source,
+                selectedIds,
+                sourceFingerprint: "all-visual-types");
+            if (!FeeContainerProvenanceCodec.TryRead(encoded.Tags, out var decoded, out var error) ||
+                decoded is null)
+            {
+                throw new InvalidOperationException(
+                    $"The all-type FEE2Container provenance could not be decoded: {error}");
+            }
+
+            var roundTrippedTypes = decoded.ContainerDocument.Descendants("Container")
+                .Select(container => container.Element("Type")?.Value ?? string.Empty)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (decoded.ContainerCount != supportedTypes.Count ||
+                !roundTrippedTypes.SetEquals(supportedTypes))
+            {
+                throw new InvalidOperationException(
+                    "FEE2Container did not retain every type generated by Container2FEE Visual.");
+            }
+
+            var (runtimeContainers, unknownSignals) =
+                ContainerToFeeService.ReadInContainerXmlData(decoded.ContainerDocument);
+            if (runtimeContainers.Count != supportedTypes.Count || unknownSignals.Count != 0)
+            {
+                throw new InvalidOperationException(
+                    "The shared Container2FEE runtime parser does not cover the complete visual type catalog.");
+            }
         }
         finally
         {
@@ -903,6 +1778,82 @@ internal static class Program
         }
     }
 
+    private static void ValidateContainerTemplateSuggestions()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-container-suggestions-{Guid.NewGuid():N}");
+        try
+        {
+            var logger = new ActionLogger(directory);
+            logger.LogAdded(
+                "Cylinder_1",
+                "Cylinder",
+                new ContainerEntry { SignalId = "A", Signal = "Work position", Slot = "PLC_IN_InWorkPos" },
+                null,
+                null,
+                null,
+                "project-1");
+            logger.LogAdded(
+                "Cylinder_2",
+                "Cylinder",
+                new ContainerEntry { SignalId = "B", Signal = "End position", Slot = "PLC_IN_InWorkPos" },
+                null,
+                null,
+                null,
+                "project-2");
+            var analysis = new ContainerTemplateSuggestionService().Analyze(
+                Directory.GetFiles(directory, "*.jsonl"));
+            var suggestion = analysis.Suggestions.Single();
+            if (suggestion.ContainerType != "Cylinder" || suggestion.SupportingContainers != 2 ||
+                suggestion.Slots != "PLC_IN_InWorkPos" || Math.Abs(suggestion.Confidence - 1d) > 0.0001)
+            {
+                throw new InvalidOperationException("Container-template suggestions are not deterministic.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static void ValidateAutomaticCoverageMatrix()
+    {
+        var requirements = Path.Combine(
+            AppContext.BaseDirectory,
+            "TestData",
+            "GoldenMaster",
+            "DE_AutoCreate_Master_V17.xml");
+        var matrix = new ContainerCoverageMatrixService().Build(requirements);
+        if (matrix.Rows.Count < FeeContainerLiveReconstructor.SupportedContainerTypes.Count ||
+            matrix.Rows.Where(row => row.ForwardGeneration).Any(row => !row.ReverseRecognition) ||
+            matrix.Rows.All(row => row.ContainerType != "Cylinder" || !row.RequirementsPresent))
+        {
+            throw new InvalidOperationException(
+                "Automatic coverage matrix does not represent the shared forward/reverse container catalog.");
+        }
+
+        var unknownRequirements = Path.Combine(Path.GetTempPath(), $"vibn-coverage-{Guid.NewGuid():N}.xml");
+        try
+        {
+            File.WriteAllText(
+                unknownRequirements,
+                "<Requirements><Component type=\"CustomerOnly\"><Slot name=\"PLC_IN_Test\" /></Component></Requirements>");
+            var unknownRow = new ContainerCoverageMatrixService().Build(unknownRequirements).Rows
+                .Single(row => row.ContainerType == "CustomerOnly");
+            if (unknownRow.ForwardGeneration || unknownRow.ReverseRecognition ||
+                !unknownRow.UnknownInRuntime.Contains("PLC_IN_Test", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Requirements-only component types must remain visible as an uncovered matrix row.");
+            }
+        }
+        finally
+        {
+            if (File.Exists(unknownRequirements))
+                File.Delete(unknownRequirements);
+        }
+    }
+
     private static void LogSlotCorrection(
         ActionLogger logger,
         string signalId,
@@ -960,7 +1911,9 @@ internal static class Program
             var service = new RequirementsRulePatchService();
             var plan = service.CreatePlan(requirementsPath, [suggestion]);
             if (!plan.UpdatedXml.Contains("match=\"exact\"", StringComparison.Ordinal) ||
-                !plan.Preview.Contains("PLC_IN_Old' -> 'PLC_IN_New", StringComparison.Ordinal))
+                !plan.Preview.Contains("PLC_IN_Old' -> 'PLC_IN_New", StringComparison.Ordinal) ||
+                !plan.Preview.Contains(suggestion.RequirementsXmlFragment, StringComparison.Ordinal) ||
+                plan.Items.Single().XmlFragment != suggestion.RequirementsXmlFragment)
             {
                 throw new InvalidOperationException("Requirements patch preview misses the exact override.");
             }

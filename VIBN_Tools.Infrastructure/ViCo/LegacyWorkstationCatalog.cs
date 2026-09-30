@@ -537,11 +537,13 @@ public sealed class ViCoWorkstationSearch : IViCoWorkstationSearch
     public IReadOnlyList<ViCoWorkstationSearchHit> SearchWithMatches(
         IEnumerable<ViCoWorkstation> workstations,
         string query,
-        ViCoSearchMode mode)
+        ViCoSearchMode mode,
+        IReadOnlyCollection<string>? searchableColumns = null)
     {
         var terms = ParseTerms(query);
+        var allowedColumns = searchableColumns?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         return workstations
-            .Select(workstation => Match(workstation, terms, mode))
+            .Select(workstation => Match(workstation, terms, mode, allowedColumns))
             .Where(hit => hit is not null)
             .Select(hit => hit!)
             .OrderBy(hit => hit.Workstation.DisplayName, StringComparer.OrdinalIgnoreCase)
@@ -551,9 +553,12 @@ public sealed class ViCoWorkstationSearch : IViCoWorkstationSearch
     private static ViCoWorkstationSearchHit? Match(
         ViCoWorkstation workstation,
         SearchTerms terms,
-        ViCoSearchMode mode)
+        ViCoSearchMode mode,
+        IReadOnlySet<string>? searchableColumns)
     {
-        var fields = GetSearchFields(workstation, mode);
+        var fields = GetSearchFields(workstation, mode)
+            .Where(field => searchableColumns is null || searchableColumns.Contains(field.Column))
+            .ToArray();
         if (terms.Excluded.Any(term => fields.Any(field => field.NormalizedValue.Contains(term, StringComparison.Ordinal))))
             return null;
 
@@ -591,8 +596,6 @@ public sealed class ViCoWorkstationSearch : IViCoWorkstationSearch
             Add("Sonstiges", workstation.WorkstationConfiguration.Other.Value);
             Add("FEE", workstation.FeeInformation);
             Add("Hardware", workstation.HardwareInformation);
-            foreach (var robot in workstation.RobotDetails)
-                Add("Robotik", $"{robot.Name} {robot.Status} {robot.SourceCard}");
         }
 
         if (mode is ViCoSearchMode.All or ViCoSearchMode.Project)
@@ -648,7 +651,10 @@ public sealed class ViCoWorkstationSearch : IViCoWorkstationSearch
     }
 
     private static string Normalize(string value) =>
-        new(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        new(value
+            .Where(character => char.IsLetterOrDigit(character) || character == '.')
+            .Select(char.ToLowerInvariant)
+            .ToArray());
 
     private sealed record SearchField(string Column, string NormalizedValue);
     private sealed record SearchTerms(IReadOnlyList<string> Included, IReadOnlyList<string> Excluded);

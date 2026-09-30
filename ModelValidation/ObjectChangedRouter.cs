@@ -443,10 +443,10 @@ namespace VIBN_Tools.ModelValidation
                     await Services.ApiInstance.Object.SetPropertyAsync(readingUnit.Guid, nameof(ModelComponent.IsComponentActive), readingUnit.Visible, "Model");
                     break;
                 case nameof(FeeReadingUnit.DetectMark):
-                    await Services.ApiInstance.Object.SetPropertyAsync(readingUnit.Guid, nameof(ReadingUnitUdt.UseDetectMark), readingUnit.DetectMark);
+                    await Services.ApiInstance.Object.SetPropertyAsync(readingUnit.Guid, FeeSdkPropertyNames.UseDetectMark, readingUnit.DetectMark);
                     break;
                 case nameof(FeeReadingUnit.MarkToDetect):
-                    await Services.ApiInstance.Object.SetPropertyAsync(readingUnit.Guid, nameof(ReadingUnitUdt.DetectMark), readingUnit.MarkToDetect);
+                    await Services.ApiInstance.Object.SetPropertyAsync(readingUnit.Guid, FeeSdkPropertyNames.DetectMark, readingUnit.MarkToDetect);
                     break;
 
             }

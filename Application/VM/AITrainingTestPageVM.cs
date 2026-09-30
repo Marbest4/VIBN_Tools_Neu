@@ -8,6 +8,8 @@ using System.Windows.Input;
 using System.Xml.Linq;
 using VIBN_Tools.Application.View;
 using VIBN_Tools.ContainerGeneration.AI;
+using VIBN_Tools.ContainerToFeeVisual;
+using VIBN_Tools.Core.Diagnostics;
 using VIBN_Tools.GlobalClasses;
 
 namespace VIBN_Tools.Application.VM
@@ -51,6 +53,15 @@ namespace VIBN_Tools.Application.VM
         public ICommand OpenActionLogFolderCommand => GetCommandBinding(_ => OpenActionLogFolder());
         public ICommand PreviewRequirementsPatchCommand => GetCommandBinding(_ => PreviewRequirementsPatch());
         public ICommand ApplyRequirementsPatchCommand => GetCommandBinding(_ => ApplyRequirementsPatch());
+        public ICommand RefreshContainerSuggestionsCommand => GetCommandBinding(_ => RefreshContainerSuggestions());
+        public ICommand AcceptContainerSuggestionCommand => GetCommandBinding(
+            parameter => SetContainerSuggestionStatus(parameter, RuleSuggestionStatus.Accepted));
+        public ICommand RejectContainerSuggestionCommand => GetCommandBinding(
+            parameter => SetContainerSuggestionStatus(parameter, RuleSuggestionStatus.Rejected));
+        public ICommand LoadCoverageMatrixCommand => GetCommandBinding(_ => LoadCoverageMatrix());
+        public ICommand RefreshPerformanceCommand => GetCommandBinding(_ => RefreshPerformance());
+        public ICommand ClearPerformanceCommand => GetCommandBinding(_ => ClearPerformance());
+        public ICommand OpenPerformanceFolderCommand => GetCommandBinding(_ => OpenPerformanceFolder());
 
         // ===========================
         // Services
@@ -65,6 +76,11 @@ namespace VIBN_Tools.Application.VM
         private readonly RuleSuggestionService _ruleSuggestionService = new();
         private readonly RuleSuggestionReviewStore _ruleSuggestionReviews = new();
         private readonly RequirementsRulePatchService _requirementsRulePatchService = new();
+        private readonly ContainerTemplateSuggestionService _containerSuggestionService = new();
+        private readonly RuleSuggestionReviewStore _containerSuggestionReviews = new(
+            Path.Combine(ModelPaths.BaseDir, "container_suggestion_reviews.json"));
+        private readonly ContainerCoverageMatrixService _coverageMatrixService = new();
+        private readonly PerformanceMeasurementService _performance = PerformanceMeasurementService.Instance;
 
         // ===========================
         // Settings
@@ -130,6 +146,38 @@ namespace VIBN_Tools.Application.VM
         // ===========================
         public ObservableCollection<ModelEntry> ModelEntries { get; } = new();
         public ObservableCollection<RuleSuggestion> RuleSuggestions { get; } = new();
+        public ObservableCollection<ContainerTemplateSuggestion> ContainerSuggestions { get; } = new();
+        public ObservableCollection<ContainerCoverageRow> CoverageRows { get; } = new();
+        public ObservableCollection<PerformanceSummary> PerformanceSummaries { get; } = new();
+
+        private string _containerSuggestionSummary = "Noch keine Container-Aktionsmuster ausgewertet.";
+        public string ContainerSuggestionSummary
+        {
+            get => _containerSuggestionSummary;
+            private set { _containerSuggestionSummary = value; OnPropertyChanged(); }
+        }
+
+        private string _coverageSummary = "Requirements-XML auswählen, um die automatische Abdeckungsmatrix zu erstellen.";
+        public string CoverageSummary
+        {
+            get => _coverageSummary;
+            private set { _coverageSummary = value; OnPropertyChanged(); }
+        }
+
+        public bool IsPerformanceModeEnabled
+        {
+            get => _performance.Enabled;
+            set
+            {
+                if (_performance.Enabled == value)
+                    return;
+                _performance.Enabled = value;
+                OnPropertyChanged();
+                Log(value
+                    ? "Performance-Modus aktiviert. Neue vollständige Workflows werden als JSONL gemessen."
+                    : "Performance-Modus deaktiviert. Vorhandene Messwerte bleiben erhalten.");
+            }
+        }
 
         private RequirementsRulePatchPlan? _pendingRequirementsPatch;
         private string _requirementsPatchPreview =
@@ -331,6 +379,88 @@ namespace VIBN_Tools.Application.VM
             {
                 RuleSuggestionSummary = $"Regelvorschläge konnten nicht geladen werden: {exception.Message}";
             }
+            try { RefreshContainerSuggestions(); }
+            catch (Exception exception)
+            {
+                ContainerSuggestionSummary = $"Container-Vorschläge konnten nicht geladen werden: {exception.Message}";
+            }
+            RefreshPerformance();
+        }
+
+        private void RefreshContainerSuggestions()
+        {
+            var analysis = _containerSuggestionService.Analyze(
+                ModelPaths.AllActionLogs(),
+                _containerSuggestionReviews.Load());
+            ContainerSuggestions.Clear();
+            foreach (var suggestion in analysis.Suggestions)
+                ContainerSuggestions.Add(suggestion);
+            ContainerSuggestionSummary =
+                $"{analysis.ParsedEvents} strukturierte Aktionen, {analysis.Suggestions.Count} Container-Muster, " +
+                $"{analysis.InvalidLines} ungültige Logzeilen. Vorschläge werden nie automatisch erzeugt oder in XML geschrieben.";
+        }
+
+        private void SetContainerSuggestionStatus(object parameter, RuleSuggestionStatus status)
+        {
+            if (parameter is not ContainerTemplateSuggestion suggestion)
+                return;
+            var statuses = new Dictionary<string, RuleSuggestionStatus>(
+                _containerSuggestionReviews.Load(),
+                StringComparer.Ordinal)
+            {
+                [suggestion.Id] = status,
+            };
+            _containerSuggestionReviews.Save(statuses);
+            var index = ContainerSuggestions.IndexOf(suggestion);
+            if (index >= 0)
+                ContainerSuggestions[index] = suggestion with { Status = status };
+            Log($"Container-Muster {suggestion.ContainerType} wurde als {status} markiert.");
+        }
+
+        private void LoadCoverageMatrix()
+        {
+            var path = SystemDialog.OpenSelectFileDialog("AutoCreate Requirements XML|*.xml");
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+            try
+            {
+                var matrix = _coverageMatrixService.Build(path);
+                CoverageRows.Clear();
+                foreach (var row in matrix.Rows)
+                    CoverageRows.Add(row);
+                CoverageSummary = $"{matrix.CompleteRows}/{matrix.Rows.Count} Typen vollständig; " +
+                                  $"{matrix.WarningRows} Abweichungen. Quelle: {matrix.SourcePath}";
+                Log("Abdeckungsmatrix aktualisiert: " + CoverageSummary);
+            }
+            catch (Exception exception)
+            {
+                CoverageSummary = $"Abdeckungsmatrix fehlgeschlagen: {exception.Message}";
+                Log(CoverageSummary);
+            }
+        }
+
+        private void RefreshPerformance()
+        {
+            PerformanceSummaries.Clear();
+            foreach (var summary in _performance.GetSummaries())
+                PerformanceSummaries.Add(summary);
+        }
+
+        private void ClearPerformance()
+        {
+            _performance.Clear();
+            RefreshPerformance();
+            Log("Messwerte der aktuellen Sitzung wurden geleert. Bereits geschriebene JSONL-Dateien bleiben erhalten.");
+        }
+
+        private void OpenPerformanceFolder()
+        {
+            Directory.CreateDirectory(_performance.LogDirectory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _performance.LogDirectory,
+                UseShellExecute = true,
+            });
         }
 
         private void RefreshRuleSuggestions()

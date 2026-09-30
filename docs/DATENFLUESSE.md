@@ -11,10 +11,14 @@ flowchart LR
     S --> P
     P --> D[WorkstationDirectory]
     P --> V[ViCoSearchPageVM]
+    V --> L[last-active-workstations.json]
+    L -. 0 Treffer oder Abruf über 10 s .-> V
     D --> PS[Project Settings Dropdown]
 ```
 
 `WorkstationBoardCache.json` bewahrt Karten- und Unteraufgaben-IDs der `KONFIGURATION`-Karte. `LegacyWorkstationCatalog` verbindet sie über die Lane mit dem Arbeitsplatz. Der Wert `USER:` hat Vorrang vor älteren Textkarten; damit nutzen ViCo und Project Settings dieselbe dynamische PC-Benutzer-Zuordnung.
+
+Die zuletzt erfolgreich dargestellte, nicht leere Übersicht wird davon getrennt atomar in `last-active-workstations.json` gespeichert. Liefert ein Abruf keine Arbeitsstation oder überschreitet die Ladezeit zehn Sekunden, zeigt die Rechnerübersicht diesen letzten aktiven Stand mit seinem exakten Aktualisierungszeitpunkt. Ein leerer oder defekter Abruf überschreibt den Snapshot nicht; ein beschädigter Snapshot wird ignoriert.
 
 Beim Speichern der Konfiguration läuft der Datenfluss nur in die Gegenrichtung der vorhandenen Unteraufgabe:
 
@@ -55,10 +59,12 @@ sequenceDiagram
         VM->>R: automatische Anmeldung
     else offline
         VM-->>U: Aktionen ausgeblendet
-    end
+end
 ```
 
-Die alternative Schaltfläche „RDP mit Anmeldedaten“ ruft denselben RDP-Adapter mit `prompt for credentials:i:1` ohne temporären Eintrag auf. Project Settings beziehungsweise die IBN-Konfiguration schreibt oder löscht das RDP-Passwort im lokalen Windows Credential Manager des aktuellen Benutzers. Der normale Start liest diesen Wert über den zentralen Credential-Service, erzeugt `TERMSRV/<PC>` unmittelbar vor `mstsc` und löscht den temporären RDP-Eintrag nach 20 Sekunden; der dauerhafte VIBN-Tools-Eintrag bleibt bestehen. Das Kennwort landet nie im `.rdp`-Profil, Cache oder Log.
+Die Spalten **RDP-Sitzung** und **Letzte Anmeldung** zeigen die Ergebnisse derselben `quser`-Abfrage wie der Detailbereich. Das Kontextmenü kann außerdem eine sichtbare lokale Eingabeaufforderung oder `ping <PC> -t` öffnen. Rechnernamen werden vor dem Prozessstart auf einen engen Hostnamen-Zeichensatz geprüft; freie Befehlsargumente werden nicht ausgeführt.
+
+Die alternative Schaltfläche „RDP mit Anmeldedaten“ des Volltools ruft denselben RDP-Adapter mit `prompt for credentials:i:1` ohne temporären Eintrag auf. Project Settings schreibt oder löscht das RDP-Passwort im lokalen Windows Credential Manager des aktuellen Benutzers. Der normale Start liest den Wert über den zentralen Credential-Service, erzeugt `TERMSRV/<PC>` unmittelbar vor `mstsc` und löscht den temporären RDP-Eintrag nach 20 Sekunden; der dauerhafte VIBN-Tools-Eintrag bleibt bestehen. Die getrennte IBN-Test-EXE nutzt denselben Vertrag mit einem absichtlich ungültigen eingebetteten Platzhalter und besitzt keinen dauerhaften VIBN-Tools-Credential-Eintrag. Das Kennwort landet nie im `.rdp`-Profil, Cache oder Log.
 
 ## Kanbanize VIBN → Arbeitsplätze
 

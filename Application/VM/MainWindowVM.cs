@@ -60,7 +60,7 @@ public sealed class MainWindowVM : MvvmBase
         }
     }
 
-    /// <summary>AI-Test and the Kanbanize card workspace.</summary>
+    /// <summary>Kanbanize card workspace.</summary>
     public bool CanUseLevel8Features
     {
         get => _canUseLevel8Features;
@@ -71,7 +71,10 @@ public sealed class MainWindowVM : MvvmBase
         }
     }
 
-    /// <summary>Administration and other system-wide write operations.</summary>
+    /// <summary>
+    /// Administration plus diagnostic/reverse-generation tools which expose
+    /// or mutate project-wide FEE state.
+    /// </summary>
     public bool CanUseLevel9Features
     {
         get => _canUseLevel9Features;

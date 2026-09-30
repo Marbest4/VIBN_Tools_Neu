@@ -7,10 +7,14 @@ namespace VIBN_Tools.Application.View;
 public partial class ViCoSearchPage : UserControl
 {
     private readonly ViCoSearchPageVM _viewModel;
+    private readonly IReadOnlyList<(DataGridColumn Column, int DisplayIndex, DataGridLength Width)> _defaultColumns;
 
     public ViCoSearchPage()
     {
         InitializeComponent();
+        _defaultColumns = WorkstationGrid.Columns
+            .Select(column => (column, column.DisplayIndex, column.Width))
+            .ToArray();
         _viewModel = ViCoFeatureBootstrapper.CreateSearchViewModel();
         DataContext = _viewModel;
         Loaded += OnLoaded;
@@ -35,5 +39,25 @@ public partial class ViCoSearchPage : UserControl
     {
         if (sender is DataGrid grid)
             _viewModel.SetSelectedWorkstations(grid.SelectedItems);
+    }
+
+    private async void ResetView_Click(object sender, RoutedEventArgs e)
+    {
+        WorkstationGrid.UnselectAll();
+        var frozenColumnCount = WorkstationGrid.FrozenColumnCount;
+        WorkstationGrid.FrozenColumnCount = 0;
+        try
+        {
+            foreach (var state in _defaultColumns.OrderBy(state => state.DisplayIndex))
+            {
+                state.Column.DisplayIndex = state.DisplayIndex;
+                state.Column.Width = state.Width;
+            }
+        }
+        finally
+        {
+            WorkstationGrid.FrozenColumnCount = frozenColumnCount;
+        }
+        await _viewModel.ResetDisplayViewAsync();
     }
 }

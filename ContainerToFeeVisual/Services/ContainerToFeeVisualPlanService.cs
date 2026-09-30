@@ -1,5 +1,7 @@
 using System.IO;
 using System.Xml.Linq;
+using VIBN_Tools.ContainerGeneration.Models;
+using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
@@ -15,20 +17,28 @@ public sealed class ContainerToFeeVisualPlanService
     private readonly VisualPlanSidecarStore _sidecarStore;
     private readonly FeeSimObjectDiscovery _discovery;
     private readonly FeeInterfaceDiscovery _interfaceDiscovery;
+    private readonly FeeSignalLinkDiscovery _signalLinkDiscovery;
+    private readonly FeeSimObjectLinkDiscovery _simObjectLinkDiscovery;
     private readonly LegacyContainerToFeeExecutionAdapter _executor;
     private readonly ExistingSimObjectLinkAdapter _linkExecutor;
     private readonly ExistingSignalLinkAdapter _signalLinkExecutor;
     private readonly Stack<PlanState> _undo = new();
     private readonly Stack<PlanState> _redo = new();
+    private readonly HashSet<string> _confirmedDuplicateIdentities = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<VisualFeeObject> _feeObjects = [];
+    private IReadOnlyList<VisualFeeContainerObject> _feeContainerObjects = [];
     private IReadOnlyDictionary<string, FeeAbstractObject> _runtimeObjects =
         new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
     private IReadOnlyList<VisualFeeInterface> _feeInterfaces = [];
     private IReadOnlyList<VisualFeeSignal> _feeSignals = [];
+    private IReadOnlyList<VisualFeeSignalLink> _feeSignalLinks = [];
+    private IReadOnlyList<VisualFeeObjectLink> _feeSimObjectLinks = [];
     private IReadOnlyDictionary<string, FeeInterface> _runtimeInterfaces =
         new Dictionary<string, FeeInterface>(StringComparer.OrdinalIgnoreCase);
     private bool _hasDiscoveredFeeObjects;
     private bool _hasDiscoveredFeeInterfaces;
+    private bool _hasDiscoveredFeeSignalLinks;
+    private bool _hasDiscoveredFeeSimObjectLinks;
 
     public ContainerToFeeVisualPlanService()
         : this(new VisualPlanLogger())
@@ -42,6 +52,8 @@ public sealed class ContainerToFeeVisualPlanService
         _sidecarStore = new VisualPlanSidecarStore(logger);
         _discovery = new FeeSimObjectDiscovery(logger);
         _interfaceDiscovery = new FeeInterfaceDiscovery(logger);
+        _signalLinkDiscovery = new FeeSignalLinkDiscovery(logger);
+        _simObjectLinkDiscovery = new FeeSimObjectLinkDiscovery(logger);
         _executor = new LegacyContainerToFeeExecutionAdapter(logger);
         _linkExecutor = new ExistingSimObjectLinkAdapter(logger);
         _signalLinkExecutor = new ExistingSignalLinkAdapter(logger);
@@ -56,9 +68,62 @@ public sealed class ContainerToFeeVisualPlanService
     public bool CanRedo => _redo.Count > 0;
 
     public IReadOnlyList<VisualFeeObject> DiscoveredFeeObjects => _feeObjects;
+    public IReadOnlyList<VisualFeeContainerObject> DiscoveredFeeContainerObjects => _feeContainerObjects;
 
     public IReadOnlyList<VisualFeeInterface> DiscoveredFeeInterfaces => _feeInterfaces;
     public IReadOnlyList<VisualFeeSignal> DiscoveredFeeSignals => _feeSignals;
+    public IReadOnlyList<VisualFeeSignalLink> DiscoveredFeeSignalLinks => _feeSignalLinks;
+    public IReadOnlyList<VisualFeeObjectLink> DiscoveredFeeSimObjectLinks => _feeSimObjectLinks;
+
+    public bool IsDuplicateFeeObject(string? feeObjectId) =>
+        FindFeeObject(feeObjectId)?.HasExactDuplicate == true;
+
+    public bool IsDuplicateFeeObjectConfirmed(string? feeObjectId) =>
+        FindFeeObject(feeObjectId) is { HasExactDuplicate: true } feeObject &&
+        _confirmedDuplicateIdentities.Contains(CreateDuplicateIdentity(feeObject));
+
+    public VisualAssignmentResult ConfirmDuplicateAssignment(string targetId, string feeObjectId)
+    {
+        var plan = CurrentPlan;
+        if (plan is null)
+            return AssignmentFailure("Es ist kein visueller Plan geladen.", "PLAN_NOT_LOADED");
+        var target = plan.FindTarget(targetId);
+        var feeObject = FindFeeObject(feeObjectId);
+        if (target is null || feeObject is null || !feeObject.HasExactDuplicate)
+        {
+            return AssignmentFailure(
+                "Der Mehrfachtreffer ist nicht mehr vorhanden.",
+                "DUPLICATE_CONFIRMATION_TARGET_MISSING",
+                targetId);
+        }
+        if (!target.CanAssign(feeObject))
+            return AssignmentFailure("Das gewählte Objekt ist nicht kompatibel.", "FEE_OBJECT_INCOMPATIBLE", targetId);
+
+        var before = Capture(plan);
+        var assignments = plan.Assignments.ToList();
+        if (!assignments.Any(item => item.TargetId == targetId && item.FeeObjectId == feeObjectId))
+            assignments.Add(ToAssignment(targetId, feeObject));
+        if (!target.AllowMultiSelect)
+        {
+            assignments = assignments
+                .Where(item => item.TargetId != targetId || item.FeeObjectId == feeObjectId)
+                .ToList();
+        }
+        _confirmedDuplicateIdentities.Add(CreateDuplicateIdentity(feeObject));
+        RecordMutation(before);
+        plan.ReplaceAssignments(assignments);
+        _logger.Information(
+            $"Mehrfachfund '{feeObject.Name}' unter '{feeObject.ParentName}' wurde ausdrücklich bestätigt; " +
+            (target.AllowMultiSelect ? "Multi-Select-Zuordnungen bleiben erhalten." : "der bestätigte Treffer wurde eindeutig ausgewählt."));
+        RaisePlanChanged();
+        return new VisualAssignmentResult(
+            true,
+            target.AllowMultiSelect
+                ? $"Mehrfachfund '{feeObject.Name}' wurde für das Multi-Select-Ziel bestätigt."
+                : $"'{feeObject.Name}' wurde als eindeutiger Treffer bestätigt; andere Treffer wurden von diesem Ziel gelöst.",
+            ToAssignment(targetId, feeObject),
+            []);
+    }
 
     public async Task<VisualPlanLoadResult> LoadXmlAsync(
         string xmlPath,
@@ -172,10 +237,37 @@ public sealed class ContainerToFeeVisualPlanService
         CancellationToken cancellationToken = default)
     {
         var result = await _discovery.DiscoverAsync(cancellationToken);
+        _confirmedDuplicateIdentities.Clear();
         _feeObjects = result.Objects;
         _runtimeObjects = result.RuntimeObjects;
+        _feeContainerObjects = result.ContainerObjects;
         _hasDiscoveredFeeObjects = true;
+        _feeSimObjectLinks = [];
+        _hasDiscoveredFeeSimObjectLinks = false;
+        RemoveStaleObjectAssignments();
         return _feeObjects;
+    }
+
+    public async Task<IReadOnlyList<VisualFeeObjectLink>> DiscoverFeeSimObjectLinksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !_hasDiscoveredFeeObjects)
+        {
+            _feeSimObjectLinks = [];
+            _hasDiscoveredFeeSimObjectLinks = false;
+            return _feeSimObjectLinks;
+        }
+
+        var assignedIds = plan.Assignments.Select(item => item.FeeObjectId)
+            .ToHashSet(StringComparer.Ordinal);
+        var relevantObjects = _runtimeObjects.Where(item => assignedIds.Contains(item.Key))
+            .Select(item => item.Value)
+            .ToArray();
+        var result = await _simObjectLinkDiscovery.DiscoverAsync(relevantObjects, cancellationToken);
+        _feeSimObjectLinks = result.Links;
+        _hasDiscoveredFeeSimObjectLinks = true;
+        return _feeSimObjectLinks;
     }
 
     public async Task<IReadOnlyList<VisualFeeInterface>> DiscoverFeeInterfacesAsync(
@@ -185,8 +277,232 @@ public sealed class ContainerToFeeVisualPlanService
         _feeInterfaces = result.Interfaces;
         _runtimeInterfaces = result.RuntimeInterfaces;
         _feeSignals = result.Signals;
+        _feeSignalLinks = [];
         _hasDiscoveredFeeInterfaces = true;
+        _hasDiscoveredFeeSignalLinks = false;
+        RemoveStaleSignalAssignments();
         return _feeInterfaces;
+    }
+
+    public async Task<IReadOnlyList<VisualFeeSignalLink>> DiscoverFeeSignalLinksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !_hasDiscoveredFeeInterfaces)
+        {
+            _feeSignalLinks = [];
+            _hasDiscoveredFeeSignalLinks = false;
+            return _feeSignalLinks;
+        }
+
+        var activeSignalNodes = plan.Nodes
+            .Where(node => node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                           !plan.IsSignalRemoved(node.Id))
+            .ToArray();
+        var relevantTags = activeSignalNodes
+            .Select(node => node.Name)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var relevantLocations = activeSignalNodes
+            .Select(node => node.SourceLocation)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var explicitGuids = plan.SignalAssignments
+            .Select(assignment => assignment.FeeSignalGuid)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var relevantSignals = _feeSignals.Where(signal =>
+                explicitGuids.Contains(signal.GuidString) ||
+                relevantTags.Contains(signal.Tag) ||
+                relevantLocations.Contains(signal.Location))
+            .ToArray();
+        var result = await _signalLinkDiscovery.DiscoverAsync(relevantSignals, cancellationToken);
+        _feeSignalLinks = result.Links;
+        _hasDiscoveredFeeSignalLinks = true;
+        return _feeSignalLinks;
+    }
+
+    public VisualSignalConnectionState GetSignalConnectionState(
+        string signalNodeId,
+        string feeSignalGuid)
+    {
+        var plan = CurrentPlan;
+        var node = plan?.FindNode(signalNodeId);
+        if (plan is null || node?.Kind is not (VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
+            return new(VisualSignalConnectionKind.NotRead, "Signalziel ist nicht mehr vorhanden.");
+        if (!_hasDiscoveredFeeSignalLinks)
+            return new(VisualSignalConnectionKind.NotRead, "FEE-Signalverknüpfungen wurden noch nicht aktualisiert.");
+
+        var links = _feeSignalLinks.Where(link => string.Equals(
+                link.SignalGuidString,
+                feeSignalGuid,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var container = node.ContainerId is null ? null : plan.FindNode(node.ContainerId);
+        if (container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
+            return new(VisualSignalConnectionKind.LinkMissing, "Der Container besitzt kein auflösbares FEE-Ziel.");
+
+        var requiresLink = !string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) ||
+                           !string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType) ||
+                           descriptor.Targets.Count > 0 ||
+                           descriptor.TechnicalHelpers.Count > 0;
+        if (!requiresLink)
+        {
+            return new(
+                VisualSignalConnectionKind.NotRequired,
+                "Für diesen signal-only Container ist keine Objekt-Slot-Verknüpfung vorgesehen.");
+        }
+
+        var expectedObjectGuids = ResolveExpectedSignalTargetGuids(plan, container, descriptor);
+        var matchingLinks = links.Where(link => expectedObjectGuids.Contains(link.ObjectGuidString)).ToArray();
+        if (matchingLinks.Length == 0 && descriptor.TechnicalHelpers.Any(helper =>
+                helper.Contains("Bool-NOT", StringComparison.OrdinalIgnoreCase)))
+        {
+            matchingLinks = links.Where(link => NormalizeToken(link.ObjectType).Contains("BOOLNOT", StringComparison.Ordinal))
+                .ToArray();
+        }
+
+        if (matchingLinks.Length > 0)
+        {
+            var endpoints = string.Join(", ", matchingLinks.Select(link =>
+                    $"{link.ObjectGuidString}/{link.SlotName}{(link.IsIndirect ? " (über MoveBit)" : string.Empty)}")
+                .Distinct(StringComparer.OrdinalIgnoreCase));
+            return new(
+                VisualSignalConnectionKind.Linked,
+                $"Vorhandene FEE-Verknüpfung bestätigt: {endpoints}");
+        }
+
+        var actual = links.Length == 0
+            ? "Das Signal besitzt keine Objektzuordnung."
+            : $"Vorhandene Zuordnung gehört zu einem anderen Objekt: {string.Join(", ", links.Select(link => $"{link.ObjectGuidString}/{link.SlotName}"))}";
+        return new(
+            VisualSignalConnectionKind.LinkMissing,
+            $"Signal gefunden, erforderliche Verknüpfung zu '{container.Name}' fehlt. {actual}");
+    }
+
+    public VisualSimObjectConnectionState GetSimObjectConnectionState(string targetId) =>
+        GetSimObjectConnectionState(targetId, null);
+
+    /// <summary>
+    /// Returns the live link state for one assignment. Supplying no object ID
+    /// aggregates all assignments of the target and is intentionally stricter:
+    /// one missing link keeps the target open while already-linked siblings stay
+    /// individually verified in the UI.
+    /// </summary>
+    public VisualSimObjectConnectionState GetSimObjectConnectionState(
+        string targetId,
+        string? feeObjectId)
+    {
+        var plan = CurrentPlan;
+        var target = plan?.FindTarget(targetId);
+        var container = target is null ? null : plan?.FindNode(target.ContainerId);
+        if (plan is null || target is null || container is null)
+            return new(VisualSimObjectConnectionKind.NotRead, "SimObject-Ziel ist nicht mehr vorhanden.");
+
+        var assignments = plan.Assignments.Where(item =>
+                string.Equals(item.TargetId, targetId, StringComparison.Ordinal) &&
+                (string.IsNullOrWhiteSpace(feeObjectId) ||
+                 string.Equals(item.FeeObjectId, feeObjectId, StringComparison.Ordinal)))
+            .ToArray();
+        if (assignments.Length == 0)
+            return new(
+                VisualSimObjectConnectionKind.NotRead,
+                string.IsNullOrWhiteSpace(feeObjectId)
+                    ? "Noch kein vorhandenes FEE-SimObject zugeordnet."
+                    : "Die ausgewählte FEE-SimObject-Zuordnung ist nicht mehr im Plan vorhanden.");
+        if (!_hasDiscoveredFeeSimObjectLinks)
+            return new(VisualSimObjectConnectionKind.NotRead, "FEE-SimObject-Verknüpfungen wurden noch nicht aktualisiert.");
+        if (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
+            return new(VisualSimObjectConnectionKind.LinkMissing, "Containerdefinition ist nicht auflösbar.");
+        if (string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName))
+        {
+            return new(
+                VisualSimObjectConnectionKind.NotRequired,
+                assignments.Length == 1
+                    ? $"FEE-SimObject '{assignments[0].FeeObjectName}' bestätigt; dieser Container erwartet keine SimObject-zu-Logik-Verknüpfung."
+                    : "Vorhandene FEE-SimObjects bestätigt; dieser Container erwartet keine SimObject-zu-Logik-Verknüpfung.");
+        }
+
+        var expectedLogics = _feeContainerObjects.Where(item =>
+                item.Kind == VisualFeeContainerObjectKind.Logic &&
+                string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, item.Definition) &&
+                Guid.TryParse(item.GuidString, out _))
+            .ToArray();
+        if (expectedLogics.Length != 1)
+        {
+            return new(
+                VisualSimObjectConnectionKind.LinkMissing,
+                expectedLogics.Length == 0
+                    ? $"FEE-SimObject gefunden; passende Logik '{descriptor.ExpectedLogicName}' fehlt."
+                    : $"FEE-SimObject gefunden; {expectedLogics.Length} passende Logiken sind nicht eindeutig.");
+        }
+
+        var logicGuid = Guid.Parse(expectedLogics[0].GuidString);
+        var unlinked = new List<string>();
+        foreach (var assignment in assignments)
+        {
+            if (!_runtimeObjects.TryGetValue(assignment.FeeObjectId, out var runtimeObject) ||
+                !IsObjectLinked(runtimeObject.Guid, logicGuid))
+            {
+                unlinked.Add(assignment.FeeObjectName);
+            }
+        }
+        return unlinked.Count == 0
+            ? new(
+                VisualSimObjectConnectionKind.Linked,
+                $"Vorhandene FEE-SimObject-Verknüpfung zu '{expectedLogics[0].Name}' bestätigt.")
+            : new(
+                VisualSimObjectConnectionKind.LinkMissing,
+                $"FEE-SimObject gefunden; Verknüpfung zur Logik fehlt oder ist nicht rücklesbar: {string.Join(", ", unlinked)}");
+    }
+
+    private bool IsObjectLinked(Guid runtimeObjectGuid, Guid expectedLogicGuid)
+    {
+        var objectGuid = runtimeObjectGuid.ToString("D");
+        var logicGuid = expectedLogicGuid.ToString("D");
+        return _feeSimObjectLinks.Any(link =>
+            (string.Equals(link.ObjectGuidString, objectGuid, StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(link.LinkedObjectGuidString, logicGuid, StringComparison.OrdinalIgnoreCase)) ||
+            (string.Equals(link.ObjectGuidString, logicGuid, StringComparison.OrdinalIgnoreCase) &&
+             string.Equals(link.LinkedObjectGuidString, objectGuid, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public IReadOnlyList<string> FindVerifiedSignalNodeIds(string feeSignalGuid)
+    {
+        var bySignal = FindVerifiedSignalNodeIds();
+        return bySignal.TryGetValue(feeSignalGuid, out var nodeIds) ? nodeIds : [];
+    }
+
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> FindVerifiedSignalNodeIds()
+    {
+        var plan = CurrentPlan;
+        if (plan is null || plan.ExistingInterfaceSelections.Count == 0)
+            return new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+
+        var selectedGuids = plan.ExistingInterfaceSelections
+            .Select(item => item.InterfaceGuid)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var result = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in plan.Nodes.Where(node =>
+                     node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                     !plan.IsSignalRemoved(node.Id)))
+        {
+            var signal = ResolveSignalForNode(plan, node, selectedGuids);
+            if (signal is null || !GetSignalConnectionState(node.Id, signal.GuidString).IsVerified)
+                continue;
+            if (!result.TryGetValue(signal.GuidString, out var nodeIds))
+            {
+                nodeIds = [];
+                result.Add(signal.GuidString, nodeIds);
+            }
+            nodeIds.Add(node.Id);
+        }
+
+        return result.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<string>)pair.Value.ToArray(),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -250,17 +566,20 @@ public sealed class ContainerToFeeVisualPlanService
             var containerName = plan.FindNode(target.ContainerId)?.Name ?? string.Empty;
             var matches = _feeObjects
                 .Where(target.CanAssign)
-                // MotionJoints often own imported CAD hierarchies. They must
-                // remain an explicit user choice even when name/type match.
-                .Where(item => !string.Equals(item.FeeType, "MotionJoint", StringComparison.OrdinalIgnoreCase) &&
-                               !item.TypeName.EndsWith("FeeJoint", StringComparison.OrdinalIgnoreCase))
                 .Where(item => !assignedObjectIds.Contains(item.Id))
                 .Where(item => string.Equals(item.Name, containerName, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.Id, StringComparer.Ordinal)
                 .ToArray();
             if (!target.AllowMultiSelect)
-                matches = matches.Take(1).ToArray();
+            {
+                // Exact duplicates must remain visible in the plan instead of
+                // silently hiding all but the first GUID. Validation marks the
+                // target as erroneous and forced execution remains an explicit
+                // user decision.
+                var exactDuplicates = matches.Where(item => item.HasExactDuplicate).ToArray();
+                matches = exactDuplicates.Length > 1 ? exactDuplicates : matches.Take(1).ToArray();
+            }
 
             foreach (var match in matches)
             {
@@ -278,6 +597,53 @@ public sealed class ContainerToFeeVisualPlanService
         RaisePlanChanged();
         _logger.Information($"{added} FEE-SimObject-Zuordnung(en) automatisch erkannt.");
         return added;
+    }
+
+    /// <summary>
+    /// Removes sidecar assignments whose scene object was deleted.  Keeping a
+    /// stale GUID made validation and runtime binding fail even though the
+    /// selected container is able to recreate the missing object.
+    /// </summary>
+    private void RemoveStaleObjectAssignments()
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !_hasDiscoveredFeeObjects)
+            return;
+
+        var availableIds = _feeObjects.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var retained = plan.Assignments
+            .Where(assignment => availableIds.Contains(assignment.FeeObjectId))
+            .ToArray();
+        var removed = plan.Assignments.Count - retained.Length;
+        if (removed == 0)
+            return;
+
+        plan.ReplaceAssignments(retained);
+        _logger.Warning(
+            $"{removed} gespeicherte FEE-SimObject-Zuordnung(en) verweisen auf gelöschte Objekte und wurden verworfen. Fehlende Objekte können neu erzeugt werden.");
+        RaisePlanChanged();
+    }
+
+    private void RemoveStaleSignalAssignments()
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !_hasDiscoveredFeeInterfaces)
+            return;
+
+        var availableGuids = _feeSignals
+            .Select(item => item.GuidString)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var retained = plan.SignalAssignments
+            .Where(assignment => availableGuids.Contains(assignment.FeeSignalGuid))
+            .ToArray();
+        var removed = plan.SignalAssignments.Count - retained.Length;
+        if (removed == 0)
+            return;
+
+        plan.ReplaceSignalAssignments(retained);
+        _logger.Warning(
+            $"{removed} gespeicherte FEE-Signalzuordnung(en) verweisen auf gelöschte Variablen und wurden verworfen. Die Signale können neu aufgelöst oder erzeugt werden.");
+        RaisePlanChanged();
     }
 
     public VisualAssignmentResult TryAssign(string targetId, string feeObjectId)
@@ -355,6 +721,20 @@ public sealed class ContainerToFeeVisualPlanService
             StringComparison.OrdinalIgnoreCase));
         if (signal is null)
             return SignalAssignmentFailure("Das FEE-Signal ist nicht mehr verfügbar.", "FEE_SIGNAL_NOT_FOUND", signalNodeId);
+        if (plan.ExistingInterfaceSelections.Count == 0)
+        {
+            return SignalAssignmentFailure(
+                "Vor der Signalzuordnung muss in 'Gefundene FEE-Signale' mindestens ein Interface ausgewählt werden.",
+                "FEE_INTERFACE_NOT_SELECTED",
+                signalNodeId);
+        }
+        if (!IsSelectedInterface(plan, signal.InterfaceGuidString))
+        {
+            return SignalAssignmentFailure(
+                $"Signal '{signal.Tag}' gehört zu keinem der ausgewählten Interfaces.",
+                "FEE_SIGNAL_WRONG_INTERFACE",
+                signalNodeId);
+        }
 
         var assignment = new VisualSignalAssignment(
             signalNodeId,
@@ -375,6 +755,331 @@ public sealed class ContainerToFeeVisualPlanService
             $"FEE-Signal '{signal.Tag}' aus Interface '{signal.InterfaceName}' wurde ausdrücklich zugeordnet.",
             assignment,
             []);
+    }
+
+    /// <summary>
+    /// Extends one container with existing interface signals. The new entries
+    /// deliberately start without a slot so the user must choose an allowed
+    /// slot before generation.
+    /// </summary>
+    public VisualSignalAssignmentResult AddSignals(
+        string containerId,
+        IEnumerable<string> feeSignalGuids)
+    {
+        var plan = CurrentPlan;
+        if (plan is null)
+            return SignalAssignmentFailure("Es ist kein visueller Plan geladen.", "PLAN_NOT_LOADED");
+        var container = plan.FindNode(containerId);
+        if (container?.Kind != VisualNodeKind.Container ||
+            !ContainerMetadataCatalog.TryGet(container.TypeName, out _))
+        {
+            return SignalAssignmentFailure(
+                "Signale können nur einem unterstützten Container hinzugefügt werden.",
+                "SIGNAL_CONTAINER_NOT_SUPPORTED",
+                containerId);
+        }
+        if (plan.ExistingInterfaceSelections.Count == 0)
+        {
+            return SignalAssignmentFailure(
+                "Vor dem Hinzufügen muss mindestens ein Interface ausgewählt werden.",
+                "FEE_INTERFACE_NOT_SELECTED",
+                containerId);
+        }
+
+        var requested = feeSignalGuids.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var signals = requested
+            .Select(guid => _feeSignals.FirstOrDefault(signal => string.Equals(
+                signal.GuidString,
+                guid,
+                StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        if (signals.Any(signal => signal is null))
+            return SignalAssignmentFailure("Mindestens ein FEE-Signal ist nicht mehr verfügbar.", "FEE_SIGNAL_NOT_FOUND", containerId);
+        if (signals.Any(signal => !IsSelectedInterface(plan, signal!.InterfaceGuidString)))
+        {
+            return SignalAssignmentFailure(
+                "Es dürfen nur Signale der ausgewählten Interfaces hinzugefügt werden.",
+                "FEE_SIGNAL_WRONG_INTERFACE",
+                containerId);
+        }
+
+        var newSignals = signals
+            .Cast<VisualFeeSignal>()
+            .Where(signal => !plan.SignalAssignments.Any(item => string.Equals(
+                item.FeeSignalGuid,
+                signal.GuidString,
+                StringComparison.OrdinalIgnoreCase)))
+            .Where(signal => !plan.AddedSignals.Any(item =>
+                string.Equals(item.ContainerId, containerId, StringComparison.Ordinal) &&
+                string.Equals(item.FeeSignalGuid, signal.GuidString, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        if (newSignals.Length == 0)
+            return new VisualSignalAssignmentResult(true, "Die ausgewählten Signale sind bereits im Containerplan enthalten.", null, []);
+
+        var before = Capture(plan);
+        var added = plan.AddedSignals.ToList();
+        var assignments = plan.SignalAssignments.ToList();
+        VisualSignalAssignment? lastAssignment = null;
+        foreach (var signal in newSignals)
+        {
+            var nodeId = $"{containerId}:added-signal:{StableId.Encode(signal.GuidString)}";
+            added.Add(new VisualAddedSignal(
+                nodeId,
+                containerId,
+                $"{containerId}:signals",
+                signal.GuidString,
+                signal.Tag,
+                signal.InterfaceGuidString,
+                signal.InterfaceName,
+                signal.Address,
+                signal.Path,
+                signal.DataType,
+                signal.Usage));
+            lastAssignment = new VisualSignalAssignment(
+                nodeId,
+                signal.GuidString,
+                signal.Tag,
+                signal.InterfaceName);
+            assignments.Add(lastAssignment);
+        }
+        plan.ReplaceAddedSignals(added);
+        plan.ReplaceSignalAssignments(assignments);
+        RecordMutation(before);
+        RaisePlanChanged();
+        return new VisualSignalAssignmentResult(
+            true,
+            $"{newSignals.Length} Signal(e) wurden ergänzt. Vor der Generierung muss für jeden neuen Eintrag ein Slot ausgewählt werden.",
+            lastAssignment,
+            []);
+    }
+
+    /// <summary>
+    /// Assigns existing FEE variables directly to one declared container slot.
+    /// Existing source entries are reused first; additional PLC_IN fan-in
+    /// entries are created in the sidecar-backed effective document.
+    /// </summary>
+    public VisualSignalAssignmentResult AssignSignalsToSlot(
+        string containerId,
+        string slot,
+        IEnumerable<string> feeSignalGuids)
+    {
+        var plan = CurrentPlan;
+        var container = plan?.FindNode(containerId);
+        if (plan is null || container?.Kind != VisualNodeKind.Container ||
+            !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
+        {
+            return SignalAssignmentFailure(
+                "Das Signalziel gehört zu keinem unterstützten Container.",
+                "SIGNAL_SLOT_CONTAINER_NOT_SUPPORTED",
+                containerId);
+        }
+        var canonicalSlot = descriptor.Slots.FirstOrDefault(candidate =>
+            string.Equals(candidate, slot, StringComparison.OrdinalIgnoreCase));
+        if (canonicalSlot is null)
+            return SignalAssignmentFailure($"Slot '{slot}' ist für diesen Container nicht zulässig.", "SIGNAL_SLOT_UNKNOWN", containerId);
+        if (plan.ExistingInterfaceSelections.Count == 0)
+            return SignalAssignmentFailure("Zuerst mindestens ein Interface auswählen.", "FEE_INTERFACE_NOT_SELECTED", containerId);
+
+        var requestedGuids = feeSignalGuids.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (requestedGuids.Length == 0)
+            return SignalAssignmentFailure("Es wurde kein FEE-Signal ausgewählt.", "FEE_SIGNAL_NOT_SELECTED", containerId);
+        var signals = requestedGuids.Select(guid => _feeSignals.FirstOrDefault(signal => string.Equals(
+                signal.GuidString,
+                guid,
+                StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+        if (signals.Any(signal => signal is null))
+            return SignalAssignmentFailure("Mindestens ein FEE-Signal ist nicht mehr verfügbar.", "FEE_SIGNAL_NOT_FOUND", containerId);
+        if (signals.Any(signal => !IsSelectedInterface(plan, signal!.InterfaceGuidString)))
+        {
+            return SignalAssignmentFailure(
+                "Es dürfen nur Signale der ausgewählten Interfaces zugeordnet werden.",
+                "FEE_SIGNAL_WRONG_INTERFACE",
+                containerId);
+        }
+
+        var allowsMultiple = ContainerSlotMultiplicityPolicy.IsPlcInput(canonicalSlot);
+        if (!allowsMultiple && requestedGuids.Length > 1)
+        {
+            return SignalAssignmentFailure(
+                $"Slot '{canonicalSlot}' ist exklusiv und erlaubt nur ein Signal.",
+                "SIGNAL_SLOT_EXCLUSIVE",
+                containerId);
+        }
+
+        var existingNodes = plan.Nodes.Where(node =>
+                string.Equals(node.ContainerId, containerId, StringComparison.Ordinal) &&
+                node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                !plan.IsSignalRemoved(node.Id) &&
+                string.Equals(plan.GetEffectiveSlot(node), canonicalSlot, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (!allowsMultiple && existingNodes.Count > 1)
+        {
+            return SignalAssignmentFailure(
+                $"Slot '{canonicalSlot}' ist im ContainerFile bereits mehrfach vorhanden und muss zuerst bereinigt werden.",
+                "SIGNAL_SLOT_ALREADY_DUPLICATED",
+                containerId);
+        }
+
+        var previousNodes = requestedGuids.ToDictionary(
+            guid => guid,
+            guid => plan.SignalAssignments
+                .Where(assignment => string.Equals(
+                    assignment.FeeSignalGuid,
+                    guid,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(assignment => plan.FindNode(assignment.SignalNodeId))
+                .FirstOrDefault(node => node is not null),
+            StringComparer.OrdinalIgnoreCase);
+        var foreignNode = plan.SignalAssignments
+            .Where(assignment => requestedGuids.Contains(
+                assignment.FeeSignalGuid,
+                StringComparer.OrdinalIgnoreCase))
+            .Select(assignment => plan.FindNode(assignment.SignalNodeId))
+            .FirstOrDefault(node => node is not null &&
+                                    !string.Equals(node.ContainerId, containerId, StringComparison.Ordinal));
+        if (foreignNode is not null)
+        {
+            var foreignContainer = plan.FindNode(foreignNode.ContainerId ?? string.Empty)?.Name ??
+                                   foreignNode.ContainerId;
+            return SignalAssignmentFailure(
+                $"Das FEE-Signal ist bereits Container '{foreignContainer}' zugeordnet. " +
+                "Die bestehende Zuordnung zuerst entfernen, damit keine unbemerkte Doppelverwendung entsteht.",
+                "FEE_SIGNAL_ASSIGNED_TO_OTHER_CONTAINER",
+                foreignNode.Id);
+        }
+
+        var before = Capture(plan);
+        var assignments = plan.SignalAssignments
+            .Where(assignment => !requestedGuids.Contains(assignment.FeeSignalGuid, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        var addedSignals = plan.AddedSignals.ToList();
+        var slotOverrides = plan.SlotOverrides.ToList();
+        var availableNodes = allowsMultiple
+            ? existingNodes.Where(node => assignments.All(assignment =>
+                !string.Equals(assignment.SignalNodeId, node.Id, StringComparison.Ordinal))).ToList()
+            : existingNodes.Take(1).ToList();
+        VisualSignalAssignment? lastAssignment = null;
+
+        foreach (var signal in signals.Cast<VisualFeeSignal>())
+        {
+            VisualNode? targetNode = previousNodes.GetValueOrDefault(signal.GuidString);
+            if (targetNode is not null)
+                availableNodes.RemoveAll(node => string.Equals(node.Id, targetNode.Id, StringComparison.Ordinal));
+            else
+            {
+                targetNode = availableNodes.FirstOrDefault();
+                if (targetNode is not null)
+                    availableNodes.RemoveAt(0);
+            }
+            if (targetNode is null)
+            {
+                var nodeId = $"{containerId}:added-signal:{StableId.Encode(signal.GuidString)}";
+                var existingAdded = addedSignals.FirstOrDefault(item => string.Equals(
+                    item.NodeId,
+                    nodeId,
+                    StringComparison.Ordinal));
+                if (existingAdded is null)
+                {
+                    addedSignals.Add(new VisualAddedSignal(
+                        nodeId,
+                        containerId,
+                        $"{containerId}:signals",
+                        signal.GuidString,
+                        signal.Tag,
+                        signal.InterfaceGuidString,
+                        signal.InterfaceName,
+                        signal.Address,
+                        signal.Path,
+                        signal.DataType,
+                        signal.Usage));
+                }
+                plan.ReplaceAddedSignals(addedSignals);
+                targetNode = plan.FindNode(nodeId);
+                if (targetNode is null)
+                    return SignalAssignmentFailure("Der zusätzliche Signaleintrag konnte nicht angelegt werden.", "ADDED_SIGNAL_CREATE_FAILED", containerId);
+            }
+
+            slotOverrides.RemoveAll(item => string.Equals(item.SignalNodeId, targetNode.Id, StringComparison.Ordinal));
+            if (!string.Equals(targetNode.Slot, canonicalSlot, StringComparison.Ordinal))
+                slotOverrides.Add(new VisualSlotOverride(targetNode.Id, canonicalSlot));
+
+            assignments.RemoveAll(assignment => string.Equals(
+                assignment.SignalNodeId,
+                targetNode.Id,
+                StringComparison.Ordinal));
+            lastAssignment = new VisualSignalAssignment(
+                targetNode.Id,
+                signal.GuidString,
+                signal.Tag,
+                signal.InterfaceName);
+            assignments.Add(lastAssignment);
+        }
+
+        plan.ReplaceAddedSignals(addedSignals);
+        plan.ReplaceSlotOverrides(slotOverrides);
+        plan.ReplaceSignalAssignments(assignments);
+        RecordMutation(before);
+        RaisePlanChanged();
+        return new VisualSignalAssignmentResult(
+            true,
+            $"{requestedGuids.Length} FEE-Signal(e) wurden Slot '{canonicalSlot}' zugeordnet.",
+            lastAssignment,
+            []);
+    }
+
+    public VisualSignalAssignmentResult RemoveSignal(string signalNodeId)
+    {
+        var plan = CurrentPlan;
+        var node = plan?.FindNode(signalNodeId);
+        if (plan is null || node?.Kind is not (VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
+            return SignalAssignmentFailure("Das ausgewählte Element ist kein Containersignal.", "SIGNAL_NODE_NOT_FOUND", signalNodeId);
+
+        var wasAdded = plan.IsAddedSignal(signalNodeId);
+        var before = Capture(plan);
+        plan.ReplaceSignalAssignments(plan.SignalAssignments.Where(item =>
+            !string.Equals(item.SignalNodeId, signalNodeId, StringComparison.Ordinal)));
+        plan.ReplaceSlotOverrides(plan.SlotOverrides.Where(item =>
+            !string.Equals(item.SignalNodeId, signalNodeId, StringComparison.Ordinal)));
+        if (wasAdded)
+        {
+            plan.ReplaceAddedSignals(plan.AddedSignals.Where(item =>
+                !string.Equals(item.NodeId, signalNodeId, StringComparison.Ordinal)));
+        }
+        else
+            plan.ReplaceRemovedSignalNodeIds(plan.RemovedSignalNodeIds.Append(signalNodeId));
+        RecordMutation(before);
+        RaisePlanChanged();
+        return new VisualSignalAssignmentResult(
+            true,
+            wasAdded
+                ? "Zusätzliches Signal wurde aus dem Containerplan entfernt."
+                : "Signal wurde aus dem wirksamen Containerplan entfernt. Die unveränderte Quelldatei kann über Rückgängig wiederhergestellt werden.",
+            null,
+            []);
+    }
+
+    public async Task SaveEffectiveContainerXmlAsync(
+        string targetPath,
+        CancellationToken cancellationToken = default)
+    {
+        var plan = CurrentPlan ?? throw new InvalidOperationException("Es ist kein visueller Plan geladen.");
+        cancellationToken.ThrowIfCancellationRequested();
+        var effectiveDocument = RuntimeVisualPlanBinder.CreateEffectiveDocument(plan);
+        var includedIds = plan.Nodes
+            .Where(node => node.Kind == VisualNodeKind.Container)
+            .Where(node => plan.IsGenerationSelected(node.Id) ||
+                           !ContainerMetadataCatalog.TryGet(node.TypeName, out _))
+            .Select(node => node.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var snapshot = FeeContainerProvenanceCodec.Create(
+            effectiveDocument,
+            includedIds,
+            plan.SourceFingerprint);
+        cancellationToken.ThrowIfCancellationRequested();
+        await Task.Run(
+            () => FeeContainerProvenanceCodec.SaveAtomically(snapshot, targetPath),
+            cancellationToken);
     }
 
     public bool SetCreationRequested(string containerId, bool requested)
@@ -487,6 +1192,27 @@ public sealed class ContainerToFeeVisualPlanService
         return true;
     }
 
+    public bool SetExistingInterfaces(IEnumerable<VisualFeeInterface> feeInterfaces)
+    {
+        var plan = CurrentPlan;
+        if (plan is null)
+            return false;
+
+        var next = feeInterfaces
+            .Where(item => item is not null && !string.IsNullOrWhiteSpace(item.GuidString))
+            .Select(item => new VisualExistingInterfaceSelection(item.GuidString, item.Name))
+            .DistinctBy(item => item.InterfaceGuid, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (plan.ExistingInterfaceSelections.SequenceEqual(next))
+            return true;
+
+        var before = Capture(plan);
+        plan.SetExistingInterfaceSelections(next);
+        RecordMutation(before);
+        RaisePlanChanged();
+        return true;
+    }
+
     public bool SetSlotOverride(string signalNodeId, string slot)
     {
         var plan = CurrentPlan;
@@ -500,6 +1226,13 @@ public sealed class ContainerToFeeVisualPlanService
         var canonicalSlot = descriptor.Slots.FirstOrDefault(candidate =>
             string.Equals(candidate, slot?.Trim(), StringComparison.OrdinalIgnoreCase));
         if (canonicalSlot is null)
+            return false;
+        var occupiedByOtherSignals = plan.Nodes.Count(node =>
+            node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+            !string.Equals(node.Id, signalNodeId, StringComparison.Ordinal) &&
+            string.Equals(node.ContainerId, signalNode.ContainerId, StringComparison.Ordinal) &&
+            string.Equals(plan.GetEffectiveSlot(node), canonicalSlot, StringComparison.OrdinalIgnoreCase));
+        if (ContainerSlotMultiplicityPolicy.GetDuplicateError(canonicalSlot, occupiedByOtherSignals + 1) is not null)
             return false;
         if (string.Equals(plan.GetEffectiveSlot(signalNode), canonicalSlot, StringComparison.Ordinal))
             return true;
@@ -536,6 +1269,64 @@ public sealed class ContainerToFeeVisualPlanService
                                 issue.NodeId,
                                 StringComparison.Ordinal)))
             .ToList();
+        foreach (var added in plan.AddedSignals)
+        {
+            var node = plan.FindNode(added.NodeId);
+            if (node is null || string.IsNullOrWhiteSpace(plan.GetEffectiveSlot(node)))
+            {
+                issues.Add(new VisualIssue(
+                    VisualIssueSeverity.Error,
+                    "ADDED_SIGNAL_SLOT_REQUIRED",
+                    $"Für das zusätzlich eingefügte Signal '{added.FeeSignalTag}' muss ein erwarteter Slot ausgewählt werden.",
+                    added.NodeId));
+            }
+            if (plan.ExistingInterfaceSelections.Count > 0 &&
+                !IsSelectedInterface(plan, added.FeeInterfaceGuid))
+            {
+                issues.Add(new VisualIssue(
+                    VisualIssueSeverity.Error,
+                    "ADDED_SIGNAL_WRONG_INTERFACE",
+                    $"Das zusätzliche Signal '{added.FeeSignalTag}' gehört zu keinem aktuell ausgewählten Interface.",
+                    added.NodeId));
+            }
+        }
+        foreach (var container in plan.Nodes.Where(node => node.Kind == VisualNodeKind.Container))
+        {
+            var signalNodes = plan.Nodes.Where(node =>
+                    string.Equals(node.ContainerId, container.Id, StringComparison.Ordinal) &&
+                    node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                    !plan.IsSignalRemoved(node.Id))
+                .ToArray();
+            foreach (var slotGroup in signalNodes
+                         .Select(node => (Node: node, Slot: plan.GetEffectiveSlot(node)))
+                         .Where(item => !string.IsNullOrWhiteSpace(item.Slot))
+                         .GroupBy(item => item.Slot, StringComparer.OrdinalIgnoreCase))
+            {
+                var message = ContainerSlotMultiplicityPolicy.GetDuplicateError(slotGroup.Key, slotGroup.Count());
+                if (message is null)
+                    continue;
+                foreach (var item in slotGroup)
+                {
+                    issues.Add(new VisualIssue(
+                        VisualIssueSeverity.Error,
+                        "DUPLICATE_EXCLUSIVE_SLOT",
+                        message,
+                        item.Node.Id));
+                }
+            }
+
+            var hasRuntimeObject = plan.Nodes.Any(node =>
+                string.Equals(node.ContainerId, container.Id, StringComparison.Ordinal) &&
+                node.Kind is VisualNodeKind.Logic or VisualNodeKind.SimObjectTarget or VisualNodeKind.TechnicalHelper);
+            if (!hasRuntimeObject && signalNodes.Length > 0 && plan.IsGenerationSelected(container.Id))
+            {
+                issues.Add(new VisualIssue(
+                    VisualIssueSeverity.Warning,
+                    "SIGNAL_ONLY_CONTAINER",
+                    $"Container '{container.Name}' besteht ausschließlich aus Signalen. Es wird kein FEE-Szenenobjekt erzeugt; die Signale werden nur im Interface berücksichtigt.",
+                    container.Id));
+            }
+        }
         foreach (var group in plan.Assignments.GroupBy(assignment => assignment.FeeObjectId))
         {
             if (group.Count() > 1)
@@ -544,6 +1335,44 @@ public sealed class ContainerToFeeVisualPlanService
                     VisualIssueSeverity.Error,
                     "FEE_OBJECT_ASSIGNED_MULTIPLE_TIMES",
                     $"FEE-Objekt '{group.First().FeeObjectName}' wurde mehrfach zugeordnet."));
+            }
+        }
+
+        if (_hasDiscoveredFeeObjects)
+        {
+            foreach (var duplicateGroup in _feeObjects
+                         .Where(item => item.HasExactDuplicate)
+                         .GroupBy(item => string.Join("\u001f",
+                             item.Name.Trim(),
+                             item.TypeName,
+                             item.FeeType.Trim(),
+                             item.ParentGuidString.Trim()),
+                             StringComparer.OrdinalIgnoreCase))
+            {
+                var sample = duplicateGroup.First();
+                var isConfirmed = _confirmedDuplicateIdentities.Contains(CreateDuplicateIdentity(sample));
+                var matchingTargets = plan.Targets.Where(target =>
+                        target.CanAssign(sample) &&
+                        string.Equals(
+                            plan.FindNode(target.ContainerId)?.Name,
+                            sample.Name,
+                            StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                var nodeIds = matchingTargets.Length == 0
+                    ? new string?[] { null }
+                    : matchingTargets.Select(target => (string?)target.Id).ToArray();
+                foreach (var nodeId in nodeIds)
+                {
+                    issues.Add(new VisualIssue(
+                        isConfirmed ? VisualIssueSeverity.Warning : VisualIssueSeverity.Error,
+                        "DUPLICATE_FEE_SIMOBJECT_IDENTITY",
+                        $"{duplicateGroup.Count()} identische FEE-SimObjects '{sample.Name}' vom Typ " +
+                        $"'{sample.FeeType}' wurden unter demselben Parent '{sample.ParentName}' gefunden. " +
+                        (isConfirmed
+                            ? "Der Mehrfachfund wurde für diese Sitzung ausdrücklich bestätigt."
+                            : "Die GUIDs sind unterschiedlich; im Strukturbaum einen konkreten Treffer bestätigen oder die Duplikate im FEE-Projekt bereinigen."),
+                        nodeId));
+                }
             }
         }
 
@@ -636,9 +1465,8 @@ public sealed class ContainerToFeeVisualPlanService
         // Always refresh before a write. A previous generation changes both
         // scene objects and variables; reusing the old snapshot caused the
         // second click to recreate objects/interfaces and eventually stall.
-        await Task.WhenAll(
-            DiscoverFeeObjectsAsync(cancellationToken),
-            DiscoverFeeInterfacesAsync(cancellationToken));
+        await DiscoverFeeObjectsAsync(cancellationToken);
+        await DiscoverFeeInterfacesAsync(cancellationToken);
         AutoAssignMatches();
 
         var validation = Validate();
@@ -653,24 +1481,11 @@ public sealed class ContainerToFeeVisualPlanService
         var currentErrors = validation.Issues
             .Where(issue => issue.Severity == VisualIssueSeverity.Error)
             .ToArray();
-        if (currentErrors.Length > 0 && acceptedValidationErrors is not null)
-        {
-            var acceptedKeys = acceptedValidationErrors
-                .Select(issue => (issue.Code, issue.Message, issue.NodeId))
-                .ToHashSet();
-            var newErrors = currentErrors
-                .Where(issue => !acceptedKeys.Contains((issue.Code, issue.Message, issue.NodeId)))
-                .ToArray();
-            if (newErrors.Length > 0)
-            {
-                return new VisualExecutionResult(
-                    false,
-                    "Nach der FEE-Aktualisierung wurden zusätzliche, noch nicht bestätigte Fehler erkannt. " +
-                    "Die Generierung wurde vor dem Schreiben abgebrochen.",
-                    validation.Issues);
-            }
-        }
-
+        // The confirmation belongs to this complete start operation. Refreshing
+        // FEE immediately before the write may refine the same validation
+        // findings; forcing a second click would neither add information nor
+        // improve safety. Runtime identity conflicts remain hard failures in
+        // the executor and are never suppressed here.
         var effectiveAcceptedErrors = currentErrors.Length > 0
             ? currentErrors
             : acceptedValidationErrors?
@@ -764,13 +1579,19 @@ public sealed class ContainerToFeeVisualPlanService
         CurrentPlan = plan;
         _undo.Clear();
         _redo.Clear();
+        _confirmedDuplicateIdentities.Clear();
         _feeObjects = [];
+        _feeContainerObjects = [];
         _runtimeObjects = new Dictionary<string, FeeAbstractObject>(StringComparer.Ordinal);
         _feeInterfaces = [];
         _feeSignals = [];
+        _feeSignalLinks = [];
+        _feeSimObjectLinks = [];
         _runtimeInterfaces = new Dictionary<string, FeeInterface>(StringComparer.OrdinalIgnoreCase);
         _hasDiscoveredFeeObjects = false;
         _hasDiscoveredFeeInterfaces = false;
+        _hasDiscoveredFeeSignalLinks = false;
+        _hasDiscoveredFeeSimObjectLinks = false;
         RaisePlanChanged();
     }
 
@@ -784,7 +1605,29 @@ public sealed class ContainerToFeeVisualPlanService
         var generationSelections = document.GenerationSelections ?? [];
         var signalCreationSelections = document.SignalCreationSelections ?? [];
         var signalAssignments = document.SignalAssignments ?? [];
+        var addedSignals = document.AddedSignals ?? [];
         var slotOverrides = document.SlotOverrides ?? [];
+        var removedSignalNodeIds = document.RemovedSignalNodeIds ?? [];
+
+        var validAddedSignals = addedSignals.Where(added =>
+        {
+            var container = plan.FindNode(added.ContainerId);
+            var valid = container?.Kind == VisualNodeKind.Container &&
+                        ContainerMetadataCatalog.TryGet(container.TypeName, out _) &&
+                        string.Equals(added.SignalGroupId, $"{added.ContainerId}:signals", StringComparison.Ordinal) &&
+                        !string.IsNullOrWhiteSpace(added.NodeId) &&
+                        !string.IsNullOrWhiteSpace(added.FeeSignalGuid);
+            if (!valid)
+            {
+                issues.Add(new VisualIssue(
+                    VisualIssueSeverity.Warning,
+                    "SIDECAR_ADDED_SIGNAL_INVALID",
+                    $"Ein zusätzliches Signal '{added.FeeSignalTag}' verweist auf keinen gültigen Container und wurde ignoriert.",
+                    added.NodeId));
+            }
+            return valid;
+        }).DistinctBy(item => item.NodeId, StringComparer.Ordinal).ToArray();
+        plan.ReplaceAddedSignals(validAddedSignals);
 
         foreach (var assignment in assignments)
         {
@@ -902,7 +1745,7 @@ public sealed class ContainerToFeeVisualPlanService
             issues.Add(new VisualIssue(
                 VisualIssueSeverity.Info,
                 "SIDECAR_SIGNAL_SELECTION_IGNORED",
-                "Die frühere Auswahl 'Signale erzeugen' ist entfallen. Signale werden automatisch gesucht, wiederverwendet oder im Grob Generation Interface erzeugt."));
+                "Die frühere Auswahl 'Signale erzeugen' ist entfallen. Signale werden automatisch gesucht, wiederverwendet oder in einem neuen AutoGenerated-Interface erzeugt."));
         }
 
         plan.ReplaceAssignments(assignments);
@@ -913,7 +1756,8 @@ public sealed class ContainerToFeeVisualPlanService
             plan.FindNode(selection.ContainerId)?.Kind == VisualNodeKind.Container));
         plan.ReplaceSignalCreationSelections([]);
         plan.ReplaceSignalAssignments(signalAssignments.Where(assignment =>
-            plan.FindNode(assignment.SignalNodeId)?.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal));
+            plan.FindNode(assignment.SignalNodeId)?.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+            !removedSignalNodeIds.Contains(assignment.SignalNodeId, StringComparer.Ordinal)));
         plan.ReplaceSlotOverrides(slotOverrides.Where(slotOverride =>
         {
             var signalNode = plan.FindNode(slotOverride.SignalNodeId);
@@ -923,7 +1767,12 @@ public sealed class ContainerToFeeVisualPlanService
                    ContainerMetadataCatalog.TryGet(containerNode.TypeName, out var descriptor) &&
                    descriptor.Slots.Contains(slotOverride.Slot);
         }));
-        plan.SetExistingInterfaceSelection(document.ExistingInterfaceSelection);
+        plan.ReplaceRemovedSignalNodeIds(removedSignalNodeIds);
+        plan.SetExistingInterfaceSelections(document.ExistingInterfaceSelections.Count > 0
+            ? document.ExistingInterfaceSelections
+            : document.ExistingInterfaceSelection is null
+                ? []
+                : [document.ExistingInterfaceSelection]);
         return issues;
     }
 
@@ -933,7 +1782,7 @@ public sealed class ContainerToFeeVisualPlanService
             plan.SourceXmlPath,
             plan.SidecarPath,
             plan.SourceFingerprint,
-            plan.Nodes,
+            plan.Nodes.Where(node => !plan.IsAddedSignal(node.Id)).ToArray(),
             plan.Roots,
             plan.Edges,
             plan.Targets,
@@ -942,13 +1791,101 @@ public sealed class ContainerToFeeVisualPlanService
             plan.GenerationSelections,
             plan.SignalCreationSelections,
             plan.SignalAssignments,
+            plan.AddedSignals,
             plan.SlotOverrides,
+            [.. plan.RemovedSignalNodeIds],
             plan.ExistingInterfaceSelection,
             plan.Issues.Concat(additionalIssues)
                 .DistinctBy(issue => (issue.Severity, issue.Code, issue.Message, issue.NodeId))
                 .ToArray());
+        clone.SetExistingInterfaceSelections(plan.ExistingInterfaceSelections);
         return clone;
     }
+
+    private VisualFeeObject? FindFeeObject(string? feeObjectId) =>
+        string.IsNullOrWhiteSpace(feeObjectId)
+            ? null
+            : _feeObjects.FirstOrDefault(item => string.Equals(item.Id, feeObjectId, StringComparison.Ordinal));
+
+    private static string CreateDuplicateIdentity(VisualFeeObject item) => string.Join(
+        "\u001f",
+        item.Name.Trim(),
+        item.TypeName,
+        item.FeeType.Trim(),
+        item.ParentGuidString.Trim());
+
+    private VisualFeeSignal? ResolveSignalForNode(
+        VisualPlan plan,
+        VisualNode node,
+        IReadOnlySet<string> interfaceGuids)
+    {
+        var explicitAssignment = plan.SignalAssignments.LastOrDefault(assignment =>
+            string.Equals(assignment.SignalNodeId, node.Id, StringComparison.Ordinal));
+        if (explicitAssignment is not null)
+        {
+            return _feeSignals.FirstOrDefault(signal =>
+                string.Equals(signal.GuidString, explicitAssignment.FeeSignalGuid, StringComparison.OrdinalIgnoreCase) &&
+                interfaceGuids.Contains(signal.InterfaceGuidString));
+        }
+
+        var scoped = _feeSignals.Where(signal => interfaceGuids.Contains(signal.InterfaceGuidString))
+            .ToArray();
+        var byTag = scoped.Where(signal => string.Equals(
+                signal.Tag,
+                node.Name,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        if (string.IsNullOrWhiteSpace(node.SourceLocation))
+            return byTag.Length == 1 ? byTag[0] : null;
+        var exact = byTag.Where(signal => string.Equals(
+                signal.Location,
+                node.SourceLocation,
+                StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        return exact.Length == 1 ? exact[0] : null;
+    }
+
+    private HashSet<string> ResolveExpectedSignalTargetGuids(
+        VisualPlan plan,
+        VisualNode container,
+        ContainerDescriptor descriptor)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName))
+        {
+            result.UnionWith(_feeContainerObjects.Where(item =>
+                    item.Kind == VisualFeeContainerObjectKind.Logic &&
+                    string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                    ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, item.Definition))
+                .Select(item => item.GuidString));
+        }
+        if (!string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType))
+        {
+            result.UnionWith(_feeContainerObjects.Where(item =>
+                    item.Kind == VisualFeeContainerObjectKind.CabinetElement &&
+                    string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                    NormalizeToken(item.Definition) == NormalizeToken(descriptor.ExpectedCabinetElementType))
+                .Select(item => item.GuidString));
+        }
+
+        var targetIds = plan.Targets.Where(target => string.Equals(
+                target.ContainerId,
+                container.Id,
+                StringComparison.Ordinal))
+            .Select(target => target.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var assignedObjectIds = plan.Assignments.Where(assignment => targetIds.Contains(assignment.TargetId))
+            .Select(assignment => assignment.FeeObjectId)
+            .ToHashSet(StringComparer.Ordinal);
+        result.UnionWith(_feeObjects.Where(item => assignedObjectIds.Contains(item.Id))
+            .Select(item => item.GuidString));
+        return result;
+    }
+
+    private static string NormalizeToken(string? value) => new((value ?? string.Empty)
+        .Where(char.IsLetterOrDigit)
+        .Select(char.ToUpperInvariant)
+        .ToArray());
 
     private void RecordMutation(PlanState state)
     {
@@ -963,8 +1900,10 @@ public sealed class ContainerToFeeVisualPlanService
             [.. plan.GenerationSelections],
             [.. plan.SignalCreationSelections],
             [.. plan.SignalAssignments],
+            [.. plan.AddedSignals],
             [.. plan.SlotOverrides],
-            plan.ExistingInterfaceSelection);
+            [.. plan.RemovedSignalNodeIds],
+            [.. plan.ExistingInterfaceSelections]);
 
     private static void Restore(VisualPlan plan, PlanState state)
     {
@@ -972,9 +1911,11 @@ public sealed class ContainerToFeeVisualPlanService
         plan.ReplaceCreationRequests(state.CreationRequests);
         plan.ReplaceGenerationSelections(state.GenerationSelections);
         plan.ReplaceSignalCreationSelections(state.SignalCreationSelections);
+        plan.ReplaceAddedSignals(state.AddedSignals);
         plan.ReplaceSignalAssignments(state.SignalAssignments);
         plan.ReplaceSlotOverrides(state.SlotOverrides);
-        plan.SetExistingInterfaceSelection(state.ExistingInterfaceSelection);
+        plan.ReplaceRemovedSignalNodeIds(state.RemovedSignalNodeIds);
+        plan.SetExistingInterfaceSelections(state.ExistingInterfaceSelections);
     }
 
     private void RaisePlanChanged()
@@ -1010,8 +1951,16 @@ public sealed class ContainerToFeeVisualPlanService
         IReadOnlyList<VisualGenerationSelection> GenerationSelections,
         IReadOnlyList<VisualSignalCreationSelection> SignalCreationSelections,
         IReadOnlyList<VisualSignalAssignment> SignalAssignments,
+        IReadOnlyList<VisualAddedSignal> AddedSignals,
         IReadOnlyList<VisualSlotOverride> SlotOverrides,
-        VisualExistingInterfaceSelection? ExistingInterfaceSelection);
+        IReadOnlyList<string> RemovedSignalNodeIds,
+        IReadOnlyList<VisualExistingInterfaceSelection> ExistingInterfaceSelections);
+
+    private static bool IsSelectedInterface(VisualPlan plan, string interfaceGuid) =>
+        plan.ExistingInterfaceSelections.Any(item => string.Equals(
+            item.InterfaceGuid,
+            interfaceGuid,
+            StringComparison.OrdinalIgnoreCase));
 }
 
 internal static class VisualExistingContainerComparer

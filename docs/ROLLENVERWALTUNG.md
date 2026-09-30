@@ -10,8 +10,8 @@ VIBN Tools verwendet Rollen ausschließlich zur Steuerung der Tool-Berechtigunge
 | --- | --- |
 | normale VIBN-Reiter, Project Settings, ViCo, Zuli Converter, SpecialDevices2FEE, Model Validation, Model Control, Interface Operation | alle Benutzer |
 | CAD Wizard, Container Generation, Container2Fee | Level7 oder höher |
-| Kanbanize Karten, AI-Test | Level8 oder höher |
-| Administration anzeigen und verwenden | Level9 |
+| Kanbanize Karten | Level8 oder höher |
+| Container2FEE Visual, FEE2Container, FEE2SpecialDevices, AI-Test, Administration | Level9 |
 | Benutzer hinzufügen, entfernen oder Stufe ändern | Level9 |
 
 Die Sichtbarkeit wird beim Start aus derselben Rollenliste bestimmt, die auch die Administration verwendet. Ein nicht erkannter Benutzer erhält keine Level7-/Level8-/Level9-Reiter.

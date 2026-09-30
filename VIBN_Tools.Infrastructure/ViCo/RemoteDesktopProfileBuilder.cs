@@ -6,7 +6,7 @@ public static class RemoteDesktopProfileBuilder
         string hostName,
         string userName,
         IReadOnlyCollection<int> monitorIndexes,
-        int monitorCount,
+        IReadOnlyCollection<int> availableMonitorIds,
         bool promptForCredentials = false)
     {
         if (string.IsNullOrWhiteSpace(hostName))
@@ -14,14 +14,16 @@ public static class RemoteDesktopProfileBuilder
         if (!promptForCredentials && string.IsNullOrWhiteSpace(userName))
             throw new InvalidOperationException("Die Kanbanize-Karte enthält keinen gültigen Remote-Benutzer.");
 
-        var availableMonitorCount = Math.Max(1, monitorCount);
+        ArgumentNullException.ThrowIfNull(availableMonitorIds);
+        var availableMonitors = availableMonitorIds.Count == 0
+            ? new[] { 0 }
+            : availableMonitorIds.Distinct().OrderBy(index => index).ToArray();
         var monitors = monitorIndexes
-            .Where(index => index >= 0 && index < availableMonitorCount)
+            .Where(availableMonitors.Contains)
             .Distinct()
-            .OrderBy(index => index)
             .ToArray();
         if (monitors.Length == 0)
-            monitors = new[] { 0 };
+            monitors = [availableMonitors[0]];
 
         var lines = new List<string>
         {
@@ -47,7 +49,8 @@ public static class RemoteDesktopProfileBuilder
         if (!string.IsNullOrWhiteSpace(userName))
             lines.Insert(lines.IndexOf($"prompt for credentials:i:{(promptForCredentials ? 1 : 0)}"), $"username:s:{userName}");
 
-        if (monitors.Length == availableMonitorCount)
+        if (monitors.Length == availableMonitors.Length &&
+            monitors.ToHashSet().SetEquals(availableMonitors))
             lines.Add("use multimon:i:1");
         else if (monitors.Length > 1)
         {

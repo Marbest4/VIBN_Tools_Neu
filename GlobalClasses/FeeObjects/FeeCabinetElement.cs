@@ -1,4 +1,5 @@
 ﻿using FS.SDK.Mathematics;
+using System.Xml.Linq;
 using static VIBN_Tools.GlobalClasses.FeeObjects.FeeCabinetElement;
 using static VIBN_Tools.GlobalClasses.Interfaces;
 
@@ -120,7 +121,31 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
         public Task CheckObjectIssuesAsync(IEnumerable<FeeAbstractObject> newObjects)
         {
-            throw new NotImplementedException();
+            return Task.CompletedTask;
+        }
+
+        public override void StoreXmlObjectProperties(XElement xElement, Guid guid)
+        {
+            base.StoreXmlObjectProperties(xElement, guid);
+            ElementType = ReadValue(xElement, "Definition", "ElementType") ?? string.Empty;
+            Label = ReadValue(xElement, "Label") ?? string.Empty;
+            Tooltip = ReadValue(xElement, "Tooltip") ?? string.Empty;
+        }
+
+        private static string? ReadValue(XElement root, params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var attribute = root.DescendantsAndSelf().Attributes()
+                    .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(attribute?.Value))
+                    return attribute.Value.Trim();
+                var element = root.DescendantsAndSelf()
+                    .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrWhiteSpace(element?.Value))
+                    return element.Value.Trim();
+            }
+            return null;
         }
 
 

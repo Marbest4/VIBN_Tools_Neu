@@ -9,6 +9,8 @@ public partial class App : System.Windows.Application
     {
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         base.OnStartup(e);
+        MainWindow = new MainWindow();
+        MainWindow.Show();
     }
 
     protected override void OnExit(ExitEventArgs e)

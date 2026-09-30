@@ -51,5 +51,20 @@ public interface ITiaBridgeClient : IAsyncDisposable
         IReadOnlyCollection<string> axisIds,
         CancellationToken cancellationToken = default);
 
+    Task<TiaAxisConfigurationTransferResult> ExportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default);
+
+    Task<TiaAxisConfigurationTransferResult> ImportAxisConfigurationsAsync(
+        string folderPath,
+        CancellationToken cancellationToken = default);
+
+    Task<TiaAxisInterfaceExportResult> ExportAxisInterfaceWorkbookAsync(
+        string filePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Compiles the selected PLC software and returns recursive diagnostics without saving the project.</summary>
+    Task<TiaCompileResult> CompileSelectedPlcAsync(CancellationToken cancellationToken = default);
+
     Task SaveAsync(CancellationToken cancellationToken = default);
 }

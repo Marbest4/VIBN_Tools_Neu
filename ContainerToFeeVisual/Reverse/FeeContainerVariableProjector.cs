@@ -45,8 +45,19 @@ public static class FeeContainerVariableProjector
                 continue;
             }
 
+            if (binding.ContainerIndex < 0 || binding.ContainerIndex >= containers.Length)
+            {
+                missing.Add(binding.VariableGuid);
+                continue;
+            }
+
             var entries = containers[binding.ContainerIndex].Descendants()
                 .Where(element => element.Name.LocalName == "Entry").ToArray();
+            if (binding.EntryIndex < 0 || binding.EntryIndex >= entries.Length)
+            {
+                missing.Add(binding.VariableGuid);
+                continue;
+            }
             var entry = entries[binding.EntryIndex];
             SetChild(entry, "Signal", variable.Signal);
             SetChild(entry, "Address",

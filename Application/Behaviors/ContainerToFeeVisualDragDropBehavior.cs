@@ -156,20 +156,45 @@ public static class ContainerToFeeVisualDragDropBehavior
 
     private static object? ResolveItem(FrameworkElement sourceElement, DependencyObject? originalSource)
     {
+        object? item = null;
         DependencyObject? current = originalSource;
         while (current is not null && current != sourceElement)
         {
             if (current is FrameworkElement frameworkElement &&
                 frameworkElement.DataContext is not null &&
                 frameworkElement.DataContext != sourceElement.DataContext)
-                return frameworkElement.DataContext;
+            {
+                item = frameworkElement.DataContext;
+                break;
+            }
 
             current = System.Windows.Media.VisualTreeHelper.GetParent(current);
         }
 
-        if (sourceElement is ListBox listBox)
-            return listBox.SelectedItem;
+        item ??= sourceElement is ListBox sourceListBox
+            ? sourceListBox.SelectedItem
+            : sourceElement.DataContext;
+        if (item is null)
+            return null;
 
-        return sourceElement.DataContext;
+        var listBox = FindAncestor<ListBox>(sourceElement);
+        if (listBox?.SelectionMode is SelectionMode.Multiple or SelectionMode.Extended &&
+            listBox.SelectedItems.Count > 1 && listBox.SelectedItems.Contains(item))
+        {
+            return listBox.SelectedItems.Cast<object>().ToArray();
+        }
+
+        return item;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? start) where T : DependencyObject
+    {
+        for (var current = start; current is not null;
+             current = System.Windows.Media.VisualTreeHelper.GetParent(current))
+        {
+            if (current is T match)
+                return match;
+        }
+        return null;
     }
 }

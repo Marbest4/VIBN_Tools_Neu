@@ -6,6 +6,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Margin="0,0,0,12">
@@ -87,7 +88,40 @@
             </Grid>
         </Grid>
 
-        <WrapPanel Grid.Row="2" Margin="0,12,0,0" VerticalAlignment="Center">
+        <GroupBox Grid.Row="2" Margin="0,12,0,0" Header="Vom Tool erzeugte Ordner">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Margin="6" TextWrapping="Wrap"
+                           Text="Hier werden ausschließlich bekannte VIBN-Tools-Datenordner angezeigt. Löschen entfernt deren Inhalt dauerhaft; Einstellungen, Cache oder Nachweise werden bei Bedarf neu erzeugt." />
+                <DataGrid Grid.Row="1" Margin="4" MaxHeight="220"
+                          ItemsSource="{Binding ToolDirectories}"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserAddRows="False" HeadersVisibility="Column"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Bereich" Binding="{Binding Name}" Width="190" />
+                        <DataGridTextColumn Header="Pfad" Binding="{Binding Path}" Width="2*" MinWidth="260" />
+                        <DataGridTextColumn Header="Inhalt" Binding="{Binding Description}" Width="2*" MinWidth="260" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding StateText}" Width="105" />
+                        <DataGridTemplateColumn Header="Aktionen" Width="170">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Padding="8,2" Content="Öffnen" IsEnabled="{Binding Exists}" Click="OpenToolDirectory_Click" />
+                                        <Button Margin="6,0,0,0" Padding="8,2" Content="Löschen" IsEnabled="{Binding Exists}" Click="DeleteToolDirectory_Click" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </GroupBox>
+
+        <WrapPanel Grid.Row="3" Margin="0,12,0,0" VerticalAlignment="Center">
             <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Level9CoverageText}" />
             <Button MinWidth="170" Margin="24,0,0,0" Content="Versionsordner öffnen" Command="{Binding OpenUpdateCommand}" />
             <TextBlock Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding LatestUpdate.Version}" />

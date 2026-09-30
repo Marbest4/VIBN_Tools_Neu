@@ -16,6 +16,7 @@
   <!-- Compile the proven read/RDP adapters from their single source of truth.
        No board-write, FEE, TIA, copy or administration source is included. -->
   <ItemGroup>
+    <Compile Include="IbnRemoteWorkstationSelectionPolicy.cs" />
     <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\BusinessmapSubtaskJsonParser.cs" Link="ViCo\BusinessmapSubtaskJsonParser.cs" />
     <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\DesktopWorkstationServices.cs" Link="ViCo\DesktopWorkstationServices.cs" />
     <Compile Include="..\VIBN_Tools.Infrastructure\ViCo\KanbanizeRefreshService.cs" Link="ViCo\KanbanizeRefreshService.cs" />

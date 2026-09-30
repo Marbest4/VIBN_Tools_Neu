@@ -22,9 +22,10 @@ internal static class RuntimeVisualPlanBinder
     public static RuntimeVisualPlanBindingResult Bind(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
-        IReadOnlySet<string>? excludedContainerIds = null)
+        IReadOnlySet<string>? excludedContainerIds = null,
+        bool omitInvalidSlotEntries = false)
     {
-        var effectiveDocument = CreateEffectiveDocument(plan);
+        var effectiveDocument = CreateEffectiveDocument(plan, omitInvalidSlotEntries);
         var (containers, unknownSignals) =
             ContainerToFeeService.ReadInContainerXmlData(effectiveDocument);
         var containerNodes = plan.Nodes
@@ -110,7 +111,9 @@ internal static class RuntimeVisualPlanBinder
         return new RuntimeVisualPlanBindingResult(true, bound, unknownSignals, null);
     }
 
-    internal static XDocument CreateEffectiveDocument(VisualPlan plan)
+    internal static XDocument CreateEffectiveDocument(
+        VisualPlan plan,
+        bool omitInvalidSlotEntries = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var document = XDocument.Load(plan.SourceXmlPath, LoadOptions.None);
@@ -129,20 +132,63 @@ internal static class RuntimeVisualPlanBinder
         for (var containerIndex = 0; containerIndex < supportedContainers.Length; containerIndex++)
         {
             var entries = supportedContainers[containerIndex].Descendants("Entry").ToArray();
-            var signalNodes = plan.Nodes
+            var sourceSignalNodes = plan.Nodes
                 .Where(node => string.Equals(
                                    node.ContainerId,
                                    containerNodes[containerIndex].Id,
                                    StringComparison.Ordinal) &&
-                               node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
+                               node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+                               !plan.IsAddedSignal(node.Id))
                 .ToArray();
-            if (entries.Length != signalNodes.Length)
+            if (entries.Length != sourceSignalNodes.Length)
                 continue;
             for (var entryIndex = 0; entryIndex < entries.Length; entryIndex++)
             {
                 var slotElement = entries[entryIndex].Element("Slot");
                 if (slotElement is not null)
-                    slotElement.Value = plan.GetEffectiveSlot(signalNodes[entryIndex]);
+                    slotElement.Value = plan.GetEffectiveSlot(sourceSignalNodes[entryIndex]);
+            }
+            for (var entryIndex = entries.Length - 1; entryIndex >= 0; entryIndex--)
+            {
+                if (plan.IsSignalRemoved(sourceSignalNodes[entryIndex].Id))
+                    entries[entryIndex].Remove();
+            }
+
+            var dataList = supportedContainers[containerIndex].Descendants("DataList").FirstOrDefault();
+            if (dataList is null)
+            {
+                dataList = new XElement("DataList");
+                supportedContainers[containerIndex].Add(dataList);
+            }
+            foreach (var added in plan.AddedSignals.Where(item => string.Equals(
+                         item.ContainerId,
+                         containerNodes[containerIndex].Id,
+                         StringComparison.Ordinal)))
+            {
+                var addedNode = plan.FindNode(added.NodeId);
+                if (addedNode is null)
+                    continue;
+                dataList.Add(new XElement("Entry",
+                    new XElement("ID", "Manuell in Container2FEE Visual ergänzt"),
+                    new XElement("Address", string.IsNullOrWhiteSpace(added.Path) ? added.Address : added.Path),
+                    new XElement("DataType", added.DataType),
+                    new XElement("Signal", added.FeeSignalTag),
+                    new XElement("Slot", plan.GetEffectiveSlot(addedNode)),
+                    new XElement("Note", $"Bestehendes Signal aus Interface '{added.FeeInterfaceName}'")));
+            }
+
+            if (omitInvalidSlotEntries &&
+                ContainerMetadataCatalog.TryGet(containerNodes[containerIndex].TypeName, out var descriptor))
+            {
+                var validSlots = descriptor.Slots.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                foreach (var invalidEntry in supportedContainers[containerIndex]
+                             .Descendants("Entry")
+                             .Where(entry => !validSlots.Contains(
+                                 entry.Element("Slot")?.Value?.Trim() ?? string.Empty))
+                             .ToArray())
+                {
+                    invalidEntry.Remove();
+                }
             }
         }
 

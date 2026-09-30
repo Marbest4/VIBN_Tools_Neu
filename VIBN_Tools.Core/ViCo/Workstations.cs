@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace VIBN_Tools.Core.ViCo;
 
@@ -188,6 +189,24 @@ public sealed record ViCoWorkstationSnapshot(
     IReadOnlyList<ViCoWorkstation> Workstations,
     IReadOnlyList<string> Warnings);
 
+/// <summary>
+/// Last non-empty workstation projection that was successfully displayed. It
+/// is deliberately separate from the Kanbanize transport cache: a broken or
+/// empty refresh must never replace the user's last usable overview.
+/// </summary>
+public sealed record ViCoLastActiveSnapshot(
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<ViCoWorkstation> Workstations);
+
+public interface IViCoLastActiveSnapshotStore
+{
+    Task<ViCoLastActiveSnapshot?> LoadAsync(CancellationToken cancellationToken = default);
+
+    Task SaveAsync(
+        ViCoLastActiveSnapshot snapshot,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IViCoWorkstationCatalog
 {
     Task<ViCoWorkstationSnapshot> LoadAsync(CancellationToken cancellationToken = default);
@@ -203,7 +222,8 @@ public interface IViCoWorkstationSearch
     IReadOnlyList<ViCoWorkstationSearchHit> SearchWithMatches(
         IEnumerable<ViCoWorkstation> workstations,
         string query,
-        ViCoSearchMode mode);
+        ViCoSearchMode mode,
+        IReadOnlyCollection<string>? searchableColumns = null);
 }
 
 /// <summary>
@@ -226,6 +246,12 @@ public interface INetworkAvailabilityService
 
 public interface IRemoteDesktopService
 {
+    /// <summary>
+    /// Machine-specific zero-based display IDs used by mstsc /l and the
+    /// selectedmonitors RDP property. These are not Windows display numbers.
+    /// </summary>
+    IReadOnlyList<int> MonitorIds { get; }
+
     int MonitorCount { get; }
 
     /// <summary>Starts RDP with locally saved Windows credentials.</summary>
@@ -233,6 +259,38 @@ public interface IRemoteDesktopService
 
     /// <summary>Starts RDP without inserting credentials so Windows shows its sign-in dialog.</summary>
     void ConnectWithCredentialPrompt(string hostName, string userName, IReadOnlyCollection<int> monitorIndexes);
+}
+
+/// <summary>
+/// Selectable machine-specific monitor ID as reported by the RDP client.
+/// The UI deliberately displays only <see cref="Id"/> so it matches
+/// <c>mstsc /l</c> without an additional display-number mapping.
+/// </summary>
+public sealed class RemoteDesktopMonitorOption : INotifyPropertyChanged
+{
+    private bool _isSelected;
+
+    public RemoteDesktopMonitorOption(int id, bool isSelected = false)
+    {
+        Id = id;
+        _isSelected = isSelected;
+    }
+
+    public int Id { get; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value)
+                return;
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 /// <summary>Creates and removes the short-lived Windows credential used by automatic RDP.</summary>

@@ -59,8 +59,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         {
             await base.CreateAsync();
 
-            await Services.ApiInstance.Object.SetPropertyAsync(Guid, nameof(ReadingUnitUdt.UseDetectMark), DetectMark);
-            await Services.ApiInstance.Object.SetPropertyAsync(Guid, nameof(ReadingUnitUdt.DetectMark), MarkToDetect);
+            await Services.ApiInstance.Object.SetPropertyAsync(Guid, FeeSdkPropertyNames.UseDetectMark, DetectMark);
+            await Services.ApiInstance.Object.SetPropertyAsync(Guid, FeeSdkPropertyNames.DetectMark, MarkToDetect);
 
             await Services.ApiInstance.Object.SetPropertyAsync(Guid, nameof(UDTComponent.ReadWriteTypes), UdtDefinition, nameof(UDTComponent));
 

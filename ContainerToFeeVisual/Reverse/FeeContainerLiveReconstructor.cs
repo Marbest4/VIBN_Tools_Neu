@@ -29,11 +29,27 @@ public sealed record FeeContainerReconstructionIssue(
     Guid? ObjectGuid,
     string Message);
 
+public sealed record FeeContainerUnmappedObject(
+    Guid Guid,
+    string Name,
+    string FeeType,
+    string Reason);
+
+public sealed record FeeContainerObjectAssociation(
+    Guid ObjectGuid,
+    string ObjectName,
+    string ObjectType,
+    Guid ContainerObjectGuid,
+    string ContainerId,
+    string Reason);
+
 public sealed record FeeContainerReconstructionResult(
     FeeContainerProvenanceSnapshot Snapshot,
     int InspectedObjectCount,
     int IgnoredObjectCount,
-    IReadOnlyList<FeeContainerReconstructionIssue> Issues);
+    IReadOnlyList<FeeContainerReconstructionIssue> Issues,
+    IReadOnlyList<FeeContainerUnmappedObject> UnmappedObjects,
+    IReadOnlyList<FeeContainerObjectAssociation> ObjectAssociations);
 
 /// <summary>
 /// Reconstructs the container schema from a bounded FEE subtree. Exact
@@ -42,6 +58,14 @@ public sealed record FeeContainerReconstructionResult(
 /// </summary>
 public static class FeeContainerLiveReconstructor
 {
+    /// <summary>
+    /// Complete XML type set understood by the same catalog that drives
+    /// Container2FEE Visual. FEE2Container uses this as its round-trip
+    /// contract, including signal-only types retained by root provenance.
+    /// </summary>
+    public static IReadOnlyList<string> SupportedContainerTypes =>
+        ContainerMetadataCatalog.SupportedXmlTypes;
+
     public static FeeContainerReconstructionResult Reconstruct(
         Guid rootGuid,
         string rootName,
@@ -64,12 +88,14 @@ public static class FeeContainerLiveReconstructor
             .ToDictionary(group => group.Key, group => group.ToArray());
         var issues = new List<FeeContainerReconstructionIssue>();
         var candidates = new List<ContainerCandidate>();
+        var relevantObjectGuids = new HashSet<Guid>();
 
         foreach (var item in sourceObjects)
         {
             if (!TryCreateCandidate(item, out var candidate, out var ambiguity))
                 continue;
             candidates.Add(candidate!);
+            relevantObjectGuids.Add(item.Guid);
             if (!string.IsNullOrWhiteSpace(ambiguity))
                 issues.Add(new FeeContainerReconstructionIssue(item.Guid, ambiguity));
         }
@@ -77,7 +103,8 @@ public static class FeeContainerLiveReconstructor
         // Property provenance is intentionally written to every generated
         // primary/technical object. Collapse those objects back to one
         // container and prefer the logic object because PLC variables are
-        // normally assigned there. MotionJoints are never inferred/merged.
+        // normally assigned there. MotionJoints are not emitted as standalone
+        // containers; they are associated with one compatible container below.
         var versioned = candidates
             .Where(item => !string.IsNullOrWhiteSpace(item.Object.ProvenanceContainerId))
             .GroupBy(item => item.Object.ProvenanceContainerId!, StringComparer.Ordinal)
@@ -91,6 +118,9 @@ public static class FeeContainerLiveReconstructor
             .Where(item => !IsRedundantLegacySimObject(item, candidates))
             .ToArray();
         candidates = versioned.Concat(unversioned).ToList();
+
+        var objectAssociations = ResolveMotionJointAssociations(sourceObjects, candidates, issues);
+        relevantObjectGuids.UnionWith(objectAssociations.Select(item => item.ObjectGuid));
 
         var containerElements = new List<XElement>();
         var bindings = new List<FeeContainerSignalBinding>();
@@ -182,11 +212,65 @@ public static class FeeContainerLiveReconstructor
             containerElements.Count,
             bindings.Count,
             string.Empty);
+        var unmapped = sourceObjects
+            .Where(item => !relevantObjectGuids.Contains(item.Guid))
+            .Select(item => new FeeContainerUnmappedObject(
+                item.Guid,
+                item.Name,
+                item.FeeType,
+                "Kein eindeutiger Containerbezug aus Typ, Logikdefinition oder Provenienz erkennbar."))
+            .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.FeeType, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         return new FeeContainerReconstructionResult(
             snapshot,
             sourceObjects.Length,
-            sourceObjects.Length - containerElements.Count,
-            issues);
+            unmapped.Length,
+            issues,
+            unmapped,
+            objectAssociations);
+    }
+
+    private static IReadOnlyList<FeeContainerObjectAssociation> ResolveMotionJointAssociations(
+        IReadOnlyList<FeeContainerLiveObject> objects,
+        IReadOnlyList<ContainerCandidate> candidates,
+        ICollection<FeeContainerReconstructionIssue> issues)
+    {
+        var result = new List<FeeContainerObjectAssociation>();
+        foreach (var joint in objects.Where(item => EndsWithType(item.FeeType, "MotionJoint")))
+        {
+            var compatible = candidates.Where(candidate =>
+                    candidate.Descriptor.Targets.Any(target =>
+                        string.Equals(target.AllowedType.Name, "MotionJoint", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(target.AllowedType.Name, "FeeJoint", StringComparison.OrdinalIgnoreCase)) &&
+                    ((!string.IsNullOrWhiteSpace(joint.ProvenanceContainerId) &&
+                      string.Equals(joint.ProvenanceContainerId, candidate.Object.ProvenanceContainerId, StringComparison.Ordinal)) ||
+                     string.Equals(joint.Name, candidate.ComponentName, StringComparison.OrdinalIgnoreCase)))
+                .DistinctBy(candidate => candidate.Object.Guid)
+                .ToArray();
+            if (compatible.Length == 1)
+            {
+                var container = compatible[0];
+                result.Add(new FeeContainerObjectAssociation(
+                    joint.Guid,
+                    joint.Name,
+                    joint.FeeType,
+                    container.Object.Guid,
+                    string.IsNullOrWhiteSpace(container.Object.ProvenanceContainerId)
+                        ? $"fee:{container.Object.Guid:D}"
+                        : container.Object.ProvenanceContainerId!,
+                    !string.IsNullOrWhiteSpace(joint.ProvenanceContainerId)
+                        ? "Über Container-Provenienz zugeordnet"
+                        : "Über eindeutigen Komponentenname und kompatiblen MotionJoint-Zieltyp zugeordnet"));
+            }
+            else if (compatible.Length > 1)
+            {
+                issues.Add(new FeeContainerReconstructionIssue(
+                    joint.Guid,
+                    $"MotionJoint '{joint.Name}' passt zu mehreren Containern und bleibt zur Prüfung unzugeordnet."));
+            }
+        }
+        return result;
     }
 
     private static bool TryCreateCandidate(
@@ -346,20 +430,28 @@ public static class FeeContainerLiveReconstructor
 
     private static string? MapCabinetType(string? definition)
     {
-        if (string.Equals(definition, "Grob_NotAus", StringComparison.OrdinalIgnoreCase))
+        var normalized = NormalizeToken(definition);
+        if (normalized.Contains("GROBNOTAUS", StringComparison.Ordinal))
             return "EStop";
-        if (string.Equals(definition, "Fuse", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains("FUSE", StringComparison.Ordinal))
             return "Fuse";
-        if (definition?.StartsWith("Lamp ", StringComparison.OrdinalIgnoreCase) == true)
+        if (normalized.Contains("LAMP", StringComparison.Ordinal))
             return "CabinetLamp";
-        if (string.Equals(definition, "Grob_2PositionSwitch", StringComparison.OrdinalIgnoreCase))
+        if (normalized.Contains("GROB2POSITIONSWITCH", StringComparison.Ordinal) ||
+            normalized.Contains("POSITIONSWITCH2", StringComparison.Ordinal) ||
+            normalized.Contains("2POSITIONSWITCH", StringComparison.Ordinal) ||
+            normalized.Contains("TWOPOSITIONSWITCH", StringComparison.Ordinal))
             return "Switch";
         return null;
     }
 
     private static bool EndsWithType(string value, string typeName) =>
-        string.Equals(value, typeName, StringComparison.OrdinalIgnoreCase) ||
-        value.EndsWith($".{typeName}", StringComparison.OrdinalIgnoreCase);
+        NormalizeToken(value).EndsWith(NormalizeToken(typeName), StringComparison.Ordinal);
+
+    private static string NormalizeToken(string? value) => new((value ?? string.Empty)
+        .Where(char.IsLetterOrDigit)
+        .Select(char.ToUpperInvariant)
+        .ToArray());
 
     private static string? FirstNotBlank(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));

@@ -12,6 +12,9 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] `Tests/Test-TiaHardwareTraversal.ps1` bestätigt Gerätegruppen, Local Session und exakt `E62–73/A62–67` sowie `E74–79/A68–79`.
 - [ ] `Tests/TiaLiveRead` liest aus dem geöffneten `Projekt1.ap20` genau eine PLC, drei Teilnehmer und sechs eindeutige adressführende Modulzeilen, ohne das Projekt zu speichern.
 - [ ] Anwendung startet ohne XamlParseException.
+- [ ] **Project Quality** lädt ohne Binding-Fehler; Profil speichern/neuladen, XML-Prüfung, Signalvergleich, Szenarioanzeige und JSON-/HTML-Export funktionieren.
+- [ ] Signalregister übernimmt Namens-/Adressänderungen mit Historie; Datentyp-, GUID- oder Mehrdeutigkeitskonflikte verändern die persistierte Datei nicht.
+- [ ] Container2FEE Visual schreibt nach Erfolg, Fehler und Abbruch ein Manifest; **Letzten Lauf reparieren** selektiert bei identischem Quellfingerabdruck nur offene Container.
 - [ ] Anwendung startet ohne FEE-Verbindungs-/Interface-Abfrage und ohne entsprechende Fehlermeldung; die gemeinsame `CoreApi`-Instanz wird vorbereitet, lädt aber keine Interfaces.
 
 ## Rollen und Navigation
@@ -25,6 +28,8 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Navigation einklappen reduziert die linke Leiste sichtbar auf Symbole; Ausklappen und Alt+N stellen die volle Breite wieder her.
 
 ## Project Settings und ViCo
+
+- [ ] Der Hauptreiter heißt **Rechnerübersicht**; **Administration** ist der letzte Hauptreiter und bleibt Level9-geschützt.
 
 - [ ] Project Settings zeigt nur erreichbare PCs und der Filter wirkt sofort.
 - [ ] Ein fehlgeschlagener FEE-Connect zeigt nicht fälschlich „verbunden“.
@@ -72,9 +77,12 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 ## TIA und SpecialDevices2FEE
 
 - [ ] TIA-Version, Attach und PLC-Auswahl funktionieren.
-- [ ] **Auswahl konfigurieren** verarbeitet einen statischen Auswahlsatz ohne Dynamic-Binder-Ausnahme; **Was wird geändert?** zeigt alle zehn Parameter und die Linear-/Rotatorikregel.
+- [ ] **Achsen nur lesen** füllt ausschließlich **Gefundene Achsen**; **Konfigurieren + AxisDB/AxisFC erzeugen** verarbeitet einen statischen Auswahlsatz ohne Dynamic-Binder-Ausnahme und verschiebt nur vollständig erfolgreiche Achsen in **Konfigurierte Achsen**.
 - [ ] **Gesamtes TIA-Projekt speichern** ist von der Konfiguration getrennt und weist darauf hin, dass `Project.Save()` alle offenen Projektänderungen persistiert.
-- [ ] **ViCo-Bibliothek → Was wird gemacht?** beschreibt Voraussetzungen sowie Überschreiben/Speichern beim Import, Achsen-/AxisXML-Option und read-only TIA-Export vollständig.
+- [ ] **ViCo-Bibliothek → Was wird gemacht?** beschreibt den manuellen Erstimport, kundenspezifische Bearbeitung, Export auf das Projektlaufwerk und den späteren Import einschließlich Überschreiben/Speichern.
+- [ ] TO-Export, TO-Import und Achsen-Schnittstelle sind als getrennte Buttons vorhanden; Hilfe und Log nennen Voraussetzungen, Dateiziele und Speicherwirkung.
+- [ ] **Ausgewählte PLC kompilieren** liefert reale Siemens-Compilerfehler/-warnungen samt Pfad und Laufzeit, speichert das Projekt nicht und hinterlegt nur bei tatsächlich ausgeführtem Compile einen Nachweis.
+- [ ] TIA-Projektübersicht und ViCo-Bibliothek sind auf einer gemeinsamen scrollbaren Seite bedienbar.
 - [ ] Die einzige Hardwareansicht unter SpecialDevices2FEE gruppiert gleiche Gerätenamen und zeigt Hardware-ID, GSDML, IP, Modultyp, Firmware, E-/A-Bereich und -Länge, Präfix, Logik und Status; #, Tiefe, Modul, Parent, Slot/Subslot, Pfad und Objektklasse sind ausgeblendet.
 - [ ] Die Logikauswahl bietet **Keine Logik**; eine entsprechend gesetzte Zeile gelangt auch mit aktivem Übernehmen-Haken nicht in die Warteschlange.
 - [ ] Nach vollständig erfolgreicher SpecialDevices2FEE-Erzeugung ist der Root in FEE2SpecialDevices sichtbar; ein absichtlich fehlgeschlagener Teilvorgang ist nicht als gültige Quelle markiert.
@@ -91,29 +99,43 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Geräte erscheinen zuerst in der Warteschlange.
 - [ ] Fehlerhafte FEE-Erzeugung bleibt prüfbar in der Warteschlange.
 
+## Externe Simulationsadapter
+
+- [ ] FEE-Probe meldet nur bei bestätigter gemeinsamer SDK-Verbindung verfügbar; dies wird nicht mit einem ausgeführten Simulationstest verwechselt.
+- [ ] Emulate3D-/EKS-Bereitschaft meldet gefundene Installation/Projektpfad als Warnung **nicht live bestätigt**.
+- [ ] Vor Freigabe eines echten Herstelleradapters werden SDK-Version, Lizenz, Beispielprojekt, read-only Modellabfrage, Signalverknüpfung und Szenarioausführung separat live abgenommen.
+
 ## Bestehende VIBN-Funktionen
 
 - [ ] CAD Wizard, Zuli Converter, Container Generation und Container2Fee funktionieren mit einer bekannten Testvorlage.
 - [ ] Container Generation lädt nach einer Requirements-XML ein bestehendes ContainerFile als aktiven Arbeitsstand; ohne aktiven Stand ist der Vergleich deaktiviert.
 - [ ] **Aktiven Stand vergleichen** fragt nur einen Kandidaten ab und zeigt feldgenaue Unterschiede zum sichtbaren Workspace; **Arbeitsstand laden** lädt weiterhin ausschließlich das interne Workspaceformat.
 - [ ] Der bestehende Container2Fee-Reiter arbeitet unverändert.
-- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 6, erlaubt nur kompatible Drag-and-drop-Ziele und beschränkt Slot-Overrides auf die Runtime-Slots des Containertyps.
+- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 9 einschließlich Mehrfach-Interfaceauswahl, zeigt alle deklarierten Signalslots und erlaubt Signale beziehungsweise SimObjects ausschließlich auf ihren getrennten, kompatiblen Drag-and-drop-Zielen.
+- [ ] `Entf`, Kontextmenü und die mittlere Signalliste entfernen Signale nur aus dem wirksamen Plan; Rückgängig stellt sie wieder her und **Container.xml speichern** schreibt genau den bearbeiteten Stand.
+- [ ] Auswahl, Aufklappzustand und Scrollposition der Containerstruktur bleiben nach Drag-and-drop erhalten; helllila kennzeichnet gefundene, aber noch nicht bestätigt verknüpfte Elemente.
 - [ ] Gefundene FEE-Signale lassen sich auf Signal-Knoten ziehen; die bestätigte GUID bleibt nach erneutem Öffnen erhalten und löst einen dokumentierten Tag-/Adresskonflikt eindeutig auf.
 - [ ] Rot, Gelb und Grün kennzeichnen fehlende/mehrdeutige, geplante und vollständig gefundene beziehungsweise erfolgreich erzeugte Baumknoten bis hinunter zu Signal und Logikobjekt.
 - [ ] Eine ausdrücklich bestätigte Best-Effort-Generierung kennzeichnet den erzeugten Root und legt pro akzeptiertem Fehler genau einen untergeordneten Fehler-BasicFrame an; der Fortschritt endet mit einer Fertigmeldung.
 - [ ] FEE2Container exportiert einen erkannten älteren Container ohne Signalverknüpfung mit einem `FEE-UNASSIGNED-*`-Prüfeintrag statt ihn auszublenden.
+- [ ] FEE2Container zeigt Container, Signalzuordnungen und nicht containerrelevante Objekte getrennt; Container und Signale markieren ihre Gegenstellen gegenseitig hellblau, während die direkte Auswahl dunkelblau bleibt, und alle Exportkorrekturen wirken auf die gespeicherte Datei.
 - [ ] FEE2SpecialDevices findet bekannte Gerätelogiken auch in verschachtelten BasicFrames und unterdrückt doppelte Treffer desselben Geräts.
 - [ ] SpecialDevices2FEE zeigt den Gerätefortschritt und entfernt ein vollständig vorhandenes, eindeutig erkanntes Gerät ohne erneute Erzeugung aus der Warteschlange.
 - [ ] ViCo liest den Projektstart aus Custom-Field 508, ordnet Start und Deadline mit Kartentitel sowie Karten-ID zu und zeigt Planung/In Arbeit für `Angelegt (Tool)` ausklappbar an.
+- [ ] ViCo aktualisiert Karten ohne `fields`-Reduktion; ein leerer oder nicht mit Arbeitsplatz-Lanes verknüpfbarer API-Stand ersetzt keinen vorhandenen Cache und die Suche meldet keine interne Trefferspalte `Robotik`.
 - [ ] Containercheckboxen sowie Alle selektieren/deselektieren begrenzen die Aktion auf vollständige unterstützte Container; abgewählte Container werden nicht erzeugt.
 - [ ] Fehlende SimObject-Ziele sind rot, Erzeugungswünsche gelb und vorhandene Zuordnungen auf Ziel- und FEE-Objektseite grün dargestellt.
 - [ ] **Nur SimObjects verknüpfen** verbindet nach Model Validation → Update Objects vorhandene SimObjects mit genau einer gleichnamigen vorhandenen Logik und erzeugt kein Modellobjekt neu.
 - [ ] Container2FEE Visual erzeugt mit denselben Zuordnungen fachlich dasselbe Ergebnis wie der bestehende Executor; Erzeugen und Überspringen sind geprüft.
+- [ ] Die Statusfilter begrenzen Containerbaum, verfügbare SimObjects und FEE-Signale auf den gewählten Zustand; bei Baumtreffern bleiben die benötigten Elternknoten sichtbar.
+- [ ] Ein Abbruch gibt die UI sofort frei und verhindert einen neuen FEE-Vorgang, bis ein bereits laufender nicht abbrechbarer SDK-Aufruf beendet ist.
+- [ ] Ein vorhandenes gleichnamiges Cabinet wird wiederverwendet; mehrere gleichnamige Cabinets blockieren als Mehrdeutigkeit und erzeugen kein weiteres Duplikat.
 - [ ] Ein Stopper-Floor besitzt nach Erzeugung oder Link-only-Aktualisierung einen aktiven `CollisionSlot`; `SIM_Collision` und alle gewählten `Floor/Collision`-Slots sind nach Save/Reload verbunden.
 - [ ] Eine von FEE abgewiesene Variablen- oder Slotverknüpfung wird mit GUID-/Slot-Kontext als Fehler gemeldet und nicht als Erfolg angezeigt.
 - [ ] Fehlende ModelValidation-Pflichtsignale/-ziele brechen vor dem ersten Schreibzugriff ab; Stopper-Rückmeldungen werden über `Opened/Closed` geprüft.
 - [ ] Neu erzeugte SimObjects besitzen die dokumentierten bisherigen Container2FEE-Größen; Bewegungscontainer haben plausible Startparameter.
 - [ ] Container2FEE Visual erzeugt in FEE einen BasicFrame mit `vibn.container2fee.schema`-Tag; nach FEE-Speichern, Schließen und Öffnen findet FEE2Container denselben Root und exportiert ein semantisch gleiches ContainerFile.
+- [ ] Wird eine TagComponent-Property nach bestätigter Best-Effort-Freigabe von FEE nicht zurückbestätigt, läuft die fachliche Generierung weiter und protokolliert die eingeschränkte Provenienz, statt beim Root oder einem erzeugten Unterobjekt abzubrechen.
 - [ ] Eine direkte Slotänderung und eine PLC_IN-Änderung über MoveBit werden nach Save/Reload als eindeutige Route innerhalb des Roots exportiert; externe oder mehrdeutige Routen bleiben unverändert und erscheinen als Diagnose.
 - [ ] Model Validation, Model Control und Interface Operation funktionieren mit dem Testmodell; Update Objects protokolliert Objektzahl und Laufzeit und ist gegenüber dem Referenzmodell nicht langsamer.
 - [ ] Keine bestehende Funktion wurde durch ViCo-/Kanbanize-Aufrufe verändert.
@@ -123,4 +145,9 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Diagnoseprotokoll enthält keine sensiblen Werte.
 - [ ] Anwenderhandbuch und Screenshots sind Bestandteil des Releasepakets.
 - [ ] `scripts/Publish-IbnRemote.ps1` erzeugt nur `VIBN_Tools_IBN.exe`; die EXE startet auf einem sauberen Windows-x64-PC ohne .NET-, FEE- oder TIA-Installation und enthält keine Volltool-Reiter.
+- [ ] Ohne Zugangsdatenparameter fragt `Publish-IbnRemote.ps1` API-Key und RDP-Passwort verdeckt in der Konsole ab; die Werte erscheinen weder im Shell-Verlauf noch in der `dotnet publish`-Befehlszeile. Die Auslesbarkeit aus der fertigen EXE ist als Sicherheitsgrenze dokumentiert.
+- [ ] Das Prüfstatus-Dropdown der ContainerGeneration filtert nur die Haupt-Containerliste; **Unassigned Data** und **Filtered Data** behalten unabhängig davon alle Treffer ihres jeweiligen Textfilters.
+- [ ] Abdeckungsmatrix meldet Abweichungen zwischen Requirements, Vorwärtsgenerator und FEE2Container-Typkatalog; neue Container-Vorschläge benötigen mehrere Fälle und verändern keine XML automatisch.
+- [ ] Der opt-in Performance-Modus misst ContainerGeneration, Container2FEE, TIA und Rockwell und kann seine Diagnosewerte wieder löschen.
+- [ ] Rockwell führt seine drei Stufen über den gewählten Standard aus; **Generierte L5X öffnen** verwendet die Windows-Dateizuordnung und meldet eine fehlende Studio-5000-Installation verständlich.
 - [ ] Bekannte externe SDK-Warnungen bzw. Abhängigkeiten sind dokumentiert und keine neue funktionale Warnung aus den geänderten Integrationsmodulen offen.

@@ -106,7 +106,7 @@
                         <p:KanbanizeCardPage/>
                     </TabItem>
 
-                    <TabItem Header="ViCo" ux:Icon.Kind="TaskListAssigned">
+                    <TabItem Header="Rechnerübersicht" ux:Icon.Kind="TaskListAssigned">
                         <p:ViCoWorkspacePage/>
                     </TabItem>
 
@@ -118,12 +118,10 @@
                         <p:TiaPortalPage />
                     </TabItem>
 
-                    <TabItem Header="Administration"
-                             ux:Icon.Kind="Settings"
-                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
-                        <p:ViCoAdministrationPage />
+                    <TabItem Header="Rockwell" ux:Icon.Kind="Cad">
+                        <p:RockwellPage />
                     </TabItem>
-                    
+
                     <TabItem Header="CAD Wizard"
                              ux:Icon.Kind="Cad"
                              Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -148,19 +146,19 @@
 
                     <TabItem Header="Container2FEE Visual"
                              ux:Icon.Kind="WorkpieceStation"
-                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:ContainerToFeeVisualPage/>
                     </TabItem>
 
                     <TabItem Header="FEE2Container"
                              ux:Icon.Kind="WorkpieceStation"
-                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:Fee2ContainerPage />
                     </TabItem>
 
                     <TabItem Header="FEE2SpecialDevices"
                              ux:Icon.Kind="DeviceVideoCamera"
-                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:Fee2SpecialDevicesPage />
                     </TabItem>
                     
@@ -192,8 +190,20 @@
 
                     <TabItem Header="AI-Test"
                              ux:Icon.Kind="Magazines"
-                             Visibility="{Binding CanUseLevel8Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <p:AITrainingTestPage/>
+                    </TabItem>
+
+                    <TabItem Header="Project Quality"
+                             ux:Icon.Kind="TaskListAssigned"
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ProjectQualityPage />
+                    </TabItem>
+
+                    <TabItem Header="Administration"
+                             ux:Icon.Kind="Settings"
+                             Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <p:ViCoAdministrationPage />
                     </TabItem>
 
                 </ux:NavigationBar>

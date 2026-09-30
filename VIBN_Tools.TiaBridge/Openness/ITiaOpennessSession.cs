@@ -34,5 +34,13 @@ public interface ITiaOpennessSession : IDisposable
 
     IReadOnlyList<TiaAxisInfo> ConfigureAxes(TiaAxisConfigurationPayload payload);
 
+    TiaAxisConfigurationTransferResult ExportAxisConfigurations(TiaPathPayload payload);
+
+    TiaAxisConfigurationTransferResult ImportAxisConfigurations(TiaPathPayload payload);
+
+    TiaAxisInterfaceExportResult ExportAxisInterfaceWorkbook(TiaPathPayload payload);
+
+    TiaCompileResult CompileSelectedPlc();
+
     void Save();
 }

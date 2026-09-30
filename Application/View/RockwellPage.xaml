@@ -1,0 +1,103 @@
+<UserControl x:Class="VIBN_Tools.Application.View.RockwellPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
+             mc:Ignorable="d" d:DesignHeight="700" d:DesignWidth="1100">
+    <UserControl.DataContext><vm:RockwellPageVM /></UserControl.DataContext>
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+    </UserControl.Resources>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock FontSize="24" FontWeight="SemiBold" Text="Rockwell Studio 5000" />
+            <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
+                       Text="Erzeugt zuerst die Allen-Bradley-Excel-Schnittstelle und bearbeitet danach L5X-Exporte gestuft und idempotent. Die Quelldatei bleibt unverändert." />
+        </StackPanel>
+        <GroupBox Grid.Row="1" Margin="0,16,0,8" Header="1. Allen-Bradley Interface-Excel erzeugen">
+            <Grid Margin="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button MinWidth="200" MinHeight="34" Content="Allen-Bradley L5X Select"
+                        Command="{Binding OpenCommand}"
+                        ToolTip="Wählt den Studio-5000-L5X-Export aus. Die Quelldatei wird nur gelesen und zugleich für die nachfolgenden Rockwell-Schritte geladen." />
+                <TextBox Grid.Column="1" Margin="8,0" Padding="7,4" IsReadOnly="True"
+                         Text="{Binding SourcePath, Mode=OneWay}"
+                         ToolTip="Vollständiger Pfad der ausgewählten Allen-Bradley-L5X-Datei." />
+                <Button Grid.Column="2" MinWidth="220" MinHeight="34"
+                        Content="Allen-Bradley Excel Interface"
+                        Command="{Binding ExportInterfaceCommand}"
+                        IsEnabled="{Binding CanExportInterface}"
+                        ToolTip="Liest D*, PtStatus* und VS* rekursiv aus BK-, SBK-, PM- und übrigen Controller-Tags, löst Kommentare aus Program-Tags auf und erzeugt das Arbeitsblatt InterfaceSimExport als XLSX." />
+            </Grid>
+        </GroupBox>
+        <Grid Grid.Row="2" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="180" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock VerticalAlignment="Center" Text="2. Simulationsstandard" />
+            <ComboBox Grid.Column="1" Margin="8,0" ItemsSource="{Binding Standards}"
+                      SelectedItem="{Binding SelectedStandard}" DisplayMemberPath="DisplayName"
+                      ToolTip="GCCS wendet die drei dokumentierten Transformationen an. 'Kein Standard' lässt die L5X unverändert." />
+            <TextBlock Grid.Column="2" Margin="8,0" VerticalAlignment="Center" Foreground="#FF455A64"
+                       Text="{Binding SelectedStandardDescription}" TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding SelectedStandardDescription}" />
+            <Button Grid.Column="3" MinWidth="145" Margin="8,0,0,0" Content="Was wird gemacht?"
+                    Command="{Binding ToggleHelpCommand}" />
+        </Grid>
+        <StackPanel Grid.Row="3" Margin="0,0,0,10">
+            <Border Padding="10" Background="#FFF3F5F7" CornerRadius="4">
+                <TextBlock Text="{Binding ProjectSummary}" TextWrapping="Wrap" />
+            </Border>
+            <Border Margin="0,6,0,0" Padding="10" Background="#FFFFF2CC" CornerRadius="4"
+                    Visibility="{Binding IsHelpVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock Text="{Binding WorkflowHelp}" TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="12" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Margin="0,0,0,7" FontWeight="SemiBold" Text="Änderungen vormerken" />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="1. Basic-Simulation ergänzen"
+                        Command="{Binding AddBasicsCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Sucht Controller/DataTypes, AddOnInstructionDefinitions und Tags. Ergänzt SIMULATION_MODES, SimulationMode sowie Standard-/Safety-Tags nur, wenn sie fehlen." />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="2. A001 Standard ergänzen"
+                        Command="{Binding AddStandardSimulationCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Sucht B001_MapInputs und A000_Main in jedem Standardprogramm, erzeugt A001_Simulation und ersetzt den passenden JSR-Aufruf. Fehlende Namen und Suchorte erscheinen in den Prüfhinweisen." />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="3. A001 Safety ergänzen"
+                        Command="{Binding AddSafetySimulationCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Sucht s_B001_MapInputs/B001_MapInputs und s_A000_Main/A000_Main in Safety-Programmen. Erzeugt s_A001_Simulation; direkte Moduladressen werden mit Prüfhinweis auf NOP gesetzt." />
+                <Separator Margin="0,6" />
+                <Button MinHeight="38" Margin="0,0,0,7" Content="Generierte L5X speichern"
+                        Command="{Binding SaveGeneratedCommand}" IsEnabled="{Binding CanEdit}"
+                        ToolTip="Schreibt den aktuellen Änderungsstand in eine neue L5X-Datei; die Quelle bleibt unverändert." />
+                <Button MinHeight="38" Content="Generierte L5X öffnen"
+                        Command="{Binding OpenGeneratedCommand}" IsEnabled="{Binding CanOpenGenerated}"
+                        ToolTip="Erfordert Studio 5000 Logix Designer und eine registrierte L5X-Dateizuordnung. Übergibt die generierte Datei an Studio 5000." />
+            </StackPanel>
+            <GroupBox Grid.Column="2" Header="Änderungen und Prüfhinweise">
+                <ListBox ItemsSource="{Binding Messages}" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                    <ListBox.ItemTemplate><DataTemplate><TextBlock Margin="4" Text="{Binding}" TextWrapping="Wrap" /></DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
+            </GroupBox>
+        </Grid>
+        <Border Grid.Row="5" Margin="0,12,0,0" Padding="8,5" Background="#FFF3F5F7" CornerRadius="3">
+            <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+        </Border>
+    </Grid>
+</UserControl>

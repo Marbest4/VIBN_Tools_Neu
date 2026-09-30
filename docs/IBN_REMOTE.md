@@ -7,9 +7,11 @@
 - neutrale ViCo-Modelle und Suche aus `VIBN_Tools.Core`;
 - einen minimal kompilierten Read-/RDP-Ausschnitt in `VIBN_Tools.IbnRemote.Infrastructure`;
 - Arbeitsplatzliste, Filter, Onlineprüfung und RDP-Sitzungsdiagnose;
-- automatische RDP-Anmeldung und RDP mit Windows-Anmeldedialog.
+- automatische RDP-Anmeldung mit dem Benutzer der KONFIGURATION-Karte.
 
-Die Startansicht ist für kleine Notebook-/Serviceauflösungen ausgelegt und zeigt nur **PC**, **Online** und **Projekte**. Belegung, KONFIGURATION-Felder, Benutzer, RDP-Sitzung, letzte Anmeldung, Monitorauswahl und Verbindungsbuttons stehen im ausklappbaren Bereich **Erweiterte Anzeige und Verbindung**. Das Fenster startet mit 680 × 520 Pixeln und kann bis 480 × 340 Pixel verkleinert werden; die Detailbereiche besitzen eigene Scrollleisten.
+Die read-only Startansicht zeigt ausschließlich **PC**, **Online**, **In Arbeit (Projekt)**, **Ende In Arbeit**, **Standort**, **Sonstiges** und **Software**. Zusätzlich stehen Monitorauswahl und der automatische RDP-Start zur Verfügung. Die dynamische Auswahl zeigt nur die Zahlen der lokalen **MSTSC-IDs** aus `mstsc.exe /l`, einschließlich IDs ab 4, und übernimmt sie unverändert in das RDP-Profil. Karten oder Konfigurationsdaten können nicht geändert werden.
+
+Beim Programmstart darf die Anwendung auf den gemeinsamen Lesecache zurückfallen, damit die zuletzt verfügbare Rechnerliste auch bei einem vorübergehenden Netzausfall sichtbar bleibt. Der manuelle Button **Daten aktualisieren** verhält sich bewusst strenger: Er sendet cachefreie GET-Abfragen an Kanbanize, ersetzt den lokalen Cache erst nach einer vollständigen und zusammenfügbaren Antwort und zeigt bei einem API-/Netzfehler eine eindeutige Fehlermeldung. Die bisherige Anzeige bleibt dann erhalten, wird aber nicht fälschlich als frisch aktualisiert ausgegeben. Quelle und lokaler Aktualisierungszeitpunkt stehen in der Oberfläche.
 
 Nicht enthalten sind FEE-SDK, TIA-Bridge, Container-/CAD-/Modellfunktionen, Administration, Dateiübertragung und Kanbanize-Schreiboperationen. Der Kanbanize-Zugriff des IBN-Clients besteht ausschließlich aus GET-Abfragen und einem lokalen Cache.
 
@@ -21,6 +23,20 @@ Auf dem Buildrechner genügt:
 .\scripts\Publish-IbnRemote.ps1
 ```
 
+Das Skript fragt nacheinander den festen Filter, den Kanbanize-/Businessmap-API-Key und das gemeinsame RDP-Passwort ab. API-Key und Passwort werden bei der Eingabe nicht angezeigt. Für einen automatisierten Testlauf können alle Werte weiterhin ausdrücklich als Parameter übergeben werden:
+
+```powershell
+.\scripts\Publish-IbnRemote.ps1 -InWorkFilter 'GM7283' -ApiKey 'abcde' -RemoteDesktopPassword 'fghijk'
+```
+
+In der verdeckten `SecureString`-Abfrage unterstützt die klassische PowerShell-Konsole kein zuverlässiges Einfügen per Strg+V. Für einen beaufsichtigten Build kann deshalb ausdrücklich der sichtbare Eingabemodus aktiviert werden:
+
+```powershell
+.\scripts\Publish-IbnRemote.ps1 -PasteFriendlyCredentials
+```
+
+API-Key und Passwort lassen sich in diesem Modus einfügen, stehen aber während der Eingabe im Klartext auf dem Bildschirm. Sie werden weiterhin nicht als Argument an `dotnet publish` übergeben. Auf gemeinsam genutzten oder aufgezeichneten Konsolen ist der sichtbare Modus nicht zu verwenden.
+
 Das Ergebnis ist:
 
 ```text
@@ -29,13 +45,11 @@ artifacts\publish\IBN-Remote\VIBN_Tools_IBN.exe
 
 Die Datei ist `win-x64`, self-contained und single-file. Auf dem Ziel-PC sind weder Visual Studio noch eine separate .NET-Installation, FEE oder TIA erforderlich. Nur diese EXE wird verteilt. Vor einer breiten Verteilung muss sie wie die Hauptanwendung signiert und auf einem sauberen Unternehmens-PC geprüft werden.
 
-## Benutzerkonfiguration
+## Vorkonfigurierte Testwerte
 
-Im ausklappbaren Bereich **Zugangsdaten** können Kanbanize API-Key und Remote-Desktop-Passwort verdeckt eingegeben, geschützt im Windows Credential Manager gespeichert und einzeln gelöscht werden. Die Oberfläche zeigt nur **Konfiguriert** beziehungsweise **Nicht konfiguriert**, nie den gespeicherten Wert. Ein neu gespeicherter API-Key löst direkt eine Aktualisierung aus; ein Neustart ist nicht erforderlich.
+Der feste Filter sowie API-Key und RDP-Passwort werden beim Publish gesetzt. Nicht übergebene Werte fragt das Skript über die Konsole ab. Die beiden verdeckt eingegebenen Zugangswerte werden nur für den untergeordneten Buildprozess als temporäre Prozess-Umgebungsvariablen gesetzt und danach wieder entfernt; sie stehen damit nicht in der von `dotnet publish` gestarteten Befehlszeile. Eine Konfigurationsoberfläche gibt es nicht. Der API-Key wird für den read-only Kanbanize-Abruf verwendet. Beim RDP-Start wird das konfigurierte Passwort kurzzeitig als `TERMSRV/<PC>`-Eintrag angelegt und nach 20 Sekunden wieder entfernt. Logs liegen unter `%LOCALAPPDATA%\GROB\VIBN_Tools_IBN\Logs` und enthalten die Werte nicht.
 
-Die Werte gelten pro Windows-Benutzer und Rechner und müssen deshalb auf jedem Ziel-PC beziehungsweise für jedes verwendete Windows-Konto einmal eingetragen werden. Die frühere CMD-/PowerShell-Ersteinrichtung ist für den normalen Betrieb nicht mehr nötig. Bestehende Werte in den früheren Benutzervariablen werden beim ersten erfolgreichen Zugriff in den Credential Manager migriert und anschließend aus der Umgebung gelöscht. Für administrierte Rollouts ist ein organisationskonformes Secretsystem statt eines Repository- oder Skriptwerts erforderlich.
-
-Ohne Key liest der Client den gemeinsamen ViCo-Cache schreibgeschützt. Der Dialog-Button funktioniert ohne hinterlegtes RDP-Passwort. Kennwort und API-Key werden nicht in die EXE kompiliert oder protokolliert. Der eigentliche `TERMSRV/<PC>`-Eintrag bleibt nur für den RDP-Start bestehen und wird nach 20 Sekunden entfernt; die VIBN-Tools-Einträge im Credential Manager bleiben bis zum expliziten Löschen erhalten. Logs liegen unter `%LOCALAPPDATA%\GROB\VIBN_Tools_IBN\Logs`.
+Die eingebetteten Zeichenfolgen sind weiterhin mit üblichen .NET-Werkzeugen aus der EXE auslesbar. Das Skript warnt deshalb ausdrücklich bei Werten außerhalb der Testplatzhalter `12345`/`67890`. Die verdeckte Konsoleneingabe schützt nur Bildschirm, Shell-Verlauf und Publish-Befehlszeile; sie macht die erzeugte EXE nicht zu einem Secret-Speicher. Ein produktiver Rollout benötigt einen Windows-/gerätegebundenen Secret-Speicher oder ein freigegebenes Unternehmens-Secretsystem.
 
 ## Technische Grenze
 

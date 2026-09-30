@@ -16,6 +16,8 @@ public sealed record ViCoPathsOptions(
 
     public string AutoRefreshSettingsFile => Path.Combine(WorkingDirectory, "user-preferences.json");
 
+    public string LastActiveWorkstationsFile => Path.Combine(WorkingDirectory, "last-active-workstations.json");
+
     /// <summary>
     /// Historical encrypted assignments, read only during the one-time roles
     /// migration. New installations use <see cref="RolesFile"/> exclusively.

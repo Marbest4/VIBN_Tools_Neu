@@ -7,6 +7,7 @@ public enum VisualNodeKind
 {
     Root,
     Container,
+    Group,
     BasicFrame,
     Interface,
     Logic,
@@ -123,7 +124,10 @@ public sealed class VisualFeeObject
         string name,
         string typeName,
         string feeType,
-        IReadOnlyCollection<string> assignableTypeNames)
+        IReadOnlyCollection<string> assignableTypeNames,
+        string parentGuidString,
+        string parentName,
+        bool hasExactDuplicate)
     {
         Id = id;
         GuidString = guidString;
@@ -131,6 +135,9 @@ public sealed class VisualFeeObject
         TypeName = typeName;
         FeeType = feeType;
         AssignableTypeNames = assignableTypeNames;
+        ParentGuidString = parentGuidString;
+        ParentName = parentName;
+        HasExactDuplicate = hasExactDuplicate;
     }
 
     public string Id { get; }
@@ -145,7 +152,48 @@ public sealed class VisualFeeObject
 
     /// <summary>CLR type names including all base classes.</summary>
     public IReadOnlyCollection<string> AssignableTypeNames { get; }
+
+    public string ParentGuidString { get; }
+
+    public string ParentName { get; }
+
+    /// <summary>
+    /// Another FEE object has the same name, runtime/SimObject type and parent,
+    /// but a different GUID. Such entries are retained for diagnosis.
+    /// </summary>
+    public bool HasExactDuplicate { get; }
 }
+
+/// <summary>Kind of non-draggable FEE object used to colour the generation plan.</summary>
+public enum VisualFeeContainerObjectKind
+{
+    Logic,
+    Cabinet,
+    CabinetElement,
+}
+
+/// <summary>
+/// Lightweight identity of an existing logic or cabinet object. These objects
+/// are deliberately kept separate from draggable SimObjects.
+/// </summary>
+public sealed record VisualFeeContainerObject(
+    string GuidString,
+    string Name,
+    VisualFeeContainerObjectKind Kind,
+    string Definition);
+
+public enum VisualFeeNodePresenceKind
+{
+    Found,
+    Planned,
+    Ambiguous,
+}
+
+/// <summary>Presence result for one logic/cabinet node in the visual tree.</summary>
+public sealed record VisualFeeNodePresence(
+    string NodeId,
+    VisualFeeNodePresenceKind Kind,
+    string Description);
 
 /// <summary>Read-only identity of an existing FEE interface selectable by the user.</summary>
 public sealed class VisualFeeInterface
@@ -183,6 +231,54 @@ public sealed record VisualFeeSignal(
     string Usage)
 {
     public string Location => string.IsNullOrWhiteSpace(Path) ? Address : Path;
+}
+
+/// <summary>
+/// One object-side endpoint currently assigned to an existing FEE variable.
+/// Indirect endpoints are reached through a generated MoveBit fan-in.
+/// </summary>
+public sealed record VisualFeeSignalLink(
+    string SignalGuidString,
+    string ObjectGuidString,
+    string ObjectType,
+    string SlotName,
+    bool IsIndirect);
+
+/// <summary>One currently readable slot-to-slot connection between two FEE scene objects.</summary>
+public sealed record VisualFeeObjectLink(
+    string ObjectGuidString,
+    string SlotName,
+    string LinkedObjectGuidString,
+    string LinkedSlotName);
+
+public enum VisualSignalConnectionKind
+{
+    NotRead,
+    NotRequired,
+    Linked,
+    LinkMissing,
+}
+
+public sealed record VisualSignalConnectionState(
+    VisualSignalConnectionKind Kind,
+    string Description)
+{
+    public bool IsVerified => Kind is VisualSignalConnectionKind.Linked or VisualSignalConnectionKind.NotRequired;
+}
+
+public enum VisualSimObjectConnectionKind
+{
+    NotRead,
+    NotRequired,
+    Linked,
+    LinkMissing,
+}
+
+public sealed record VisualSimObjectConnectionState(
+    VisualSimObjectConnectionKind Kind,
+    string Description)
+{
+    public bool IsVerified => Kind is VisualSimObjectConnectionKind.Linked or VisualSimObjectConnectionKind.NotRequired;
 }
 
 /// <summary>A typed drop target declared by the unchanged legacy container.</summary>
@@ -232,6 +328,24 @@ public sealed record VisualSignalAssignment(
     string FeeInterfaceName);
 
 /// <summary>
+/// A signal explicitly added to one container by drag/drop. It is stored in
+/// the sidecar and projected into the effective ContainerFile at execution
+/// time; the imported source XML is never modified implicitly.
+/// </summary>
+public sealed record VisualAddedSignal(
+    string NodeId,
+    string ContainerId,
+    string SignalGroupId,
+    string FeeSignalGuid,
+    string FeeSignalTag,
+    string FeeInterfaceGuid,
+    string FeeInterfaceName,
+    string Address,
+    string Path,
+    string DataType,
+    string Usage);
+
+/// <summary>
 /// User-selected replacement for a slot from the imported ContainerFile. The
 /// source XML remains untouched; execution and provenance use the effective
 /// slot from this override.
@@ -271,8 +385,13 @@ public sealed class VisualPlan
     private readonly List<VisualGenerationSelection> _generationSelections;
     private readonly List<VisualSignalCreationSelection> _signalCreationSelections;
     private readonly List<VisualSignalAssignment> _signalAssignments;
+    private readonly List<VisualAddedSignal> _addedSignals;
     private readonly List<VisualSlotOverride> _slotOverrides;
+    private readonly List<VisualExistingInterfaceSelection> _existingInterfaceSelections;
+    private readonly HashSet<string> _removedSignalNodeIds;
     private readonly List<VisualEdge> _edges;
+    private readonly List<VisualNode> _nodes;
+    private readonly HashSet<string> _sourceNodeIds;
 
     internal VisualPlan(
         string sourceXmlPath,
@@ -287,14 +406,17 @@ public sealed class VisualPlan
         IReadOnlyList<VisualGenerationSelection>? generationSelections,
         IReadOnlyList<VisualSignalCreationSelection>? signalCreationSelections,
         IReadOnlyList<VisualSignalAssignment>? signalAssignments,
+        IReadOnlyList<VisualAddedSignal>? addedSignals,
         IReadOnlyList<VisualSlotOverride>? slotOverrides,
+        IReadOnlyList<string>? removedSignalNodeIds,
         VisualExistingInterfaceSelection? existingInterfaceSelection,
         IReadOnlyList<VisualIssue> issues)
     {
         SourceXmlPath = sourceXmlPath;
         SidecarPath = sidecarPath;
         SourceFingerprint = sourceFingerprint;
-        Nodes = nodes;
+        _nodes = [.. nodes];
+        _sourceNodeIds = nodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
         Roots = roots;
         _edges = [.. edges];
         Targets = targets;
@@ -303,8 +425,13 @@ public sealed class VisualPlan
         _generationSelections = generationSelections is null ? [] : [.. generationSelections];
         _signalCreationSelections = signalCreationSelections is null ? [] : [.. signalCreationSelections];
         _signalAssignments = signalAssignments is null ? [] : [.. signalAssignments];
+        _addedSignals = [];
         _slotOverrides = slotOverrides is null ? [] : [.. slotOverrides];
-        ExistingInterfaceSelection = existingInterfaceSelection;
+        _removedSignalNodeIds = removedSignalNodeIds is null
+            ? new(StringComparer.Ordinal)
+            : new(removedSignalNodeIds, StringComparer.Ordinal);
+        ReplaceAddedSignals(addedSignals ?? []);
+        _existingInterfaceSelections = existingInterfaceSelection is null ? [] : [existingInterfaceSelection];
         Issues = issues;
     }
 
@@ -314,7 +441,7 @@ public sealed class VisualPlan
 
     public string SourceFingerprint { get; }
 
-    public IReadOnlyList<VisualNode> Nodes { get; }
+    public IReadOnlyList<VisualNode> Nodes => _nodes;
 
     public IReadOnlyList<VisualNode> Roots { get; }
 
@@ -333,14 +460,33 @@ public sealed class VisualPlan
 
     public IReadOnlyList<VisualSignalAssignment> SignalAssignments => _signalAssignments;
 
+    public IReadOnlyList<VisualAddedSignal> AddedSignals => _addedSignals;
+
     public IReadOnlyList<VisualSlotOverride> SlotOverrides => _slotOverrides;
 
-    public VisualExistingInterfaceSelection? ExistingInterfaceSelection { get; private set; }
+    public IReadOnlySet<string> RemovedSignalNodeIds => _removedSignalNodeIds;
+
+    /// <summary>
+    /// Interfaces whose variables may be searched and reused. Multiple entries
+    /// are intentional; a missing variable is never written into these source
+    /// interfaces.
+    /// </summary>
+    public IReadOnlyList<VisualExistingInterfaceSelection> ExistingInterfaceSelections =>
+        _existingInterfaceSelections;
+
+    /// <summary>Backward-compatible primary selection used by older sidecars and callers.</summary>
+    public VisualExistingInterfaceSelection? ExistingInterfaceSelection =>
+        _existingInterfaceSelections.FirstOrDefault();
 
     public IReadOnlyList<VisualIssue> Issues { get; }
 
     public VisualNode? FindNode(string id) =>
         Nodes.FirstOrDefault(node => string.Equals(node.Id, id, StringComparison.Ordinal));
+
+    public bool IsAddedSignal(string nodeId) =>
+        _addedSignals.Any(item => string.Equals(item.NodeId, nodeId, StringComparison.Ordinal));
+
+    public bool IsSignalRemoved(string nodeId) => _removedSignalNodeIds.Contains(nodeId);
 
     public VisualSimObjectTarget? FindTarget(string id) =>
         Targets.FirstOrDefault(target => string.Equals(target.Id, id, StringComparison.Ordinal));
@@ -367,43 +513,89 @@ public sealed class VisualPlan
 
     internal void ReplaceAssignments(IEnumerable<VisualAssignment> assignments)
     {
+        var replacement = assignments.ToArray();
         _assignments.Clear();
-        _assignments.AddRange(assignments);
+        _assignments.AddRange(replacement);
         RebuildAssignmentEdges();
     }
 
     internal void ReplaceCreationRequests(IEnumerable<VisualCreationRequest> requests)
     {
+        var replacement = requests.Where(request => !request.IsRequested).ToArray();
         _creationRequests.Clear();
-        _creationRequests.AddRange(requests.Where(request => !request.IsRequested));
+        _creationRequests.AddRange(replacement);
     }
 
     internal void ReplaceGenerationSelections(IEnumerable<VisualGenerationSelection> selections)
     {
+        var replacement = selections.Where(selection => !selection.IsSelected).ToArray();
         _generationSelections.Clear();
-        _generationSelections.AddRange(selections.Where(selection => !selection.IsSelected));
+        _generationSelections.AddRange(replacement);
     }
 
     internal void ReplaceSignalCreationSelections(IEnumerable<VisualSignalCreationSelection> selections)
     {
+        var replacement = selections.Where(selection => !selection.CreateSignals).ToArray();
         _signalCreationSelections.Clear();
-        _signalCreationSelections.AddRange(selections.Where(selection => !selection.CreateSignals));
+        _signalCreationSelections.AddRange(replacement);
     }
 
     internal void ReplaceSignalAssignments(IEnumerable<VisualSignalAssignment> assignments)
     {
+        var replacement = assignments.ToArray();
         _signalAssignments.Clear();
-        _signalAssignments.AddRange(assignments);
+        _signalAssignments.AddRange(replacement);
+    }
+
+    internal void ReplaceAddedSignals(IEnumerable<VisualAddedSignal> signals)
+    {
+        var replacement = signals
+            .Where(item => !_sourceNodeIds.Contains(item.NodeId))
+            .DistinctBy(item => item.NodeId, StringComparer.Ordinal)
+            .ToArray();
+        _addedSignals.Clear();
+        _addedSignals.AddRange(replacement);
+        _nodes.RemoveAll(node => !_sourceNodeIds.Contains(node.Id));
+        _nodes.AddRange(replacement.Select(item => new VisualNode(
+            item.NodeId,
+            item.SignalGroupId,
+            item.ContainerId,
+            VisualNodeKind.Signal,
+            item.FeeSignalTag,
+            item.DataType,
+            string.Empty,
+            isTechnical: false,
+            sourceLocation: string.IsNullOrWhiteSpace(item.Path) ? item.Address : item.Path)));
     }
 
     internal void ReplaceSlotOverrides(IEnumerable<VisualSlotOverride> overrides)
     {
+        var replacement = overrides.ToArray();
         _slotOverrides.Clear();
-        _slotOverrides.AddRange(overrides);
+        _slotOverrides.AddRange(replacement);
+    }
+
+    internal void ReplaceRemovedSignalNodeIds(IEnumerable<string> nodeIds)
+    {
+        _removedSignalNodeIds.Clear();
+        foreach (var nodeId in nodeIds.Where(nodeId =>
+                     _sourceNodeIds.Contains(nodeId) &&
+                     FindNode(nodeId)?.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
+            _removedSignalNodeIds.Add(nodeId);
     }
 
     internal void SetExistingInterfaceSelection(VisualExistingInterfaceSelection? selection) =>
-        ExistingInterfaceSelection = selection;
+        SetExistingInterfaceSelections(selection is null ? [] : [selection]);
+
+    internal void SetExistingInterfaceSelections(IEnumerable<VisualExistingInterfaceSelection> selections)
+    {
+        var replacement = selections
+            .Where(item => !string.IsNullOrWhiteSpace(item.InterfaceGuid))
+            .DistinctBy(item => item.InterfaceGuid, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _existingInterfaceSelections.Clear();
+        _existingInterfaceSelections.AddRange(replacement);
+    }
 
     internal void RebuildAssignmentEdges()
     {

@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.Core.ViCo;
 using VIBN_Tools.Tia.Client;
 using VIBN_Tools.Tia.Contracts;
 using VIBN_Tools.Core.Collections;
+using VIBN_Tools.Core.Diagnostics;
+using VIBN_Tools.Quality;
 
 namespace VIBN_Tools.Application.VM;
 
@@ -52,6 +55,8 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         SelectAllAxesCommand = GetCommandBinding(() => SetAllAxesSelected(true));
         SelectNoAxesCommand = GetCommandBinding(() => SetAllAxesSelected(false));
         ConfigureAxesCommand = GetCommandBindingAsync(ConfigureAxesAsync);
+        ConfigureAxesAndCreateFilesCommand = GetCommandBindingAsync(ConfigureAxesAndCreateFilesAsync);
+        BrowseAxisArtifactCommand = GetCommandBinding(BrowseAxisArtifact);
         ToggleAxisConfigurationInfoCommand = GetCommandBinding(ToggleAxisConfigurationInfo);
         SaveCommand = GetCommandBindingAsync(SaveAsync);
         BrowseImportCommand = GetCommandBinding(BrowseImport);
@@ -59,6 +64,13 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         ImportLibraryCommand = GetCommandBindingAsync(ImportLibraryAsync);
         ExportLibraryCommand = GetCommandBindingAsync(ExportLibraryAsync);
         ToggleLibraryOperationInfoCommand = GetCommandBinding(ToggleLibraryOperationInfo);
+        BrowseAxisExchangeCommand = GetCommandBinding(BrowseAxisExchange);
+        ExportAxisConfigurationsCommand = GetCommandBindingAsync(ExportAxisConfigurationsAsync);
+        ImportAxisConfigurationsCommand = GetCommandBindingAsync(ImportAxisConfigurationsAsync);
+        ExportAxisInterfaceCommand = GetCommandBindingAsync(ExportAxisInterfaceAsync);
+        ToggleAxisExchangeInfoCommand = GetCommandBinding(() =>
+            IsAxisExchangeInfoVisible = !IsAxisExchangeInfoVisible);
+        CompileQualityGateCommand = GetCommandBindingAsync(CompileQualityGateAsync);
     }
 
     public ObservableCollection<string> InstalledVersions { get; } = new();
@@ -67,7 +79,13 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
     public ObservableCollection<TiaProgramItemInfo> ProgramItems { get; } = new();
 
-    public ObservableCollection<TiaAxisSelectionRowVM> Axes { get; } = new();
+    public ObservableCollection<TiaAxisSelectionRowVM> FoundAxes { get; } = new();
+
+    public ObservableCollection<TiaAxisSelectionRowVM> ConfiguredAxes { get; } = new();
+
+    public ObservableCollection<TiaCompileMessageRowVM> CompileMessages { get; } = new();
+
+    public ObservableCollection<TiaAxisSelectionRowVM> Axes => FoundAxes;
 
     public ICommand ConnectCommand { get; }
 
@@ -85,6 +103,10 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
     public ICommand ConfigureAxesCommand { get; }
 
+    public ICommand ConfigureAxesAndCreateFilesCommand { get; }
+
+    public ICommand BrowseAxisArtifactCommand { get; }
+
     public ICommand ToggleAxisConfigurationInfoCommand { get; }
 
     public ICommand SaveCommand { get; }
@@ -99,6 +121,34 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
     public ICommand ToggleLibraryOperationInfoCommand { get; }
 
+    public ICommand BrowseAxisExchangeCommand { get; }
+
+    public ICommand ExportAxisConfigurationsCommand { get; }
+
+    public ICommand ImportAxisConfigurationsCommand { get; }
+
+    public ICommand ExportAxisInterfaceCommand { get; }
+
+    public ICommand ToggleAxisExchangeInfoCommand { get; }
+
+    public ICommand CompileQualityGateCommand { get; }
+
+    public string CompileQualityGateInfo =>
+        "Der Button kompiliert ausschließlich die ausgewählte PLC über TIA Openness und liest Fehler, Warnungen " +
+        "und Meldungspfade aus. Ergebnisse stehen direkt in der Tabelle, im Anwendungslog und als Nachweis unter " +
+        "Project Quality > Adapter/Nachweise. Das Projekt wird nicht gespeichert. Safety- oder Know-how-geschützte " +
+        "Inhalte können weiterhin eine Anmeldung direkt in TIA erfordern. Auch mit vorhandenen Lizenzen wird derzeit " +
+        "kein HMI-Funktionstest automatisch gestartet. Ein Ablauf wie 'HMI-Taste -> PLC-Ausgang -> " +
+        "Simulationsrückmeldung' benötigt eine verbundene WinCC Runtime, PLCSIM Advanced oder eine Test-PLC, eine " +
+        "projektspezifische Tag-/Bildzuordnung, einen Simulationsadapter und eine sichere Rücksetzung der Schreibwerte.";
+
+    public string ProgramInventoryInfo =>
+        "Diese beiden Funktionen sind momentan eine schreibgeschützte Bestandsaufnahme: Sie laden Name und " +
+        "Ordnerpfad der Programmbausteine beziehungsweise PLC-Datentypen aus der ausgewählten PLC. Die Liste " +
+        "ändert, importiert und exportiert nichts. Sie dient zum Prüfen, ob erwartete Kundenbausteine und UDTs " +
+        "vorhanden und richtig einsortiert sind; eine automatische Inhaltsanalyse oder Einzelaktion auf einer " +
+        "markierten Zeile ist derzeit nicht implementiert. Der Bibliotheksimport/-export ist davon getrennt.";
+
     public string AxisConfigurationInfo =>
         "Auswahl konfigurieren ändert ausschließlich die markierten Technologieachsen. " +
         "Ein separates X/Y/Z-Kennzeichen beziehungsweise Namen wie AxisX/AchseX werden als linear erkannt; andere Namen als rotatorisch. " +
@@ -106,7 +156,9 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         "Sensor[1].DataAdaption=0, Sensor[1].MountingMode, Simulation.Mode=1, " +
         "Sensor[1].Type=2, TorqueLimiting.PositionBasedMonitorings=0, " +
         "FollowingError.EnableMonitoring=0 und PositionControl.EnableDSC=0. " +
-        "Die Konfiguration speichert nicht automatisch.";
+        "Die Konfiguration speichert nicht automatisch. AxisDB/AxisFC werden wie im Avalonia-Werkzeug unter " +
+        "<Ablagewurzel>/_Programm/Axis erzeugt. Bereits konfigurierte Achsen können rechts markiert und ohne " +
+        "erneute Parameteränderung in diese Dateien aufgenommen werden.";
 
     public string ProjectSaveInfo =>
         "Gesamtes TIA-Projekt speichern ruft Project.Save() auf. Dadurch werden alle aktuell " +
@@ -117,14 +169,25 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
     public string LibraryOperationInfo =>
         "Voraussetzung: TIA Portal mit geöffnetem Projekt starten, hier die passende Version verbinden, " +
         "die gewünschte PLC wählen und 'PLC auswählen' drücken.\n\n" +
-        "Import: Der Importordner muss _Programm und/oder _Datatype mit TIA-XML-Dateien enthalten. " +
-        "Fehlende TIA-Ordner werden angelegt, gleichnamige Bausteine und Datentypen werden überschrieben. " +
-        "Ist die Achsenoption aktiv, werden alle gefundenen Achsen konfiguriert und AxisDB.xml sowie " +
-        "AxisFC.xml im lokalen Importordner erzeugt und mitimportiert. Am Ende wird das gesamte TIA-Projekt automatisch gespeichert.\n\n" +
+        "Neues Kundenprojekt: Die ViCo-Bibliothek zuerst manuell in TIA einfügen und kundenspezifische " +
+        "Punkte wie RFID und Safetybrücken bearbeiten. Danach wird sie mit 'Bibliothek exportieren' auf " +
+        "dem Projektlaufwerk dieses Kundenprojekts abgelegt.\n\n" +
         "Export: 'TIA-Bibliotheksordner' muss exakt den Ordnernamen bezeichnen, der im TIA-Baustein- " +
         "und Datentypbaum exportiert werden soll. Die XML-Dateien werden unter " +
         "<Exportordner>/<Name>_<TIA-Version>/_Programm und _Datatype geschrieben; vorhandene gleichnamige " +
-        "Exportdateien werden ersetzt. Das TIA-Projekt wird beim Export nicht verändert oder gespeichert.";
+        "Exportdateien werden ersetzt. Das TIA-Projekt wird beim Export nicht verändert oder gespeichert.\n\n" +
+        "Folgeprojekt desselben Kunden: Den zuvor exportierten Ordner auswählen und importieren. Fehlende " +
+        "TIA-Ordner werden angelegt, gleichnamige Bausteine und Datentypen werden überschrieben; am Ende " +
+        "wird das gesamte TIA-Projekt automatisch gespeichert.";
+
+    public string AxisExchangeInfo =>
+        "TO-Konfiguration exportieren schreibt für jede Technologieachse alle lesbaren Parameter nach " +
+        "<Ordner>/ToConfig/<Achse>/<Achse>.txt. Importieren setzt nur Parameter gleichnamiger Achsen; " +
+        "nicht gefundene Achsen und nicht setzbare Parameter werden protokolliert. Der Import speichert das " +
+        "TIA-Projekt nicht automatisch. Achsen-Schnittstelle erzeugt AxisValueTags.xlsx im gewählten Ordner " +
+        "und verändert das TIA-Projekt nicht. Voraussetzung für alle drei Aktionen sind eine verbundene " +
+        "TIA-Version, eine ausgewählte PLC und ein beschreibbarer Austauschordner. Für den Import muss " +
+        "zuvor ein passender TO-Export im Austauschordner liegen.";
 
     private bool _isAxisConfigurationInfoVisible;
     public bool IsAxisConfigurationInfoVisible
@@ -185,13 +248,37 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         }
     }
 
-    private bool _configureAxesDuringImport;
-    public bool ConfigureAxesDuringImport
+    private bool _isAxisExchangeInfoVisible;
+    public bool IsAxisExchangeInfoVisible
     {
-        get => _configureAxesDuringImport;
+        get => _isAxisExchangeInfoVisible;
+        private set
+        {
+            if (_isAxisExchangeInfoVisible == value)
+                return;
+            _isAxisExchangeInfoVisible = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private string _axisExchangePath = string.Empty;
+    public string AxisExchangePath
+    {
+        get => _axisExchangePath;
         set
         {
-            _configureAxesDuringImport = value;
+            _axisExchangePath = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private string _axisArtifactPath = string.Empty;
+    public string AxisArtifactPath
+    {
+        get => _axisArtifactPath;
+        set
+        {
+            _axisArtifactPath = value;
             OnPropertyChanged();
         }
     }
@@ -229,6 +316,7 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
                 return;
 
             _selectedPlc = value;
+            CompileMessages.Clear();
             OnPropertyChanged();
         }
     }
@@ -285,7 +373,8 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         {
             await _client.SelectPlcAsync(SelectedPlc.Index);
             ProgramItems.Clear();
-            Axes.Clear();
+            FoundAxes.Clear();
+            ConfiguredAxes.Clear();
             StatusText = $"PLC '{SelectedPlc.Name}' ist ausgewählt.";
         });
     }
@@ -315,7 +404,7 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
     private async Task ConfigureAxesAsync()
     {
-        var selectedIds = Axes.Where(axis => axis.IsSelected).Select(axis => axis.Id).ToArray();
+        var selectedIds = FoundAxes.Where(axis => axis.IsSelected).Select(axis => axis.Id).ToArray();
         if (selectedIds.Length == 0)
         {
             StatusText = "Keine Achse ausgewählt. Es wurden keine TIA-Parameter geändert.";
@@ -325,28 +414,12 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
         await RunBusyAsync("Achsen werden für die Simulation konfiguriert …", async () =>
         {
-            var configured = await _client.ConfigureAxesAsync(selectedIds);
-            foreach (var result in configured)
-                Axes.FirstOrDefault(axis => string.Equals(axis.Id, result.Id, StringComparison.OrdinalIgnoreCase))
-                    ?.ApplyConfigurationResult(result);
+            var configured = await ConfigureSelectedAxesCoreAsync(selectedIds);
 
             var successfulParameters = configured.Sum(axis => axis.ParameterResults.Count(result => result.Success));
             var failedParameters = configured.Sum(axis => axis.ParameterResults.Count(result => !result.Success));
             StatusText = $"{configured.Count} Achse(n) verarbeitet: {successfulParameters} Parameter gesetzt, {failedParameters} fehlgeschlagen.";
             _log.Information("TIA Portal", StatusText);
-            foreach (var axis in configured)
-            {
-                var details = axis.ParameterResults.Count == 0
-                    ? "keine unterstützten Parameter gefunden"
-                    : string.Join(", ", axis.ParameterResults.Select(result =>
-                        result.Success
-                            ? $"{result.Name}={result.Value}"
-                            : $"{result.Name} FEHLER: {result.Error}"));
-                if (axis.ParameterResults.Count == 0 || axis.ParameterResults.Any(result => !result.Success))
-                    _log.Warning("TIA Achsenkonfiguration", $"{axis.Id}: {details}");
-                else
-                    _log.Information("TIA Achsenkonfiguration", $"{axis.Id}: {details}");
-            }
         });
     }
 
@@ -361,17 +434,24 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         await RunBusyAsync("Achsen werden schreibgeschützt gelesen …", async () =>
         {
             var axes = await _client.ListAxesAsync();
-            Axes.ReplaceWith(axes.Select(axis => new TiaAxisSelectionRowVM(axis)));
-            StatusText = $"{Axes.Count} Achse(n) gelesen. Das TIA-Projekt wurde nicht verändert.";
+            var configuredIds = ConfiguredAxes.Select(axis => axis.Id)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            FoundAxes.ReplaceWith(axes
+                .Where(axis => !configuredIds.Contains(axis.Id))
+                .Select(axis => new TiaAxisSelectionRowVM(axis)));
+            StatusText = $"{FoundAxes.Count} nicht konfigurierte und {ConfiguredAxes.Count} konfigurierte " +
+                         "Achse(n) angezeigt. Das TIA-Projekt wurde nicht verändert.";
         });
     }
 
     private void SetAllAxesSelected(bool selected)
     {
-        foreach (var axis in Axes)
+        foreach (var axis in FoundAxes)
+            axis.IsSelected = selected;
+        foreach (var axis in ConfiguredAxes)
             axis.IsSelected = selected;
         StatusText = selected
-            ? $"Alle {Axes.Count} Achse(n) zur Konfiguration ausgewählt."
+            ? $"Alle {FoundAxes.Count + ConfiguredAxes.Count} Achse(n) ausgewählt."
             : "Keine Achse ausgewählt. Die Konfiguration würde nichts ändern.";
     }
 
@@ -398,6 +478,263 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
             ExportPath = selected;
     }
 
+    private async Task CompileQualityGateAsync()
+    {
+        if (SelectedPlc is null)
+        {
+            StatusText = "Bitte zuerst TIA verbinden und die gewünschte PLC auswählen.";
+            return;
+        }
+
+        await RunBusyAsync("Ausgewählte PLC wird kompiliert …", async () =>
+        {
+            CompileMessages.Clear();
+            OperationProgress = 10;
+            TiaCompileResult result;
+            try
+            {
+                result = await _client.CompileSelectedPlcAsync();
+            }
+            catch (Exception exception)
+            {
+                QualityEvidenceStore.Instance.Upsert(new QualityEvidence(
+                    "TIA Compile",
+                    SelectedPlc.Name,
+                    QualityStatus.Failed,
+                    $"Compile-Aufruf fehlgeschlagen: {exception.Message}",
+                    DateTimeOffset.UtcNow,
+                    [new QualityFinding("TIA Compile", "TIA_COMPILE_FAILED", QualityStatus.Failed, exception.Message)]));
+                throw;
+            }
+            OperationProgress = 90;
+            foreach (var message in FlattenCompileMessages(result.Messages))
+                CompileMessages.Add(message);
+
+            var status = result.Success ? QualityStatus.Passed : QualityStatus.Failed;
+            var findings = CompileMessages
+                .Where(message => message.IsRelevant)
+                .Select(message => new QualityFinding(
+                    "TIA Compile",
+                    "TIA_COMPILE_MESSAGE",
+                    message.IsError ? QualityStatus.Failed : QualityStatus.Warning,
+                    $"{message.Path}: {message.Description}"))
+                .ToArray();
+            QualityEvidenceStore.Instance.Upsert(new QualityEvidence(
+                "TIA Compile",
+                $"{result.TargetType}:{result.TargetName}",
+                status,
+                $"{result.ErrorCount} Fehler, {result.WarningCount} Warnungen, {result.DurationMilliseconds} ms",
+                DateTimeOffset.UtcNow,
+                findings));
+
+            OperationProgress = 100;
+            var completedAt = DateTime.Now.ToString("dd.MM.yyyy HH:mm:ss");
+            StatusText = result.Success
+                ? $"TIA-Compile erfolgreich: {result.TargetName}, {result.WarningCount} Warnung(en), {result.DurationMilliseconds} ms. Stand {completedAt}; Projekt nicht gespeichert."
+                : $"TIA-Compile fehlgeschlagen: {result.ErrorCount} Fehler, {result.WarningCount} Warnungen. Stand {completedAt}; Details stehen unten und im Log.";
+            if (result.Success)
+                _log.Information("TIA Quality Gate", StatusText);
+            else
+                _log.Warning("TIA Quality Gate", StatusText);
+        });
+    }
+
+    private static IEnumerable<TiaCompileMessageRowVM> FlattenCompileMessages(
+        IEnumerable<TiaCompileMessage> messages,
+        int depth = 0)
+    {
+        foreach (var message in messages)
+        {
+            yield return new TiaCompileMessageRowVM(message, depth);
+            foreach (var child in FlattenCompileMessages(message.Children, depth + 1))
+                yield return child;
+        }
+    }
+
+    private void BrowseAxisExchange()
+    {
+        var selected = _folderSelection.SelectFolder("Ordner für Achsen-Austausch auswählen", AxisExchangePath);
+        if (selected is not null)
+            AxisExchangePath = selected;
+    }
+
+    private void BrowseAxisArtifact()
+    {
+        var selected = _folderSelection.SelectFolder(
+            "Ablagewurzel für AxisDB/AxisFC auswählen",
+            AxisArtifactPath);
+        if (selected is not null)
+            AxisArtifactPath = selected;
+    }
+
+    private async Task ExportAxisConfigurationsAsync()
+    {
+        if (!CanUseAxisExchange())
+            return;
+        await RunBusyAsync("TO-Konfigurationen werden exportiert …", async () =>
+        {
+            var result = await _client.ExportAxisConfigurationsAsync(AxisExchangePath);
+            StatusText = $"{result.AxisCount} Achse(n) mit {result.ParameterCount} Parameter(n) in {result.FileCount} Datei(en) exportiert.";
+            LogTransferWarnings("TIA TO-Export", result.Warnings);
+        });
+    }
+
+    private async Task ConfigureAxesAndCreateFilesAsync()
+    {
+        var selectedFoundIds = FoundAxes
+            .Where(axis => axis.IsSelected)
+            .Select(axis => axis.Id)
+            .ToArray();
+        var selectedConfiguredNames = ConfiguredAxes
+            .Where(axis => axis.IsSelected)
+            .Select(axis => axis.Name)
+            .ToArray();
+        if (selectedFoundIds.Length == 0 && selectedConfiguredNames.Length == 0)
+        {
+            StatusText = "Keine gefundene oder bereits konfigurierte Achse ausgewählt.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(AxisArtifactPath))
+        {
+            StatusText = "Bitte die Ablagewurzel für AxisDB/AxisFC im Bereich Simulationsachsen auswählen.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(SelectedVersion))
+        {
+            StatusText = "Bitte zuerst eine TIA-Version auswählen.";
+            return;
+        }
+
+        await RunBusyAsync("Achsen werden konfiguriert und AxisDB/AxisFC erzeugt …", async () =>
+        {
+            OperationProgress = 5;
+            var configured = selectedFoundIds.Length == 0
+                ? []
+                : await ConfigureSelectedAxesCoreAsync(selectedFoundIds, 5, 75);
+            OperationProgress = 75;
+            var successful = configured
+                .Where(axis => axis.ParameterResults.Count > 0 &&
+                               axis.ParameterResults.All(parameter => parameter.Success))
+                .Select(axis => axis.Name)
+                .Concat(selectedConfiguredNames)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (successful.Length == 0)
+                throw new InvalidOperationException(
+                    "Keine ausgewählte Achse ist vollständig konfiguriert; AxisDB/AxisFC wurden nicht erzeugt.");
+
+            var artifacts = await _libraryService.CreateAxisArtifactsAsync(
+                AxisArtifactPath,
+                successful,
+                SelectedVersion);
+            OperationProgress = 100;
+            StatusText = $"AxisDB.xml und AxisFC.xml für {artifacts.AxisCount} Achse(n) unter " +
+                         $"'{artifacts.OutputFolder}' erzeugt. Noch nicht importiert oder gespeichert.";
+            _log.Information("TIA Achsenkonfiguration", StatusText);
+        });
+    }
+
+    private async Task<IReadOnlyList<TiaAxisInfo>> ConfigureSelectedAxesCoreAsync(
+        IReadOnlyCollection<string> selectedIds,
+        int progressStart = 0,
+        int progressEnd = 100)
+    {
+        var configured = new List<TiaAxisInfo>();
+        var index = 0;
+        OperationProgress = progressStart;
+        foreach (var selectedId in selectedIds)
+        {
+            StatusText = $"Achse {index + 1}/{selectedIds.Count} wird konfiguriert: {selectedId}";
+            var axisResults = await _client.ConfigureAxesAsync([selectedId]);
+            foreach (var result in axisResults)
+            {
+                configured.Add(result);
+                ApplyAxisConfigurationResult(result);
+                LogAxisConfigurationResult(result);
+            }
+            index++;
+            OperationProgress = progressStart +
+                                (int)Math.Round((progressEnd - progressStart) * index / (double)selectedIds.Count);
+        }
+        return configured;
+    }
+
+    private void ApplyAxisConfigurationResult(TiaAxisInfo result)
+    {
+        var row = FoundAxes.FirstOrDefault(axis =>
+            string.Equals(axis.Id, result.Id, StringComparison.OrdinalIgnoreCase));
+        if (row is null)
+            return;
+
+        row.ApplyConfigurationResult(result);
+        if (result.ParameterResults.Count > 0 && result.ParameterResults.All(parameter => parameter.Success))
+        {
+            FoundAxes.Remove(row);
+            ConfiguredAxes.Add(row);
+        }
+    }
+
+    private void LogAxisConfigurationResult(TiaAxisInfo axis)
+    {
+        var details = axis.ParameterResults.Count == 0
+            ? "keine unterstützten Parameter gefunden"
+            : string.Join(", ", axis.ParameterResults.Select(result =>
+                result.Success
+                    ? $"{result.Name}={result.Value}"
+                    : $"{result.Name} FEHLER: {result.Error}"));
+        if (axis.ParameterResults.Count == 0 || axis.ParameterResults.Any(result => !result.Success))
+            _log.Warning("TIA Achsenkonfiguration", $"{axis.Id}: {details}");
+        else
+            _log.Information("TIA Achsenkonfiguration", $"{axis.Id}: {details}");
+    }
+
+    private async Task ImportAxisConfigurationsAsync()
+    {
+        if (!CanUseAxisExchange())
+            return;
+        await RunBusyAsync("TO-Konfigurationen werden importiert …", async () =>
+        {
+            var result = await _client.ImportAxisConfigurationsAsync(AxisExchangePath);
+            StatusText = $"{result.AxisCount} Achse(n) aktualisiert; {result.ParameterCount} Parameter gesetzt. Projekt noch nicht gespeichert.";
+            LogTransferWarnings("TIA TO-Import", result.Warnings);
+        });
+    }
+
+    private async Task ExportAxisInterfaceAsync()
+    {
+        if (!CanUseAxisExchange())
+            return;
+        await RunBusyAsync("Achsen-Schnittstelle wird erzeugt …", async () =>
+        {
+            var result = await _client.ExportAxisInterfaceWorkbookAsync(
+                Path.Combine(AxisExchangePath, "AxisValueTags.xlsx"));
+            StatusText = $"Achsen-Schnittstelle für {result.AxisCount} Achse(n) geschrieben: {result.FilePath}";
+        });
+    }
+
+    private bool CanUseAxisExchange()
+    {
+        if (SelectedPlc is null)
+        {
+            StatusText = "Bitte zuerst TIA verbinden und die gewünschte PLC auswählen.";
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(AxisExchangePath))
+        {
+            StatusText = "Bitte zuerst einen Ordner für den Achsen-Austausch auswählen.";
+            return false;
+        }
+        return true;
+    }
+
+    private void LogTransferWarnings(string area, IReadOnlyList<string> warnings)
+    {
+        foreach (var warning in warnings)
+            _log.Warning(area, warning);
+        if (warnings.Count > 0)
+            StatusText += $" {warnings.Count} Warnung(en) stehen im Log.";
+    }
+
     private async Task ImportLibraryAsync()
     {
         if (string.IsNullOrWhiteSpace(LibraryPath))
@@ -417,7 +754,7 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
             var progress = new Progress<TiaLibraryProgress>(UpdateLibraryProgress);
             await _libraryService.ImportAsync(
                 LibraryPath,
-                ConfigureAxesDuringImport,
+                false,
                 SelectedVersion,
                 progress);
             OperationProgress = 100;
@@ -472,17 +809,20 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
         IsBusy = true;
         StatusText = status;
+        using var measurement = PerformanceMeasurementService.Instance.Start("TIA Portal", status);
         try
         {
             await action();
         }
         catch (OperationCanceledException)
         {
+            measurement.MarkFailed();
             StatusText = "TIA-Vorgang wurde abgebrochen.";
             _log.Warning("TIA Portal", StatusText);
         }
         catch (Exception exception)
         {
+            measurement.MarkFailed();
             // Commands are invoked from async-void WPF command bindings. By
             // handling bridge failures here, the user gets a clear status and
             // a diagnostic entry instead of an unhandled runtime exception.
@@ -495,6 +835,27 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         }
     }
 
+}
+
+public sealed record TiaCompileMessageRowVM(
+    string Path,
+    string State,
+    string Description,
+    int ErrorCount,
+    int WarningCount,
+    int Depth)
+{
+    public TiaCompileMessageRowVM(TiaCompileMessage message, int depth)
+        : this(message.Path, message.State, message.Description, message.ErrorCount, message.WarningCount, depth)
+    {
+    }
+
+    public bool IsError => ErrorCount > 0 ||
+                           State.Contains("Error", StringComparison.OrdinalIgnoreCase) ||
+                           State.Contains("Failed", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsRelevant => IsError || WarningCount > 0 ||
+                              State.Contains("Warning", StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed class TiaAxisSelectionRowVM : MvvmBase

@@ -3,6 +3,7 @@ using FS.SDK.Scene.Objects;
 using System.Xml.Linq;
 using VIBN_Tools.ContainerToFee;
 using VIBN_Tools.GlobalClasses;
+using VIBN_Tools.GlobalClasses.FeeObjects;
 using VIBN_Tools.Settings;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
@@ -18,7 +19,9 @@ public sealed record Fee2ContainerRoot(
     bool UsesExactProvenance = true,
     int InspectedObjectCount = 0,
     int IgnoredObjectCount = 0,
-    IReadOnlyList<FeeContainerReconstructionIssue>? ReconstructionIssues = null)
+    IReadOnlyList<FeeContainerReconstructionIssue>? ReconstructionIssues = null,
+    IReadOnlyList<FeeContainerUnmappedObject>? NonContainerObjects = null,
+    IReadOnlyList<FeeContainerObjectAssociation>? ObjectAssociations = null)
 {
     public bool HasProvenance => Provenance is not null && UsesExactProvenance;
     public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : "FEE-Struktur (rekonstruiert)";
@@ -40,6 +43,8 @@ public sealed record Fee2ContainerDiscoveryResult(
     int IgnoredWithoutProvenance,
     IReadOnlyList<Fee2ContainerDiscoveryIssue> Issues);
 
+public sealed record Fee2ContainerProgress(int Percent, string Message);
+
 /// <summary>
 /// Lists only top-level BasicFrames as selectable scopes. Roots carrying versioned
 /// Container2FEE metadata use the exact round-trip; other roots can be
@@ -49,10 +54,14 @@ public sealed class Fee2ContainerService
 {
     public async Task<Fee2ContainerDiscoveryResult> DiscoverAsync(
         CancellationToken cancellationToken = default,
-        bool reconstructLegacyRoots = true)
+        bool reconstructLegacyRoots = true,
+        IProgress<Fee2ContainerProgress>? progress = null)
     {
         if (Services.Connection?.CanUseFeeFeatures != true || Services.ApiInstance is null)
             throw new InvalidOperationException(FeeConnectionService.MissingConnectionMessage);
+
+        if (reconstructLegacyRoots)
+            return await DiscoverFromModelValidationSnapshotAsync(progress, cancellationToken);
 
         var roots = new List<Fee2ContainerRoot>();
         var issues = new List<Fee2ContainerDiscoveryIssue>();
@@ -187,11 +196,7 @@ public sealed class Fee2ContainerService
     {
         try
         {
-            var tagsXml = await Services.ApiInstance!.Object.GetPropertyAsync(
-                guid,
-                nameof(TagComponent.TagEntries),
-                nameof(TagComponent));
-            return Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+            return await FeeTagPropertyStore.ReadAsync(guid);
         }
         catch
         {
@@ -219,6 +224,71 @@ public sealed class Fee2ContainerService
         if (Services.Connection?.CanUseFeeFeatures != true || Services.ApiInstance is null)
             throw new InvalidOperationException(FeeConnectionService.MissingConnectionMessage);
         return await ReconstructAsync(root.Guid, root.Name, cancellationToken);
+    }
+
+    public async Task<Fee2ContainerExportResult> CreateCombinedExportAsync(
+        IEnumerable<Fee2ContainerRoot> selectedRoots,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(selectedRoots);
+        var roots = selectedRoots.DistinctBy(root => root.Guid).ToArray();
+        if (roots.Length == 0)
+            throw new InvalidOperationException("Es wurde kein FEE-Root für den Export ausgewählt.");
+        if (roots.Length == 1)
+            return await CreateExportAsync(roots[0], cancellationToken);
+
+        var containerElements = new List<XElement>();
+        var bindings = new List<FeeContainerSignalBinding>();
+        var issues = new List<FeeContainerReconstructionIssue>();
+        var containerOffset = 0;
+        var signalCount = 0;
+        var inspected = 0;
+        var ignored = 0;
+        var usedProvenance = true;
+        foreach (var root in roots)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var export = await CreateExportAsync(root, cancellationToken);
+            var rootContainers = export.Snapshot.ContainerDocument.Descendants("Container").ToArray();
+            foreach (var element in rootContainers)
+            {
+                var clone = new XElement(element);
+                var sourceId = clone.Attribute("id")?.Value ?? "container";
+                clone.SetAttributeValue("id", $"fee-root:{root.Guid:D}:{sourceId}");
+                containerElements.Add(clone);
+            }
+            bindings.AddRange(export.Snapshot.SignalBindings.Select(binding => binding with
+            {
+                ContainerIndex = binding.ContainerIndex + containerOffset,
+            }));
+            containerOffset += rootContainers.Length;
+            signalCount += export.Snapshot.SignalCount;
+            inspected += export.InspectedObjectCount;
+            ignored += export.IgnoredObjectCount;
+            usedProvenance &= export.UsedProvenance;
+            issues.AddRange(export.Issues.Select(issue => issue with
+            {
+                Message = $"{root.Name}: {issue.Message}",
+            }));
+        }
+
+        var document = new XDocument(
+            new XDeclaration("1.0", "utf-8", null),
+            new XElement("CAAMergeResult",
+                new XAttribute("version", "1.0.0.0"),
+                new XAttribute("createdAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
+                new XAttribute("autoCreateFile", string.Empty),
+                new XAttribute("zuli", string.Empty),
+                new XElement("ContainerList", containerElements)));
+        var snapshot = new FeeContainerProvenanceSnapshot(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            document,
+            bindings,
+            containerElements.Count,
+            signalCount,
+            string.Join("+", roots.Select(root => root.Provenance?.SourceFingerprint)
+                .Where(value => !string.IsNullOrWhiteSpace(value))));
+        return new Fee2ContainerExportResult(snapshot, usedProvenance, inspected, ignored, issues);
     }
 
     private static async Task<Fee2ContainerExportResult> ReconstructAsync(
@@ -253,11 +323,31 @@ public sealed class Fee2ContainerService
                 var xml = XElement.Parse(xmlTexts[index]);
                 var type = xml.Attribute("Type")?.Value ?? xml.Name.LocalName;
                 var name = xml.Attribute("Name")?.Value ?? string.Empty;
-                var logicGuidText = xml.Element("Logic")?.Element("PersistedLogicGuid")?.Value;
+                var logicGuidText = ReadXmlValue(xml, "PersistedLogicGuid");
+                if (string.IsNullOrWhiteSpace(logicGuidText) && IsLogicObject(type))
+                {
+                    logicGuidText = await ReadOptionalObjectPropertyAsync(
+                        guid,
+                        "PersistedLogicGuid");
+                }
                 var logicName = Guid.TryParse(logicGuidText, out var logicGuid) &&
                                 logicNames.TryGetValue(logicGuid, out var resolvedLogicName)
                     ? resolvedLogicName
                     : null;
+                var cabinetDefinition = ReadXmlValue(xml, "Definition", "ElementType");
+                var label = ReadXmlValue(xml, "Label");
+                if (IsCabinetElement(type))
+                {
+                    // Several FEE/SDK versions do not serialize these dynamic
+                    // Cabinet properties into GetSceneObjectsAsXmlAsync. Query
+                    // them explicitly so Switch/Fuse/EStop/Lamp are not lost.
+                    if (string.IsNullOrWhiteSpace(cabinetDefinition))
+                        cabinetDefinition = await ReadOptionalObjectPropertyAsync(guid, "Definition");
+                    if (string.IsNullOrWhiteSpace(cabinetDefinition))
+                        cabinetDefinition = await ReadOptionalObjectPropertyAsync(guid, "ElementType");
+                    if (string.IsNullOrWhiteSpace(label))
+                        label = await ReadOptionalObjectPropertyAsync(guid, "Label");
+                }
                 var marks = (xml.Element("MarkComponent")?.Element("Mark")?.Value ?? string.Empty)
                     .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 var provenance = ContainerObjectProvenance.Read(
@@ -268,8 +358,8 @@ public sealed class Fee2ContainerService
                     name,
                     type,
                     logicName,
-                    xml.Element("Definition")?.Value,
-                    xml.Element("Label")?.Value,
+                    cabinetDefinition,
+                    label,
                     provenance.ContainerId,
                     provenance.ContainerType));
             }
@@ -345,6 +435,290 @@ public sealed class Fee2ContainerService
             .Where(item => item.Item1 != Guid.Empty)
             .ToDictionary(item => item.Item1, item => item.Item2);
     }
+
+    private static async Task<Fee2ContainerDiscoveryResult> DiscoverFromModelValidationSnapshotAsync(
+        IProgress<Fee2ContainerProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new Fee2ContainerProgress(5, "FEE-Projekt wird einmalig wie in ModelValidation eingelesen …"));
+        if (Services.FeeObjects is null)
+            throw new InvalidOperationException("Der ModelValidation-FEE-Dienst ist nicht initialisiert.");
+        await Services.FeeObjects.UpdateFeeDataAsync();
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var allObjects = Services.FeeObjects.AllFeeObjects?.ToArray() ?? [];
+        var roots = allObjects
+            .OfType<FeeBasicFrame>()
+            .Where(frame => frame.Parent is not FeeBasicFrame)
+            .OrderBy(frame => frame.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(frame => frame.Guid)
+            .ToArray();
+        var variables = allObjects
+            .OfType<FeeInterface>()
+            .SelectMany(item => item.Signals ?? [])
+            .GroupBy(signal => signal.Guid)
+            .Select(group => group.First())
+            .ToArray();
+        var variableStates = variables.Select(signal => new FeeContainerVariableState(
+            signal.Guid,
+            signal.Tag ?? string.Empty,
+            signal.Address ?? string.Empty,
+            signal.Path ?? string.Empty,
+            signal.IOTypeString ?? string.Empty,
+            signal.Comment ?? string.Empty)).ToArray();
+        var liveVariables = variableStates.Select(variable => new FeeContainerLiveVariable(
+            variable.VariableGuid,
+            variable.Signal,
+            variable.Address,
+            variable.Path,
+            variable.DataType,
+            variable.Comment)).ToArray();
+        var variableGuids = variables.Select(item => item.Guid).ToHashSet();
+        var resultRoots = new List<Fee2ContainerRoot>();
+        var resultIssues = new List<Fee2ContainerDiscoveryIssue>();
+        var withoutProvenance = 0;
+
+        for (var index = 0; index < roots.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var root = roots[index];
+            progress?.Report(new Fee2ContainerProgress(
+                roots.Length == 0 ? 90 : 15 + index * 75 / roots.Length,
+                $"Root {index + 1} von {roots.Length} wird rekonstruiert: {root.Name}"));
+            var scoped = allObjects
+                .Where(item => item is not FeeInterface && item.Guid != root.Guid && IsWithinRoot(item, root))
+                .ToArray();
+            var assignments = scoped
+                .Where(item => item.Slots is not null)
+                .SelectMany(item => item.Slots
+                    .Where(slot => variableGuids.Contains(slot.Value))
+                    .Select(slot => new FeeContainerLiveAssignment(slot.Value, item.Guid, slot.Key)))
+                .Distinct()
+                .ToArray();
+            try
+            {
+                var tags = await ReadOptionalTagsAsync(root.Guid);
+                if (FeeContainerProvenanceCodec.TryRead(tags, out var provenance, out var provenanceError))
+                {
+                    var exactObjectProperties = await ReadContainerObjectPropertiesAsync(scoped, cancellationToken);
+                    var exactLiveObjects = scoped
+                        .Select(item => ToLiveObject(item, exactObjectProperties.GetValueOrDefault(item.Guid)))
+                        .ToArray();
+                    var classification = FeeContainerLiveReconstructor.Reconstruct(
+                        root.Guid,
+                        root.Name,
+                        exactLiveObjects,
+                        liveVariables,
+                        assignments);
+                    var slots = ResolveSlotsFromSnapshot(provenance!, assignments);
+                    var projection = FeeContainerVariableProjector.Apply(provenance!, variableStates, slots);
+                    resultRoots.Add(new Fee2ContainerRoot(
+                        root.Guid,
+                        root.Name,
+                        projection.Snapshot,
+                        projection.UpdatedEntries,
+                        projection.MissingVariableGuids.Count,
+                        projection.UpdatedSlots,
+                        projection.UnresolvedSlotVariableGuids.Count,
+                        UsesExactProvenance: true,
+                        scoped.Length,
+                        0,
+                        [],
+                        classification.UnmappedObjects,
+                        classification.ObjectAssociations));
+                    continue;
+                }
+
+                withoutProvenance++;
+                if (tags.ContainsKey(FeeContainerProvenanceCodec.SchemaKey) && !string.IsNullOrWhiteSpace(provenanceError))
+                {
+                    resultIssues.Add(new Fee2ContainerDiscoveryIssue(
+                        root.Guid,
+                        root.Name,
+                        $"Provenienz ist ungültig; die Struktur wird stattdessen live rekonstruiert: {provenanceError}"));
+                }
+                var objectProperties = await ReadContainerObjectPropertiesAsync(
+                    scoped,
+                    cancellationToken);
+                var liveObjects = scoped
+                    .Select(item => ToLiveObject(
+                        item,
+                        objectProperties.GetValueOrDefault(item.Guid)))
+                    .ToArray();
+                var reconstructed = FeeContainerLiveReconstructor.Reconstruct(
+                    root.Guid,
+                    root.Name,
+                    liveObjects,
+                    liveVariables,
+                    assignments);
+                resultRoots.Add(new Fee2ContainerRoot(
+                    root.Guid,
+                    root.Name,
+                    reconstructed.Snapshot,
+                    0,
+                    0,
+                    0,
+                    0,
+                    UsesExactProvenance: false,
+                    reconstructed.InspectedObjectCount,
+                    reconstructed.IgnoredObjectCount,
+                    reconstructed.Issues,
+                    reconstructed.UnmappedObjects,
+                    reconstructed.ObjectAssociations));
+                resultIssues.AddRange(reconstructed.Issues.Select(issue =>
+                    new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, root.Name, issue.Message)));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                resultIssues.Add(new Fee2ContainerDiscoveryIssue(
+                    root.Guid,
+                    root.Name,
+                    $"Der Snapshot dieses Roots konnte nicht rekonstruiert werden: {exception.Message}"));
+            }
+        }
+
+        progress?.Report(new Fee2ContainerProgress(100, "FEE-Roots und Container wurden vollständig ausgewertet."));
+        return new Fee2ContainerDiscoveryResult(resultRoots, withoutProvenance, resultIssues);
+    }
+
+    private static bool IsWithinRoot(FeeAbstractObject item, FeeBasicFrame root)
+    {
+        var current = item;
+        var visited = new HashSet<Guid>();
+        while (current is not null && visited.Add(current.Guid))
+        {
+            if (current.Guid == root.Guid)
+                return true;
+            current = current.Parent;
+        }
+        return false;
+    }
+
+    private static async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, string>>>
+        ReadContainerObjectPropertiesAsync(
+            IReadOnlyCollection<FeeAbstractObject> objects,
+            CancellationToken cancellationToken)
+    {
+        var candidates = objects.Where(CanCarryContainerProvenance).ToArray();
+        using var throttle = new SemaphoreSlim(8, 8);
+        var reads = candidates.Select(async item =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await throttle.WaitAsync(cancellationToken);
+            try
+            {
+                return (item.Guid, Properties: await ReadOptionalTagsAsync(item.Guid));
+            }
+            finally
+            {
+                throttle.Release();
+            }
+        });
+        return (await Task.WhenAll(reads))
+            .Where(item => item.Guid != Guid.Empty && item.Properties.Count > 0)
+            .ToDictionary(item => item.Guid, item => item.Properties);
+    }
+
+    private static bool CanCarryContainerProvenance(FeeAbstractObject item) => item is
+        FeeLogic or
+        FeeCabinetElement or
+        FeeButton or
+        FeeSegmentedLamp or
+        FeeSensor or
+        FeeFloor or
+        FeeJoint or
+        FeeSurface or
+        FeePickAndPlace or
+        FeeSimpleNot or
+        FeeSimpleMove;
+
+    private static FeeContainerLiveObject ToLiveObject(
+        FeeAbstractObject item,
+        IReadOnlyDictionary<string, string>? properties)
+    {
+        var provenance = ContainerObjectProvenance.Read(
+            properties,
+            item.Marks ?? []);
+        var cabinet = item as FeeCabinetElement;
+        return new FeeContainerLiveObject(
+            item.Guid,
+            item.Name ?? string.Empty,
+            item.FeeType ?? item.GetType().Name,
+            (item as FeeLogic)?.LogicDefinitionName,
+            cabinet?.ElementType,
+            cabinet?.Label,
+            provenance.ContainerId,
+            provenance.ContainerType);
+    }
+
+    private static IReadOnlyDictionary<Guid, string> ResolveSlotsFromSnapshot(
+        FeeContainerProvenanceSnapshot provenance,
+        IReadOnlyList<FeeContainerLiveAssignment> assignments)
+    {
+        var result = new Dictionary<Guid, string>();
+        foreach (var variableGuid in provenance.SignalBindings.Select(item => item.VariableGuid).Distinct())
+        {
+            var slots = assignments
+                .Where(item => item.VariableGuid == variableGuid &&
+                               item.TargetSlot.StartsWith("PLC_", StringComparison.OrdinalIgnoreCase))
+                .Select(item => item.TargetSlot)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            if (slots.Length == 1)
+                result[variableGuid] = slots[0];
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// FEE versions serialize some Cabinet/Logic properties either directly,
+    /// below a component element, or as an attribute. Read all compatible
+    /// representations without depending on one SDK XML layout.
+    /// </summary>
+    private static string? ReadXmlValue(XElement root, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var attribute = root.DescendantsAndSelf().Attributes()
+                .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(attribute?.Value))
+                return attribute.Value.Trim();
+
+            var element = root.DescendantsAndSelf()
+                .FirstOrDefault(item => string.Equals(item.Name.LocalName, name, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(element?.Value))
+                return element.Value.Trim();
+        }
+        return null;
+    }
+
+    private static async Task<string?> ReadOptionalObjectPropertyAsync(Guid guid, string propertyName)
+    {
+        try
+        {
+            var value = await Services.ApiInstance!.Object.GetPropertyAsync(guid, propertyName);
+            var converted = Services.ApiInstance.XmlHelper.ConvertToString(value);
+            return string.IsNullOrWhiteSpace(converted) ? null : converted.Trim();
+        }
+        catch
+        {
+            // Dynamic properties are version/type specific. Their absence is
+            // a normal discriminator, not a reason to abort the whole root.
+            return null;
+        }
+    }
+
+    private static bool IsCabinetElement(string? type) =>
+        NormalizeToken(type).EndsWith("CABINETELEMENT", StringComparison.Ordinal);
+
+    private static bool IsLogicObject(string? type) =>
+        NormalizeToken(type).Contains("LOGIC", StringComparison.Ordinal);
+
+    private static string NormalizeToken(string? value) => new((value ?? string.Empty)
+        .Where(char.IsLetterOrDigit)
+        .Select(char.ToUpperInvariant)
+        .ToArray());
 
     private static async Task<VariableAssignmentRead> ReadAssignmentsAsync(
         IEnumerable<Guid> variableGuids,

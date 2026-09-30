@@ -6,7 +6,7 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// <summary>Versioned, portable representation of user-edited visual-plan data.</summary>
 internal sealed class VisualPlanSidecarDocument
 {
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 9;
 
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
@@ -24,9 +24,15 @@ internal sealed class VisualPlanSidecarDocument
 
     public List<VisualSignalAssignment> SignalAssignments { get; init; } = [];
 
+    public List<VisualAddedSignal> AddedSignals { get; init; } = [];
+
     public List<VisualSlotOverride> SlotOverrides { get; init; } = [];
 
+    public List<string> RemovedSignalNodeIds { get; init; } = [];
+
     public VisualExistingInterfaceSelection? ExistingInterfaceSelection { get; init; }
+
+    public List<VisualExistingInterfaceSelection> ExistingInterfaceSelections { get; init; } = [];
 }
 
 internal sealed record VisualSidecarReadResult(
@@ -68,8 +74,11 @@ internal sealed class VisualPlanSidecarStore(IVisualPlanLogger logger)
             GenerationSelections = [.. plan.GenerationSelections],
             SignalCreationSelections = [.. plan.SignalCreationSelections],
             SignalAssignments = [.. plan.SignalAssignments],
+            AddedSignals = [.. plan.AddedSignals],
             SlotOverrides = [.. plan.SlotOverrides],
+            RemovedSignalNodeIds = [.. plan.RemovedSignalNodeIds],
             ExistingInterfaceSelection = plan.ExistingInterfaceSelection,
+            ExistingInterfaceSelections = [.. plan.ExistingInterfaceSelections],
         };
 
         var temporaryPath = Path.Combine(

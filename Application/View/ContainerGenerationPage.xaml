@@ -123,16 +123,51 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="2*"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition x:Name="AuxiliaryDataRow" Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!--row 1 - Component Grouping & Substitute Component-->
-            <Expander Margin="5,5,5,35" Grid.Row="0"  IsExpanded="False">
+            <Expander Margin="5,3" Grid.Row="0" MaxHeight="170" IsExpanded="False"
+                      ToolTip="Optionale Gruppierung. Die Einstellungen bleiben eingeklappt, bis sie benötigt werden.">
                 <Expander.Header>
-                    <TextBlock Style="{StaticResource H3Style}" Text="Grouping Settings"/>
+                    <TextBlock FontWeight="SemiBold" Text="Grouping (optional)"/>
                 </Expander.Header>
-                <Grid>
+                <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,2,0,0">
+                    <WrapPanel Margin="5,2">
+                        <Button Padding="8,2" Content="Was passiert hier?" Command="{Binding ToggleGroupingHelp}" />
+                        <ComboBox Margin="6,0,0,0" MinWidth="225"
+                                  ItemsSource="{Binding GroupingExamples}"
+                                  SelectedItem="{Binding SelectedGroupingExample}"
+                                  DisplayMemberPath="Name"
+                                  ToolTip="Geprüfte Beispiele und eigene CAASettings-XML auswählen; die Felder bleiben danach frei bearbeitbar." />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Vorlagenordner"
+                                Command="{Binding OpenGroupingPresetFolder}"
+                                ToolTip="Öffnet den Ordner für eigene CAASettings-XML-Dateien." />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Vorlagen neu laden"
+                                Command="{Binding ReloadGroupingPresets}"
+                                ToolTip="Liest eigene XML-Vorlagen aus dem Vorlagenordner erneut ein." />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Load Settings" Command="{Binding LoadSettings}" />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="Save Settings" Command="{Binding SaveSettings}" />
+                    </WrapPanel>
+                    <Border Margin="5" Padding="9" Background="#FFF3F5F7" CornerRadius="4"
+                            Visibility="{Binding IsGroupingHelpVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock TextWrapping="Wrap"
+                                       Text="Die aktivierten Kriterien werden von oben nach unten ausgewertet. Nur Signale, bei denen jedes aktive Kriterium einen Wert liefert und derselbe Gruppenschlüssel entsteht, landen gemeinsam in einem Container. Bei Regex werden ausschließlich die Inhalte der Klammergruppen verwendet. Mehrere alternative Regex können mit Komma und Leerzeichen getrennt werden." />
+                            <TextBlock Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="Component und Type stammen aus dem Treffer in der Requirements.xml. Die Ersetzung bestimmt anschließend den sichtbaren Containernamen; sie ändert nicht den Signalnamen." />
+                            <WrapPanel Margin="0,8,0,0">
+                                <Button Padding="8,2" Content="Beispiel: nach Adressbyte" Command="{Binding UseAddressGroupingExample}"
+                                        ToolTip="^[%]?[IEAQM](\d+)\. gruppiert z. B. %I12.3 und %I12.7 über 12." />
+                                <Button Margin="6,0,0,0" Padding="8,2" Content="Beispiel: nach ID-Präfix" Command="{Binding UseIdGroupingExample}"
+                                        ToolTip="^(.+?)[._-]\d+$ gruppiert z. B. Motor_01 und Motor_02 über Motor." />
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+                    <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -145,23 +180,31 @@
                         </GroupBox.Header>
 
                         <WrapPanel Orientation="Horizontal">
-                            <ux:CheckBox Margin="5,5,10,5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupByComponent}">
+                            <ux:CheckBox Margin="5,5,10,5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupByComponent}"
+                                         ToolTip="Gruppiert nur Requirements-Treffer mit demselben erkannten Component-/Containernamen.">
                                 <TextBlock Text="Component" Style="{StaticResource TextRobotoLightStyle}" />
                             </ux:CheckBox>
 
-                            <ux:CheckBox Margin="5,5,10,5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupByType}">
+                            <ux:CheckBox Margin="5,5,10,5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupByType}"
+                                         ToolTip="Verhindert, dass unterschiedliche Containertypen gemeinsam gruppiert werden.">
                                 <TextBlock Text="Type" Style="{StaticResource TextRobotoLightStyle}" />
                             </ux:CheckBox>
 
-                            <ux:CheckBox Margin="5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupById}">
+                            <ux:CheckBox Margin="5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupById}"
+                                         ToolTip="Aktiviert die Gruppierung anhand der ID. Der Regex muss Klammergruppen enthalten; deren Inhalte bilden den Gruppenschlüssel.">
                                 <TextBlock Text="Regex ID:" Style="{StaticResource TextRobotoLightStyle}" />
                             </ux:CheckBox>
-                            <ux:TextBox Margin="5,5,10,5" VerticalContentAlignment="Center" MinWidth="200" Text="{Binding Settings.RegexId}"/>
+                            <ux:TextBox Margin="5,5,10,5" VerticalContentAlignment="Center" MinWidth="240" Text="{Binding Settings.RegexId, UpdateSourceTrigger=PropertyChanged}"
+                                        Watermark="z. B. ^(.+?)[._-]\d+$"
+                                        ToolTip="Regex auf dem ID-Feld. Beispiel ^(.+?)[._-]\d+$: Motor_01 und Motor_02 liefern beide Motor."/>
 
-                            <ux:CheckBox Margin="5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupByAddress}">
+                            <ux:CheckBox Margin="5" Style="{StaticResource CheckBoxSmallStyle}" IsChecked="{Binding Settings.GroupByAddress}"
+                                         ToolTip="Aktiviert die Gruppierung anhand der Adresse. Der Regex muss die gewünschte Gruppierinformation in Klammern erfassen.">
                                 <TextBlock Text="Regex Address:" Style="{StaticResource TextRobotoLightStyle}" />
                             </ux:CheckBox>
-                            <ux:TextBox Margin="5" VerticalContentAlignment="Center" MinWidth="200" Text="{Binding Settings.RegexAddress}"/>
+                            <ux:TextBox Margin="5" VerticalContentAlignment="Center" MinWidth="240" Text="{Binding Settings.RegexAddress, UpdateSourceTrigger=PropertyChanged}"
+                                        Watermark="z. B. ^[%]?[IEAQM](\d+)\."
+                                        ToolTip="Regex auf dem Adressfeld. Beispiel ^[%]?[IEAQM](\d+)\.: %I12.3 und %I12.7 liefern beide das Adressbyte 12."/>
                         </WrapPanel>
                     </GroupBox>
 
@@ -178,27 +221,39 @@
                             <ux:RadioButton Margin="5,5,25,5" Style="{StaticResource RadioButtonSmallStyle}" IsChecked="{Binding Settings.SelectedOption, Converter={StaticResource EqualityConverter}, ConverterParameter={x:Static settings:ContainerGenerationSettings.IdOption}}">
                                 <TextBlock Text="ID" Style="{StaticResource TextRobotoLightStyle}" />
                             </ux:RadioButton>
-                            <ux:TextBox Margin="5" VerticalContentAlignment="Center" MinWidth="275" Text="{Binding Settings.RegexSubstitution}"/>
+                            <ux:TextBox Margin="5" VerticalContentAlignment="Center" MinWidth="275" Text="{Binding Settings.RegexSubstitution, UpdateSourceTrigger=PropertyChanged}"
+                                        Watermark="optional, Klammergruppen werden neuer Name"
+                                        ToolTip="Optionaler Regex für den sichtbaren Containernamen. Treffer aus allen Klammergruppen werden wie in der bestehenden Generierung direkt aneinandergefügt; ohne Treffer bleibt der Ausgangswert erhalten."/>
                         </StackPanel>
                     </GroupBox>
-                </Grid>
+                    </Grid>
+                    <Border Margin="5" Padding="9" BorderBrush="#FFB8C7D1" BorderThickness="1" CornerRadius="4">
+                        <Grid>
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <TextBlock Grid.ColumnSpan="2" FontWeight="SemiBold" Text="Aktive Suche und Vorschau"/>
+                            <TextBlock Grid.Row="1" Margin="0,5,8,0" FontWeight="SemiBold" Text="Gesucht wird:"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Text="{Binding GroupingRuleSummary}" TextWrapping="Wrap"/>
+                            <TextBlock Grid.Row="2" Margin="0,4,8,0" FontWeight="SemiBold" Text="Ausgewähltes Signal:"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Margin="0,4,0,0" Text="{Binding GroupingPreviewSignal}"/>
+                            <TextBlock Grid.Row="3" Margin="0,4,8,0" FontWeight="SemiBold" Text="Auswertung:"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Margin="0,4,0,0" Text="{Binding GroupingPreviewCriteria}" TextWrapping="Wrap"/>
+                            <TextBlock Grid.Row="4" Margin="0,4,8,0" FontWeight="SemiBold" Text="Gruppenschlüssel / Name:"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,4,0,0" TextWrapping="Wrap">
+                                <Run Text="{Binding GroupingPreviewKey, Mode=OneWay}"/><Run Text="  |  Containername: "/><Run Text="{Binding GroupingPreviewContainerName, Mode=OneWay}"/>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+                </ScrollViewer>
             </Expander>
 
             <!-- Row 2 - Search panel container -->
-            <Grid Grid.Row="1">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Margin="5,5,10,5" Text="Filter:" Style="{StaticResource TextRobotoLightStyle}" VerticalAlignment="Center" />
-                <ux:TextBox Grid.Column="1" MinWidth="400" Height="30" VerticalContentAlignment="Center" Text="{Binding SearchTextContainer, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"/>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10,0">
+            <WrapPanel Grid.Row="1" Margin="0,0,0,3">
+                <TextBlock Margin="5,5,10,5" Text="Filter:" Style="{StaticResource TextRobotoLightStyle}" VerticalAlignment="Center" />
+                <ux:TextBox Width="300" MinWidth="180" Height="30" VerticalContentAlignment="Center"
+                            Text="{Binding SearchTextContainer, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"/>
+                <StackPanel Orientation="Horizontal" Margin="10,2">
                     <TextBlock Text="Prüfstatus:"
                                Margin="0,0,5,0"
                                VerticalAlignment="Center"/>
@@ -223,13 +278,13 @@
                             Margin="5,0,0,0"
                             Padding="10,2"/>
                 </StackPanel>
-                <TextBlock Grid.Column="3" Margin="5" Text="{Binding ContainerList.Count, NotifyOnSourceUpdated=True, StringFormat={}Containers - {0}}" HorizontalAlignment="Center" 
+                <TextBlock Margin="8,5" Text="{Binding ContainerList.Count, NotifyOnSourceUpdated=True, StringFormat={}Containers - {0}}" HorizontalAlignment="Center"
                            Style="{StaticResource TextRobotoLightStyle}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="5" Margin="5" Text="{Binding AssignedSignals, NotifyOnSourceUpdated=True, StringFormat={}Assigned Signals - {0}}" HorizontalAlignment="Center"
+                <TextBlock Margin="8,5" Text="{Binding AssignedSignals, NotifyOnSourceUpdated=True, StringFormat={}Assigned Signals - {0}}" HorizontalAlignment="Center"
                            Style="{StaticResource TextRobotoLightStyle}" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="7" Margin="5" Text="{Binding PercentComplete, NotifyOnSourceUpdated=True, StringFormat={}{0:P2} Complete}" HorizontalAlignment="Center"
+                <TextBlock Margin="8,5" Text="{Binding PercentComplete, NotifyOnSourceUpdated=True, StringFormat={}{0:P2} Complete}" HorizontalAlignment="Center"
                            Style="{StaticResource TextRobotoLightStyle}" VerticalAlignment="Center"/>
-            </Grid>
+            </WrapPanel>
 
             <!-- Reimport comparison: no visible work is changed before applying this selection. -->
             <Border Grid.Row="2"
@@ -238,7 +293,7 @@
                     BorderBrush="#FF90A4AE"
                     BorderThickness="1"
                     Background="#FFF7F9FA"
-                    Visibility="{Binding HasPendingReimportChanges, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    Visibility="{Binding ShowPendingReimportPanel, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -246,20 +301,40 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <StackPanel Margin="0,0,0,7">
-                        <TextBlock Text="Änderungsvergleich – jede erkannte Änderung einzeln entscheiden"
-                                   FontWeight="SemiBold"/>
+                        <DockPanel>
+                            <TextBlock Text="Änderungsvergleich – jede erkannte Änderung einzeln entscheiden"
+                                       FontWeight="SemiBold"/>
+                            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                                <Button Margin="8,0,0,0" Padding="8,2" Content="In eigenem Fenster"
+                                        Click="OpenReimportComparisonWindow_Click" />
+                                <Button Margin="6,0,0,0" Padding="8,2" Content="Ausblenden"
+                                        Command="{Binding HideReimportComparison}"
+                                        ToolTip="Blendet die Vorschau aus, ohne Entscheidungen zu verwerfen." />
+                            </StackPanel>
+                        </DockPanel>
                         <TextBlock Text="{Binding ReimportNotice}"
                                    Foreground="#FF455A64"
                                    Margin="0,3,0,0"/>
                         <TextBlock Text="{Binding PendingReimportSelectionSummary}"
                                    FontWeight="SemiBold"
                                    Margin="0,3,0,0"/>
+                        <WrapPanel Margin="0,7,0,0">
+                            <TextBlock Margin="0,0,5,0" VerticalAlignment="Center" Text="Kriterium:" />
+                            <ComboBox Width="190" ItemsSource="{Binding ReimportCriteria}"
+                                      SelectedItem="{Binding SelectedReimportCriterion}" />
+                            <TextBlock Margin="12,0,5,0" VerticalAlignment="Center" Text="Suche:" />
+                            <TextBox Width="260" Padding="5,2"
+                                     Text="{Binding ReimportSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Durchsucht Signal, bisherigen/neuen Wert, genauen Unterschied und Auswirkung." />
+                        </WrapPanel>
                     </StackPanel>
                     <DataGrid Grid.Row="1"
-                              ItemsSource="{Binding PendingReimportChanges}"
+                              ItemsSource="{Binding PendingReimportChangesView}"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False"
-                              MaxHeight="230"
+                              MaxHeight="335"
+                              RowHeight="29"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                               HeadersVisibility="Column"
                               IsReadOnly="False">
                         <DataGrid.RowStyle>
@@ -331,6 +406,21 @@
                                 FontWeight="SemiBold"/>
                     </StackPanel>
                 </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Margin="5" Padding="8" BorderBrush="#FF90A4AE" BorderThickness="1"
+                    Background="#FFF7F9FA"
+                    Visibility="{Binding ShowCollapsedReimportSummary, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <DockPanel>
+                    <StackPanel>
+                        <TextBlock FontWeight="SemiBold" Text="Änderungsvergleich ist ausgeblendet" />
+                        <TextBlock Margin="0,3,0,0" Text="{Binding PendingReimportSelectionSummary}" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Margin="8,0,0,0" Padding="8,2" Content="Einblenden" Command="{Binding ShowReimportComparison}" />
+                        <Button Margin="6,0,0,0" Padding="8,2" Content="In eigenem Fenster" Click="OpenReimportComparisonWindow_Click" />
+                    </StackPanel>
+                </DockPanel>
             </Border>
 
             <Border Grid.Row="2"
@@ -661,7 +751,12 @@
             </DataGrid>
 
             <!--Row 4 - Unassigend and filtered entries-->
-            <Grid Grid.Row="4">
+            <Expander x:Name="AuxiliaryDataExpander" Grid.Row="4" Margin="5,2"
+                      IsExpanded="True" Header="Unassigned Data und Filtered Data"
+                      Expanded="AuxiliaryDataExpander_Expanded"
+                      Collapsed="AuxiliaryDataExpander_Collapsed"
+                      ToolTip="Einklappen, um der Haupt-Containerliste mehr Höhe zu geben.">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -687,7 +782,8 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="0" ItemsSource="{Binding UnassignedEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedUnassignedEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True">
+                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
                             <Style.Triggers>
@@ -737,7 +833,8 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="2" ItemsSource="{Binding FilteredEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedFilteredEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True">
+                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
+                          ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
                             <Style.Triggers>
@@ -769,6 +866,7 @@
                 </DataGrid>
 
             </Grid>
+            </Expander>
 
             <Expander Grid.Row="5"
                       Margin="5"
@@ -826,14 +924,8 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Settings Buttons  -->
-            <StackPanel Grid.Row="0" Orientation="Vertical">
-                <ux:Button Margin="5,5,5,0" Content="Load Settings" DebounceInterval="150" Command="{Binding LoadSettings}" />
-                <ux:Button Margin="5,0,5,5" Content="Save Settings" DebounceInterval="150" Command="{Binding SaveSettings}" />
-            </StackPanel>
-
             <!-- Generate & Export  -->
-            <StackPanel Grid.Row="1" Orientation="Vertical">
+            <StackPanel Grid.Row="0" Grid.RowSpan="2" Orientation="Vertical">
                 <ux:Button Margin="5,5,5,0" Content="Generate" DebounceInterval="150" Command="{Binding GenerateContainers}" IsEnabled="{Binding CanGenerate}" IsBusy="{Binding IsBusyGenerateContainers}" ToolTip="{Binding GenerateUnavailableReason}" ToolTipService.ShowOnDisabled="True"/>
                 <ux:Button Margin="5,0,5,0" Content="Prüfzusammenfassung" DebounceInterval="150" Command="{Binding ValidateWorkspace}" />
                 <ux:Button Margin="5,0,5,0" Content="ContainerFile laden" DebounceInterval="150" Command="{Binding LoadContainerFile}" IsEnabled="{Binding CanLoadData}"
@@ -844,20 +936,29 @@
             </StackPanel>
 
             <!--Load / Save data & unassigend entries-->
-            <StackPanel Grid.Row="2" Orientation="Vertical" VerticalAlignment="Bottom">
-                <ux:Button Margin="5,5,5,0" Content="Arbeitsstand speichern" DebounceInterval="150" Command="{Binding SaveData}" />
-                <ux:Button Margin="5,0,5,5" Content="Arbeitsstand laden" DebounceInterval="150" Command="{Binding LoadData}" IsEnabled="{Binding CanLoadData}" ToolTip="{Binding LoadDataUnavailableReason}" ToolTipService.ShowOnDisabled="True"/>
-                <CheckBox Margin="7,3,5,2"
-                          Content="AutoSave aktiv"
-                          IsChecked="{Binding Settings.AutoSaveEnabled, Mode=TwoWay}" />
-                <StackPanel Margin="7,0,5,2" Orientation="Horizontal">
-                    <TextBlock VerticalAlignment="Center" Text="Intervall (Min.):" />
-                    <TextBox Width="48" Margin="6,0,0,0" HorizontalContentAlignment="Right"
-                             Text="{Binding Settings.AutoSaveIntervalMinutes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <Border Grid.Row="2" Margin="4" Padding="3" CornerRadius="4"
+                    BorderBrush="{Binding AutoSaveAreaBorderBrush}"
+                    BorderThickness="{Binding AutoSaveAreaBorderThickness}">
+                <StackPanel Orientation="Vertical" VerticalAlignment="Bottom">
+                    <ux:Button Margin="2,2,2,0" Content="Arbeitsstand speichern" DebounceInterval="150" Command="{Binding SaveData}" />
+                    <ux:Button Margin="2,0,2,2" Content="Arbeitsstand laden" DebounceInterval="150" Command="{Binding LoadData}" IsEnabled="{Binding CanLoadData}" ToolTip="{Binding LoadDataUnavailableReason}" ToolTipService.ShowOnDisabled="True"/>
+                    <Button Margin="2,0,2,4" Padding="6,2" Content="Arbeitsstand-Ordner öffnen" Command="{Binding OpenAutoSaveFolder}" />
+                    <CheckBox Margin="4,3,2,2"
+                              Content="AutoSave aktiv"
+                              IsChecked="{Binding Settings.AutoSaveEnabled, Mode=TwoWay}" />
+                    <StackPanel Margin="4,0,2,2" Orientation="Horizontal">
+                        <TextBlock VerticalAlignment="Center" Text="Intervall (Min.):" />
+                        <TextBox Width="48" Margin="6,0,0,0" HorizontalContentAlignment="Right"
+                                 Text="{Binding Settings.AutoSaveIntervalMinutes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                    </StackPanel>
+                    <TextBlock Margin="4,0,2,3" FontSize="10" Foreground="#FF666666"
+                               Text="{Binding AutoSaveStatus}" TextWrapping="Wrap" />
+                    <TextBlock Margin="4,0,2,3" FontSize="10" Foreground="#FFC62828" FontWeight="SemiBold"
+                               Text="AutoSave ist noch nicht gestartet: zuerst einen Arbeitsstand speichern oder laden."
+                               Visibility="{Binding IsAutoSavePending, Converter={StaticResource BooleanToVisibilityConverter}}"
+                               TextWrapping="Wrap" />
                 </StackPanel>
-                <TextBlock Margin="7,0,5,5" FontSize="10" Foreground="#666666"
-                           Text="{Binding AutoSaveStatus}" TextWrapping="Wrap" />
-            </StackPanel>
+            </Border>
 
         </Grid>
 

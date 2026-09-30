@@ -39,6 +39,10 @@ internal static class ContainerMetadataCatalog
             ["Switch"] = Describe<CabinetSwitch_Container>(technicalHelpers: ["Cabinet Switches", "CabinetElement"]),
         };
 
+    public static IReadOnlyList<string> SupportedXmlTypes { get; } = Descriptors.Keys
+        .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
     public static bool TryGet(string xmlType, out ContainerDescriptor descriptor) =>
         Descriptors.TryGetValue(xmlType, out descriptor!);
 
@@ -46,12 +50,28 @@ internal static class ContainerMetadataCatalog
         string.IsNullOrWhiteSpace(logicName)
             ? []
             : Descriptors
-                .Where(item => string.Equals(
-                    item.Value.ExpectedLogicName,
-                    logicName,
-                    StringComparison.OrdinalIgnoreCase))
+                .Where(item => IsSameLogicDefinition(item.Value.ExpectedLogicName, logicName))
                 .Select(item => item.Key)
                 .ToArray();
+
+    internal static bool IsSameLogicDefinition(string? expected, string? actual)
+    {
+        if (string.IsNullOrWhiteSpace(expected) || string.IsNullOrWhiteSpace(actual))
+            return false;
+        return string.Equals(
+            NormalizeLogicDefinition(expected),
+            NormalizeLogicDefinition(actual),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeLogicDefinition(string value)
+    {
+        var normalized = value.Trim().Replace('/', '\\');
+        var fileName = normalized[(normalized.LastIndexOf('\\') + 1)..];
+        return fileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^4]
+            : fileName;
+    }
 
     private static ContainerDescriptor Describe<TContainer>(
         string? expectedLogicName = null,
@@ -60,6 +80,7 @@ internal static class ContainerMetadataCatalog
         where TContainer : ContainerBaseClass, new()
     {
         var probe = new TContainer();
+        var cabinetOwner = probe as ICabinetElementOwner;
         var targets = probe is ISimObjectFindOrSelect selectable
             ? selectable.GetSimObjectTargets()
                 .Select((target, index) => new TargetDescriptor(
@@ -79,7 +100,9 @@ internal static class ContainerMetadataCatalog
             expectedLogicName,
             technicalHelpers ?? [],
             targets,
-            probe is ICreatableContainer);
+            probe is ICreatableContainer,
+            cabinetOwner?.CabinetName,
+            ContainerExistingObjectReuse.GetExpectedCabinetElementType(probe));
     }
 }
 
@@ -90,7 +113,9 @@ internal sealed record ContainerDescriptor(
     string? ExpectedLogicName,
     IReadOnlyList<string> TechnicalHelpers,
     IReadOnlyList<TargetDescriptor> Targets,
-    bool SupportsCreation);
+    bool SupportsCreation,
+    string? CabinetName,
+    string? ExpectedCabinetElementType);
 
 internal sealed record TargetDescriptor(
     int Index,
