@@ -1017,6 +1017,17 @@ internal static class Program
                 });
             SetPrivateField(service, "_hasDiscoveredFeeSimObjectLinks", true);
 
+            var interfaceGuid = Guid.NewGuid().ToString("D");
+            var feeInterface = new VisualFeeInterface(interfaceGuid, "Existing", "Test", 2);
+            var matchingSignals = new[]
+            {
+                new VisualFeeSignal(Guid.NewGuid().ToString("D"), interfaceGuid, "Existing", "Move", "%Q0.0", string.Empty, "Bool", "Write"),
+                new VisualFeeSignal(Guid.NewGuid().ToString("D"), interfaceGuid, "Existing", "Move", "%Q0.0", string.Empty, "Bool", "Write"),
+            };
+            SetPrivateField(service, "_feeInterfaces", new[] { feeInterface });
+            SetPrivateField(service, "_feeSignals", matchingSignals);
+            service.SetExistingInterfaces([feeInterface]);
+
             var viewModel = new ContainerToFeeVisualPageVM(service);
             var nodes = viewModel.TreeRoots.SelectMany(root => root.SelfAndDescendants()).ToArray();
             var simObject = nodes.Single(node => node.Kind == VisualNodeKind.SimObject);
@@ -1054,10 +1065,20 @@ internal static class Program
             }
             viewModel.SelectedTreeNode = container;
             if (!availableObject.IsSynchronizationMatch ||
-                nodes.Where(item => item.ContainerId == container.Id).Any(item => !item.IsSynchronizationMatch))
+                nodes.Where(item => item.ContainerId == container.Id).Any(item => !item.IsSynchronizationMatch) ||
+                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 2)
             {
                 throw new InvalidOperationException(
-                    "Selecting a parent container did not mark all related descendants and available FEE objects.");
+                    "Selecting a parent container did not mark all descendants and all matching FEE list entries.");
+            }
+            var activeSignal = viewModel.AvailableFeeSignals.Last();
+            viewModel.SelectedFeeSignal = activeSignal;
+            if (!ReferenceEquals(viewModel.SelectedFeeSignal, activeSignal) ||
+                !ReferenceEquals(viewModel.SelectedTreeNode, nodes.Single(item => item.Kind == VisualNodeKind.Signal)) ||
+                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 2)
+            {
+                throw new InvalidOperationException(
+                    "The active FEE signal list selection was not preserved while duplicate matches synchronized to the tree.");
             }
             if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
@@ -1326,6 +1347,12 @@ internal static class Program
             viewModel.ToggleNavigationCommand.Execute(null);
             if (!viewModel.IsNavigationExpanded || !new JsonNavigationPreferenceStore(path).LoadExpanded())
                 throw new InvalidOperationException("The navigation toggle did not persist its updated state.");
+            viewModel.EnsureNavigationFits(1024);
+            if (viewModel.IsNavigationExpanded || !new JsonNavigationPreferenceStore(path).LoadExpanded())
+            {
+                throw new InvalidOperationException(
+                    "Compact viewport handling either left the navigation expanded or overwrote the saved preference.");
+            }
         }
         finally
         {

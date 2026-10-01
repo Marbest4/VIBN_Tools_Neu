@@ -30,7 +30,6 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private string _containerSearchText = string.Empty;
     private string _signalSearchText = string.Empty;
     private string _objectSearchText = string.Empty;
-    private bool _suppressCrossListReveal;
     private long _selectionRevision;
     private long _crossSelectionRevision;
 
@@ -157,7 +156,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null)
                 return;
-            QueueCrossListSelection(value, revealTarget: !_suppressCrossListReveal);
+            QueueCrossListSelection(value, revealTarget: true);
         }
     }
 
@@ -172,7 +171,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null)
                 return;
-            QueueCrossListSelection(value, revealTarget: !_suppressCrossListReveal);
+            QueueCrossListSelection(value, revealTarget: true);
         }
     }
 
@@ -323,6 +322,9 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                 _operationCancellation!.Token,
                 reconstructLegacyRoots: true,
                 progress);
+            SelectedRoot = null;
+            foreach (var existingRoot in Roots)
+                existingRoot.PropertyChanged -= OnRootSelectionChanged;
             Roots.Clear();
             foreach (var root in result.Roots)
             {
@@ -478,38 +480,32 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             StatusText = "Die Detailansicht dieses FEE-Roots konnte wegen eines veralteten Tabellenindex nicht aktualisiert werden. Bitte den Root erneut auswählen.";
             ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
         }
+        catch (InvalidOperationException exception)
+        {
+            StatusText = "Die FEE2Container-Detailansicht wurde während des Root-Wechsels erneuert. Bitte den Root erneut auswählen.";
+            ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
+        }
     }
 
     private void RefreshSelectionDetails(Fee2ContainerRootSelectionVM? selection)
     {
         _crossSelectionRevision++;
-        FoundContainers.Clear();
-        FoundSignals.Clear();
-        NonContainerObjects.Clear();
-        SelectedFoundContainer = null;
-        SelectedFoundSignal = null;
+        _selectedFoundContainer = null;
+        _selectedFoundSignal = null;
+        OnPropertyChanged(nameof(SelectedFoundContainer));
+        OnPropertyChanged(nameof(SelectedFoundSignal));
         ContainerRevealTarget = null;
         SignalRevealTarget = null;
-        if (selection?.Editor is not { } editor)
-            return;
-        foreach (var container in editor.Containers)
-            FoundContainers.Add(container);
-        foreach (var signal in editor.Signals)
-            FoundSignals.Add(signal);
-        foreach (var item in editor.NonContainerObjects)
-            NonContainerObjects.Add(item);
-        // Selecting the first row after a root switch is useful, but it is not
-        // a user-requested cross-list jump. Suppress automatic viewport work so
-        // rapid root changes cannot queue navigation against a replaced view.
-        _suppressCrossListReveal = true;
-        try
-        {
-            SelectedFoundContainer = FoundContainers.FirstOrDefault(item => item.IsIncluded);
-        }
-        finally
-        {
-            _suppressCrossListReveal = false;
-        }
+        var editor = selection?.Editor;
+        // Defer all three view refreshes so WPF receives one coherent root
+        // transition instead of trying to navigate rows while their backing
+        // collections are being cleared and refilled.
+        using var containersRefresh = FoundContainersView.DeferRefresh();
+        using var signalsRefresh = FoundSignalsView.DeferRefresh();
+        using var objectsRefresh = NonContainerObjectsView.DeferRefresh();
+        FoundContainers.ReplaceWith(editor?.Containers ?? []);
+        FoundSignals.ReplaceWith(editor?.Signals ?? []);
+        NonContainerObjects.ReplaceWith(editor?.NonContainerObjects ?? []);
     }
 
     private static bool Matches(string query, params string?[] values)
@@ -590,7 +586,7 @@ public sealed class Fee2ContainerRootEditor
             {
                 var id = container.Attribute("id")?.Value ?? $"container-{containerIndex}";
                 var component = container.Element("Component")?.Value ?? string.Empty;
-                var type = container.Element("Type")?.Value ?? string.Empty;
+                var type = CanonicalizeContainerType(container.Element("Type")?.Value);
                 var entries = container.Descendants("Entry").ToArray();
                 var associatedObjects = (root.ObjectAssociations ?? [])
                     .Where(item => string.Equals(item.ContainerId, id, StringComparison.Ordinal))
@@ -688,7 +684,7 @@ public sealed class Fee2ContainerRootEditor
             containerElements.Add(new XElement("Container",
                 new XAttribute("id", container.Id),
                 new XElement("Component", container.Component),
-                new XElement("Type", container.Type),
+                new XElement("Type", CanonicalizeContainerType(container.Type)),
                 dataList));
         }
 
@@ -707,6 +703,16 @@ public sealed class Fee2ContainerRootEditor
             containerElements.Count,
             signalCount,
             _root.Provenance?.SourceFingerprint ?? string.Empty);
+    }
+
+    private static string CanonicalizeContainerType(string? type)
+    {
+        var value = type?.Trim() ?? string.Empty;
+        if (string.Equals(value, "Switch", StringComparison.OrdinalIgnoreCase))
+            return "CabinetSwitch";
+        if (string.Equals(value, "Fuse", StringComparison.OrdinalIgnoreCase))
+            return "CabinetFuse";
+        return value;
     }
 }
 

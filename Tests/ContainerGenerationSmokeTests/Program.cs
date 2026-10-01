@@ -1146,14 +1146,14 @@ internal static class Program
 
     private static void ValidateRapidFee2ContainerRootSwitching()
     {
-        static Fee2ContainerRootSelectionVM CreateRoot(string name, string component)
+        static Fee2ContainerRootSelectionVM CreateRoot(string name, string component, string type)
         {
             var document = XDocument.Parse($"""
                 <CAAMergeResult>
                   <ContainerList>
                     <Container id="{name}">
                       <Component>{component}</Component>
-                      <Type>Sensor</Type>
+                      <Type>{type}</Type>
                       <DataList>
                         <Entry><ID>A</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>Detected</Signal><Slot>PLC_IN_PartPresent</Slot><Note /></Entry>
                       </DataList>
@@ -1179,8 +1179,8 @@ internal static class Program
         }
 
         var viewModel = new Fee2ContainerPageVM();
-        var first = CreateRoot("Root-A", "Sensor A");
-        var second = CreateRoot("Root-B", "Sensor B");
+        var first = CreateRoot("Root-A", "Switch A", "Switch");
+        var second = CreateRoot("Root-B", "Fuse B", "Fuse");
         viewModel.Roots.Add(first);
         viewModel.Roots.Add(second);
         for (var index = 0; index < 50; index++)
@@ -1188,12 +1188,19 @@ internal static class Program
         viewModel.SelectedRoot = second;
 
         if (viewModel.FoundContainers.Count != 1 ||
-            viewModel.FoundContainers[0].Component != "Sensor B" ||
+            viewModel.FoundContainers[0].Component != "Fuse B" ||
+            viewModel.FoundContainers[0].Type != "CabinetFuse" ||
             viewModel.ContainerRevealTarget is not null ||
             viewModel.SignalRevealTarget is not null)
         {
             throw new InvalidOperationException(
                 "Rapid FEE2Container root switching retained stale rows or queued cross-list navigation.");
+        }
+        if (second.Editor.CreateSnapshot().ContainerDocument
+                .Descendants("Container").Single().Element("Type")?.Value != "CabinetFuse")
+        {
+            throw new InvalidOperationException(
+                "FEE2Container did not canonicalize the legacy Fuse alias during editing/export.");
         }
     }
 

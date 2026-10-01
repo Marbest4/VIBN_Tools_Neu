@@ -67,11 +67,11 @@ public sealed class Fee2ContainerService
         var issues = new List<Fee2ContainerDiscoveryIssue>();
         var ignored = 0;
         var guidValues = await Services.ApiInstance.Object
-            .GetSceneObjectGuidsOfTypeAsync(nameof(BasicFrame));
+            .GetSceneObjectGuidsOfTypeAsync(nameof(BasicFrame)) ?? [];
         var topLevel = await FeeTopLevelBasicFrameDiscovery.DiscoverAsync(guidValues, cancellationToken);
         issues.AddRange(topLevel.Issues.Select(message =>
             new Fee2ContainerDiscoveryIssue(null, string.Empty, message)));
-        var currentVariables = (await Services.ApiInstance.Interface.GetAllVariablesAsync())
+        var currentVariables = (await Services.ApiInstance.Interface.GetAllVariablesAsync() ?? [])
             .Select(variable => new FeeContainerVariableState(
                 variable.VariableGuid,
                 variable.Tag ?? string.Empty,
@@ -298,7 +298,7 @@ public sealed class Fee2ContainerService
     {
         var issues = new List<FeeContainerReconstructionIssue>();
         var guidTexts = (await Services.ApiInstance!.Object
-                .GetAllChildrenFromSceneObjectAsync(rootGuid.ToString()))
+                .GetAllChildrenFromSceneObjectAsync(rootGuid.ToString()) ?? [])
             .Where(value => Guid.TryParse(value, out _))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -306,9 +306,9 @@ public sealed class Fee2ContainerService
 
         var xmlTexts = guidTexts.Length == 0
             ? []
-            : (await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(guidTexts)).ToArray();
+            : (await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(guidTexts) ?? []).ToArray();
         var objectTags = await ReadObjectTagsAsync(guidTexts, cancellationToken);
-        var logicDefinitions = await Services.ApiInstance.Logic.GetAllAvailableLogicDefinitionsAsync();
+        var logicDefinitions = await Services.ApiInstance.Logic.GetAllAvailableLogicDefinitionsAsync() ?? [];
         var logicNames = logicDefinitions
             .Where(item => Guid.TryParse(item.Guid, out _))
             .GroupBy(item => Guid.Parse(item.Guid))
@@ -378,7 +378,7 @@ public sealed class Fee2ContainerService
                 $"FEE lieferte für {guidTexts.Length} untergeordnete Objekte nur {xmlTexts.Length} XML-Datensätze."));
         }
 
-        var apiVariables = (await Services.ApiInstance.Interface.GetAllVariablesAsync()).ToArray();
+        var apiVariables = (await Services.ApiInstance.Interface.GetAllVariablesAsync() ?? []).ToArray();
         var currentVariables = apiVariables
             .Select(variable => new FeeContainerLiveVariable(
                 variable.VariableGuid,
@@ -415,25 +415,18 @@ public sealed class Fee2ContainerService
         IEnumerable<string> guidTexts,
         CancellationToken cancellationToken)
     {
-        using var throttle = new SemaphoreSlim(6);
-        var reads = guidTexts.Distinct(StringComparer.OrdinalIgnoreCase).Select(async guidText =>
+        var result = new Dictionary<Guid, IReadOnlyDictionary<string, string>>();
+        // The vendor client is stateful. Parallel GetProperty calls can block
+        // each other in larger projects, so FEE2Container deliberately reads
+        // metadata serially just like the stable ModelValidation snapshot.
+        foreach (var guidText in guidTexts.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!Guid.TryParse(guidText, out var guid))
-                return (Guid.Empty, (IReadOnlyDictionary<string, string>)new Dictionary<string, string>());
-            await throttle.WaitAsync(cancellationToken);
-            try
-            {
-                return (guid, await ReadOptionalTagsAsync(guid));
-            }
-            finally
-            {
-                throttle.Release();
-            }
-        });
-        return (await Task.WhenAll(reads))
-            .Where(item => item.Item1 != Guid.Empty)
-            .ToDictionary(item => item.Item1, item => item.Item2);
+                continue;
+            result[guid] = await ReadOptionalTagsAsync(guid);
+        }
+        return result;
     }
 
     private static async Task<Fee2ContainerDiscoveryResult> DiscoverFromModelValidationSnapshotAsync(
@@ -538,9 +531,12 @@ public sealed class Fee2ContainerService
                         root.Name,
                         $"Provenienz ist ungültig; die Struktur wird stattdessen live rekonstruiert: {provenanceError}"));
                 }
-                var objectProperties = await ReadContainerObjectPropertiesAsync(
-                    scoped,
-                    cancellationToken);
+                // A legacy root has no exact Container2FEE metadata by
+                // definition. Avoid hundreds of individual TagComponent calls
+                // here; the ModelValidation snapshot already contains every
+                // structural property required for the legacy reconstruction.
+                IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, string>> objectProperties =
+                    new Dictionary<Guid, IReadOnlyDictionary<string, string>>();
                 var liveObjects = scoped
                     .Select(item => ToLiveObject(
                         item,
@@ -601,23 +597,18 @@ public sealed class Fee2ContainerService
             CancellationToken cancellationToken)
     {
         var candidates = objects.Where(CanCarryContainerProvenance).ToArray();
-        using var throttle = new SemaphoreSlim(8, 8);
-        var reads = candidates.Select(async item =>
+        var result = new Dictionary<Guid, IReadOnlyDictionary<string, string>>();
+        // Do not issue concurrent calls against the shared FEE ObjectApi. In
+        // practice that made a root scan appear to hang although the snapshot
+        // itself had already completed successfully.
+        foreach (var item in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await throttle.WaitAsync(cancellationToken);
-            try
-            {
-                return (item.Guid, Properties: await ReadOptionalTagsAsync(item.Guid));
-            }
-            finally
-            {
-                throttle.Release();
-            }
-        });
-        return (await Task.WhenAll(reads))
-            .Where(item => item.Guid != Guid.Empty && item.Properties.Count > 0)
-            .ToDictionary(item => item.Guid, item => item.Properties);
+            var properties = await ReadOptionalTagsAsync(item.Guid);
+            if (item.Guid != Guid.Empty && properties.Count > 0)
+                result[item.Guid] = properties;
+        }
+        return result;
     }
 
     private static bool CanCarryContainerProvenance(FeeAbstractObject item) => item is
@@ -734,7 +725,7 @@ public sealed class Fee2ContainerService
                 var matches = new List<FeeContainerLiveAssignment>();
                 var localIssues = new List<FeeContainerReconstructionIssue>();
                 var assignments = await Services.ApiInstance!.Interface
-                    .GetAssignedSceneObjectsAsync(variableGuid);
+                    .GetAssignedSceneObjectsAsync(variableGuid) ?? [];
                 foreach (var (objectGuid, slots) in assignments)
                 {
                     foreach (var slot in slots ?? Array.Empty<string>())
@@ -755,7 +746,7 @@ public sealed class Fee2ContainerService
                         try
                         {
                             var links = await Services.ApiInstance.Interface
-                                .GetSlotSlotAssignmentAsync(objectGuid, "Input 01");
+                                .GetSlotSlotAssignmentAsync(objectGuid, "Input 01") ?? [];
                             foreach (var (linkedGuidText, linkedSlots) in links)
                             {
                                 if (!Guid.TryParse(linkedGuidText, out var linkedGuid) ||
@@ -806,7 +797,7 @@ public sealed class Fee2ContainerService
         CancellationToken cancellationToken)
     {
         var scopedObjects = (await Services.ApiInstance!.Object
-                .GetAllChildrenFromSceneObjectAsync(rootGuid.ToString()))
+                .GetAllChildrenFromSceneObjectAsync(rootGuid.ToString()) ?? [])
             .Select(value => Guid.TryParse(value, out var guid) ? guid : Guid.Empty)
             .Where(guid => guid != Guid.Empty)
             .Append(rootGuid)
@@ -819,7 +810,7 @@ public sealed class Fee2ContainerService
             {
                 var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var assignments = await Services.ApiInstance.Interface
-                    .GetAssignedSceneObjectsAsync(variableGuid);
+                    .GetAssignedSceneObjectsAsync(variableGuid) ?? [];
                 foreach (var (objectGuid, slots) in assignments)
                 {
                     foreach (var slot in slots ?? Array.Empty<string>())
@@ -831,7 +822,7 @@ public sealed class Fee2ContainerService
                             continue;
 
                         var links = await Services.ApiInstance.Interface
-                            .GetSlotSlotAssignmentAsync(objectGuid, "Input 01");
+                            .GetSlotSlotAssignmentAsync(objectGuid, "Input 01") ?? [];
                         foreach (var (linkedGuidText, linkedSlots) in links)
                         {
                             if (!Guid.TryParse(linkedGuidText, out var linkedGuid) ||

@@ -11,7 +11,7 @@
         mc:Ignorable="d"
         Title="VIBN Tools"
         Height="900" Width="1600"
-        MinHeight="650" MinWidth="1000"
+        MinHeight="560" MinWidth="820"
         WindowStartupLocation="CenterScreen"
         UseLayoutRounding="True"
         WindowStyle="None" AllowsTransparency="True">

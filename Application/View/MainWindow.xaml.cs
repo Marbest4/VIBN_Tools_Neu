@@ -28,11 +28,13 @@ namespace VIBN_Tools.Application.View
             SourceInitialized += OnSourceInitialized;
             Closed += OnClosed;
             PreviewMouseWheel += OnPreviewMouseWheel;
+            SizeChanged += (_, _) => vm.EnsureNavigationFits(ActualWidth);
             ContentRendered += async (_, _) =>
             {
                 if (_deferredInitializationStarted)
                     return;
                 _deferredInitializationStarted = true;
+                vm.EnsureNavigationFits(ActualWidth);
                 var startupElapsed = App.StartupElapsed;
                 ApplicationLogService.Instance.Information(
                     "Anwendungsstart",

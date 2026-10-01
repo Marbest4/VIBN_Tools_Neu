@@ -142,7 +142,10 @@
         </HierarchicalDataTemplate>
     </UserControl.Resources>
 
-    <Grid Margin="10">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Auto"
+                  CanContentScroll="False">
+    <Grid Margin="10" MinWidth="960" MinHeight="620">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -883,4 +886,5 @@
             </StackPanel>
         </Grid>
     </Grid>
+    </ScrollViewer>
 </UserControl>

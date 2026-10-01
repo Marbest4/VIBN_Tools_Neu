@@ -650,7 +650,17 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                     string.Equals(assignment.FeeObjectId, value.Id, StringComparison.Ordinal))?.TargetId;
                 node = FindTreeNode(targetId);
             }
-            SelectRelatedTreeNode(node);
+            if (node is null && _planService.CurrentPlan is { } plan)
+            {
+                var matchingTarget = plan.Targets.FirstOrDefault(target =>
+                    target.CanAssign(value.Model) &&
+                    string.Equals(
+                        plan.FindNode(target.ContainerId)?.Name,
+                        value.Name,
+                        StringComparison.OrdinalIgnoreCase));
+                node = FindTreeNode(matchingTarget?.Id);
+            }
+            SelectRelatedTreeNode(node, preferredFeeObject: value);
         }
     }
 
@@ -668,7 +678,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             var nodeId = value.AssignedNodeIds.FirstOrDefault() ??
                 _planService.CurrentPlan?.SignalAssignments.FirstOrDefault(assignment =>
                     string.Equals(assignment.FeeSignalGuid, value.GuidString, StringComparison.OrdinalIgnoreCase))?.SignalNodeId;
-            SelectRelatedTreeNode(FindTreeNode(nodeId));
+            nodeId ??= TreeRoots.SelectMany(root => root.SelfAndDescendants())
+                .FirstOrDefault(node =>
+                    (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal) &&
+                    string.Equals(node.Name, value.Tag, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrWhiteSpace(node.SourceLocation) ||
+                     string.Equals(node.SourceLocation, value.Location, StringComparison.OrdinalIgnoreCase)))?.Id;
+            SelectRelatedTreeNode(FindTreeNode(nodeId), preferredFeeSignal: value);
         }
     }
 
@@ -683,7 +699,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null || !SynchronizeRelatedSelections)
                 return;
-            SelectRelatedTreeNode(FindTreeNode(value.PrimaryNodeId));
+            SelectRelatedTreeNode(FindTreeNode(value.PrimaryNodeId), preferredSignalSlot: value);
         }
     }
 
@@ -698,7 +714,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null || !SynchronizeRelatedSelections)
                 return;
-            SelectRelatedTreeNode(FindTreeNode(value.NodeId));
+            SelectRelatedTreeNode(FindTreeNode(value.NodeId), preferredIssue: value);
         }
     }
 
@@ -714,7 +730,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged();
             FeeObjectsView.Refresh();
             if (value is not null && SynchronizeRelatedSelections)
-                SelectRelatedTreeNode(FindTreeNode(value.Id));
+                SelectRelatedTreeNode(FindTreeNode(value.Id), preferredTarget: value);
         }
     }
 
@@ -2723,7 +2739,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private static FeeConnectionService ResolveConnection() =>
         Services.Connection ?? new FeeConnectionService();
 
-    private void SelectRelatedTreeNode(ContainerToFeeVisualTreeNodeVM? node)
+    private void SelectRelatedTreeNode(
+        ContainerToFeeVisualTreeNodeVM? node,
+        ContainerToFeeVisualFeeObjectVM? preferredFeeObject = null,
+        ContainerToFeeVisualFeeSignalVM? preferredFeeSignal = null,
+        ContainerToFeeVisualTargetVM? preferredTarget = null,
+        ContainerToFeeVisualSignalSlotVM? preferredSignalSlot = null,
+        VisualIssue? preferredIssue = null)
     {
         if (node is null || _isSynchronizingSelections)
             return;
@@ -2755,7 +2777,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         // Selecting an item in an outer list first moves the tree selection.
         // Project that tree node back into every related list afterwards so
         // all synchronized views receive the same visible selection anchor.
-        SynchronizeSelectionsFromTree(node);
+        SynchronizeSelectionsFromTree(
+            node,
+            preferredFeeObject,
+            preferredFeeSignal,
+            preferredTarget,
+            preferredSignalSlot,
+            preferredIssue);
     }
 
     private void ExpandTreeAncestors(ContainerToFeeVisualTreeNodeVM node)
@@ -2771,7 +2799,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
     }
 
-    private void SynchronizeSelectionsFromTree(ContainerToFeeVisualTreeNodeVM? node)
+    private void SynchronizeSelectionsFromTree(
+        ContainerToFeeVisualTreeNodeVM? node,
+        ContainerToFeeVisualFeeObjectVM? preferredFeeObject = null,
+        ContainerToFeeVisualFeeSignalVM? preferredFeeSignal = null,
+        ContainerToFeeVisualTargetVM? preferredTarget = null,
+        ContainerToFeeVisualSignalSlotVM? preferredSignalSlot = null,
+        VisualIssue? preferredIssue = null)
     {
         if (!SynchronizeRelatedSelections || node is null || _isSynchronizingSelections)
             return;
@@ -2810,35 +2844,72 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                     .Where(assignment => targetIds.Contains(assignment.TargetId))
                     .Select(assignment => assignment.FeeObjectId) ?? [])
                 .ToHashSet(StringComparer.Ordinal);
-            var signalNodeIds = scope
+            if (plan is not null)
+            {
+                var scopedTargets = plan.Targets.Where(target => targetIds.Contains(target.Id)).ToArray();
+                foreach (var feeObject in AvailableFeeObjects.Where(feeObject => scopedTargets.Any(target =>
+                             target.CanAssign(feeObject.Model) &&
+                             string.Equals(
+                                 plan.FindNode(target.ContainerId)?.Name,
+                                 feeObject.Name,
+                                 StringComparison.OrdinalIgnoreCase))))
+                {
+                    feeObjectIds.Add(feeObject.Id);
+                }
+            }
+
+            var scopedSignalNodes = scope
                 .Where(item => item.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
+                .ToArray();
+            var signalNodeIds = scopedSignalNodes
                 .Select(item => item.Id)
                 .ToHashSet(StringComparer.Ordinal);
+            var feeSignalGuids = plan?.SignalAssignments
+                .Where(assignment => signalNodeIds.Contains(assignment.SignalNodeId))
+                .Select(assignment => assignment.FeeSignalGuid)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase) ??
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var feeSignal in AvailableFeeSignals.Where(feeSignal => scopedSignalNodes.Any(signalNode =>
+                         string.Equals(signalNode.Name, feeSignal.Tag, StringComparison.OrdinalIgnoreCase) &&
+                         (string.IsNullOrWhiteSpace(signalNode.SourceLocation) ||
+                          string.Equals(signalNode.SourceLocation, feeSignal.Location, StringComparison.OrdinalIgnoreCase)))))
+            {
+                feeSignalGuids.Add(feeSignal.GuidString);
+            }
 
             foreach (var item in AvailableFeeObjects)
                 item.IsSynchronizationMatch = feeObjectIds.Contains(item.Id);
             foreach (var item in Targets)
                 item.IsSynchronizationMatch = targetIds.Contains(item.Id);
             foreach (var item in AvailableFeeSignals)
-                item.IsSynchronizationMatch = item.AssignedNodeIds.Any(signalNodeIds.Contains);
+                item.IsSynchronizationMatch = feeSignalGuids.Contains(item.GuidString) ||
+                                              item.AssignedNodeIds.Any(signalNodeIds.Contains);
             foreach (var item in SignalSlots)
                 item.IsSynchronizationMatch = item.Assignments.Any(assignment => signalNodeIds.Contains(assignment.NodeId));
 
             EnsureSynchronizedAnchorsAreVisible();
             SetSelectionAnchor(ref _selectedFeeObject,
-                AvailableFeeObjects.FirstOrDefault(item => item.IsSynchronizationMatch),
+                preferredFeeObject?.IsSynchronizationMatch == true
+                    ? preferredFeeObject
+                    : AvailableFeeObjects.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedFeeObject));
             SetSelectionAnchor(ref _selectedTarget,
-                Targets.FirstOrDefault(item => item.IsSynchronizationMatch),
+                preferredTarget?.IsSynchronizationMatch == true
+                    ? preferredTarget
+                    : Targets.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedTarget));
             SetSelectionAnchor(ref _selectedFeeSignal,
-                AvailableFeeSignals.FirstOrDefault(item => item.IsSynchronizationMatch),
+                preferredFeeSignal?.IsSynchronizationMatch == true
+                    ? preferredFeeSignal
+                    : AvailableFeeSignals.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedFeeSignal));
             SetSelectionAnchor(ref _selectedSignalSlot,
-                SignalSlots.FirstOrDefault(item => item.IsSynchronizationMatch),
+                preferredSignalSlot?.IsSynchronizationMatch == true
+                    ? preferredSignalSlot
+                    : SignalSlots.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedSignalSlot));
 
-            var relatedIssue = Issues.FirstOrDefault(issue =>
+            var relatedIssue = preferredIssue ?? Issues.FirstOrDefault(issue =>
                 issue.NodeId is not null &&
                 (nodeIds.Contains(issue.NodeId) ||
                  scope.Any(item => string.Equals(item.ContainerId, issue.NodeId, StringComparison.Ordinal))));

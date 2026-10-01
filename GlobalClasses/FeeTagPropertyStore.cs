@@ -26,7 +26,8 @@ public static class FeeTagPropertyStore
             objectGuid,
             PropertyName,
             ComponentName);
-        return Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(xml);
+        return Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(xml) ??
+               new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
     public static async Task WriteAndVerifyAsync(

@@ -51,6 +51,17 @@ public sealed class MainWindowVM : MvvmBase
         ? "_Navigation einklappen"
         : "_Navigation ausklappen";
 
+    /// <summary>
+    /// Frees horizontal space on compact displays without overwriting the
+    /// user's saved navigation preference. The user can still expand the
+    /// navigation manually for the current window.
+    /// </summary>
+    public void EnsureNavigationFits(double viewportWidth)
+    {
+        if (viewportWidth < 1250 && IsNavigationExpanded)
+            IsNavigationExpanded = false;
+    }
+
     /// <summary>CAD Wizard, Container Generation and Container2Fee.</summary>
     public bool CanUseLevel7Features
     {

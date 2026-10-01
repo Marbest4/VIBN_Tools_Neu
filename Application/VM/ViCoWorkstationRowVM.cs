@@ -241,7 +241,7 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 		get
 		{
 			if (string.IsNullOrWhiteSpace(WorkingEndSummary))
-				return "#FFFFFFFF";
+				return "#00FFFFFF";
 
 			var dates = WorkingEndSummary
 				.Split('|', StringSplitOptions.RemoveEmptyEntries)
@@ -279,7 +279,7 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 			if (yellow)
 				return "#FFFFEB9C";   // Gelb
 
-			return "#FFFFFFFF";       // Weiß
+			return "#00FFFFFF";       // Transparent: Zeilenselektion bleibt sichtbar
 		}
 	}
 }
