@@ -44,26 +44,6 @@ namespace VIBN_Tools.GlobalClasses
             }
 
             FeeObjects = new FeeObjectService();
-            FeeObjects.FeeObjectsUpdated += (_, _) =>
-            {
-                if (Connection is null)
-                    return;
-
-                var roots = FeeObjects.AllFeeObjects?
-                    .OfType<FeeBasicFrame>()
-                    .Where(frame => frame.Parent is null && !string.IsNullOrWhiteSpace(frame.Name))
-                    .Select(frame => frame.Name.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-                    .ToArray() ?? Array.Empty<string>();
-
-                Connection.SetConnectedStation(roots.Length switch
-                {
-                    0 => null,
-                    1 => roots[0],
-                    _ => $"{roots.Length} Hauptstationen: {string.Join(", ", roots.Take(3))}{(roots.Length > 3 ? " …" : string.Empty)}"
-                });
-            };
 
             // Load Fee Data only once
             //if (Connection != null)

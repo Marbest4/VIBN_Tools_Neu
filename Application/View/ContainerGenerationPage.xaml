@@ -129,12 +129,12 @@
             </Grid.RowDefinitions>
 
             <!--row 1 - Component Grouping & Substitute Component-->
-            <Expander Margin="5,3" Grid.Row="0" MaxHeight="170" IsExpanded="False"
+            <Expander Margin="5,3" Grid.Row="0" MaxHeight="280" IsExpanded="False"
                       ToolTip="Optionale Gruppierung. Die Einstellungen bleiben eingeklappt, bis sie benötigt werden.">
                 <Expander.Header>
                     <TextBlock FontWeight="SemiBold" Text="Grouping (optional)"/>
                 </Expander.Header>
-                <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto"
+                <ScrollViewer MaxHeight="242" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                 <StackPanel Margin="0,2,0,0">
                     <WrapPanel Margin="5,2">
@@ -142,8 +142,13 @@
                         <ComboBox Margin="6,0,0,0" MinWidth="225"
                                   ItemsSource="{Binding GroupingExamples}"
                                   SelectedItem="{Binding SelectedGroupingExample}"
-                                  DisplayMemberPath="Name"
-                                  ToolTip="Geprüfte Beispiele und eigene CAASettings-XML auswählen; die Felder bleiben danach frei bearbeitbar." />
+                                  ToolTip="Eine Vorlage übernimmt ihre Kriterien und Regex. Mit der Maus über einer Vorlage wird deren konkrete Wirkung erklärt.">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}" ToolTip="{Binding ToolTipText}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <Button Margin="6,0,0,0" Padding="8,2" Content="Vorlagenordner"
                                 Command="{Binding OpenGroupingPresetFolder}"
                                 ToolTip="Öffnet den Ordner für eigene CAASettings-XML-Dateien." />
@@ -247,6 +252,8 @@
                             </TextBlock>
                         </Grid>
                     </Border>
+                    <TextBlock Margin="7,0,7,4" Foreground="#FF455A64" TextWrapping="Wrap"
+                               Text="Vorschau verwenden: Regex bzw. Gruppierung aktivieren und danach ein Signal in Nicht zugeordnet, Gefiltert oder der Hauptliste anklicken. Auswertung, Gruppenschlüssel und resultierender Containername werden oben sofort für dieses Signal angezeigt." />
                     <TextBlock Margin="7,0,7,5" Foreground="#FF455A64" TextWrapping="Wrap"
                                Text="{Binding LastGenerationSettingsSummary}" />
                 </StackPanel>
@@ -790,7 +797,7 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="0" ItemsSource="{Binding UnassignedEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedUnassignedEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
+                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True"
                           ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">

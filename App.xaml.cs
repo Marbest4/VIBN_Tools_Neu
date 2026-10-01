@@ -1,5 +1,7 @@
 ﻿using System.Windows;
 
+using System.Diagnostics;
+
 namespace VIBN_Tools
 {
     /// <summary>
@@ -7,6 +9,10 @@ namespace VIBN_Tools
     /// </summary>
     public partial class App : System.Windows.Application
     {
+        private static readonly Stopwatch StartupStopwatch = Stopwatch.StartNew();
+
+        internal static TimeSpan StartupElapsed => StartupStopwatch.Elapsed;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);

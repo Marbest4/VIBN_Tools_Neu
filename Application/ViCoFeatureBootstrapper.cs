@@ -37,6 +37,72 @@ public static class ViCoFeatureBootstrapper
     public static Task InitializeWorkstationDirectoryAsync(CancellationToken cancellationToken = default) =>
         WorkstationDirectory.RefreshAsync(cancellationToken);
 
+    /// <summary>
+    /// Resolves the project currently assigned to a connected FEE computer
+    /// from the same Kanbanize workstation data shown in Rechnerübersicht.
+    /// Local development connections deliberately remain labelled localhost.
+    /// </summary>
+    public static async Task<string?> ResolveWorkingProjectForComputerAsync(
+        string? computer,
+        CancellationToken cancellationToken = default)
+    {
+        if (IsLocalComputer(computer))
+            return "localhost";
+
+        if (string.IsNullOrWhiteSpace(computer))
+            return null;
+
+        var snapshot = await SharedWorkstationCatalog.LoadAsync(cancellationToken);
+        return ResolveWorkingProjectForComputer(computer, snapshot.Workstations);
+    }
+
+    public static string? ResolveWorkingProjectForComputer(
+        string? computer,
+        IEnumerable<ViCoWorkstation> workstations)
+    {
+        if (IsLocalComputer(computer))
+            return "localhost";
+
+        var normalizedComputer = NormalizeComputerName(computer);
+        if (normalizedComputer.Length == 0)
+            return null;
+
+        var workstation = workstations.FirstOrDefault(item =>
+            string.Equals(NormalizeComputerName(item.PcName), normalizedComputer, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(NormalizeComputerName(item.DisplayName), normalizedComputer, StringComparison.OrdinalIgnoreCase));
+        if (workstation is null)
+            return null;
+
+        var projects = workstation.WorkingProjects
+            .Where(project => !string.IsNullOrWhiteSpace(project))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return projects.Length == 0 ? null : string.Join(" | ", projects);
+    }
+
+    private static bool IsLocalComputer(string? computer)
+    {
+        var normalized = NormalizeComputerName(computer);
+        return normalized.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+               normalized.Equals("::1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeComputerName(string? computer)
+    {
+        var value = (computer ?? string.Empty).Trim();
+        if (Uri.TryCreate(value, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
+            value = uri.Host;
+        value = value.Trim('\\', '/');
+        if (System.Net.IPAddress.TryParse(value, out _))
+            return value;
+        var separator = value.IndexOfAny(['\\', '/', ':']);
+        if (separator > 0)
+            value = value[..separator];
+        var domainSeparator = value.IndexOf('.');
+        return domainSeparator > 0 ? value[..domainSeparator] : value;
+    }
+
     public static ViCoPageVM CreateViewModel()
     {
         var options = ViCoPathsOptions.CreateDefault();
@@ -151,8 +217,22 @@ public static class ViCoFeatureBootstrapper
             new JsonViCoAutoRefreshSettingsStore(options.AutoRefreshSettingsFile),
             new JsonViCoLastActiveSnapshotStore(options.LastActiveWorkstationsFile),
             WorkspaceContext,
-            workstations => WorkstationDirectory.Synchronize(workstations),
+            workstations =>
+            {
+                WorkstationDirectory.Synchronize(workstations);
+                UpdateConnectedFeeStation(workstations);
+            },
             ApplicationLogService.Instance);
+    }
+
+    private static void UpdateConnectedFeeStation(IEnumerable<ViCoWorkstation> workstations)
+    {
+        if (GlobalClasses.Services.Connection?.IsConnected != true)
+            return;
+        var station = ResolveWorkingProjectForComputer(
+            GlobalClasses.Services.Connection.ConnectedServer,
+            workstations);
+        GlobalClasses.Services.Connection.SetConnectedStation(station);
     }
 
     /// <summary>

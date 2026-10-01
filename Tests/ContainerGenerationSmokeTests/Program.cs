@@ -59,6 +59,7 @@ internal static class Program
         await ValidateVisualMotionJointReuseAsync();
         await ValidateVisualFeeSignalStatusAsync();
         await ValidateForcedUnknownSlotProjectionAsync();
+        await ValidateSignalOnlyContainerClassificationAsync();
         ValidateFee2ContainerSelectionHighlighting();
         ValidateRapidFee2ContainerRootSwitching();
         ValidateWpfVirtualizationExceptionPolicy();
@@ -981,6 +982,62 @@ internal static class Program
                 throw new InvalidOperationException(
                     "A confirmed best-effort run must omit only unknown slot entries while retaining valid container data.");
             }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static async Task ValidateSignalOnlyContainerClassificationAsync()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"vibn-signal-only-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "signal-only.container.xml");
+            await File.WriteAllTextAsync(path, """
+                <ContainerFile>
+                  <Container id="legacy-signal-only">
+                    <Component>LegacyCylinder</Component><Type>CustomerSignalOnly</Type><DataList>
+                      <Entry><ID>A</ID><Address>%I0.0</Address><DataType>Bool</DataType><Signal>Home</Signal><Slot>PLC_IN_InHomePos</Slot></Entry>
+                      <Entry><ID>B</ID><Address>%Q0.0</Address><DataType>Bool</DataType><Signal>Move</Signal><Slot>PLC_OUT_ToWorkPos</Slot></Entry>
+                    </DataList>
+                  </Container>
+                </ContainerFile>
+                """);
+
+            var service = new ContainerToFeeVisualPlanService();
+            var loaded = await service.LoadXmlAsync(path);
+            var container = loaded.Plan?.Nodes.Single(node => node.Kind == VisualNodeKind.Container)
+                ?? throw new InvalidOperationException("Signal-only test plan could not be loaded.");
+            if (!service.CanClassifySignalOnlyContainer(container.Id) ||
+                !service.SetSignalOnlyContainerType(container.Id, "Cylinder"))
+                throw new InvalidOperationException("Unknown signal-only container could not be classified.");
+            if (container.TypeName != "Cylinder" ||
+                !loaded.Plan!.Targets.Any(target => target.ContainerId == container.Id) ||
+                !loaded.Plan.Nodes.Any(node => node.ContainerId == container.Id && node.Kind == VisualNodeKind.Logic))
+            {
+                throw new InvalidOperationException(
+                    "Container classification did not add the known Cylinder logic and SimObject targets.");
+            }
+
+            var effectivePath = Path.Combine(directory, "classified.container.xml");
+            await service.SaveEffectiveContainerXmlAsync(effectivePath);
+            if (XDocument.Load(effectivePath).Descendants("Type").Single().Value != "Cylinder")
+                throw new InvalidOperationException("Effective Container.xml did not retain the selected container type.");
+
+            var sidecarPath = Path.Combine(directory, "classified.visual.json");
+            await service.SaveSidecarAsync(sidecarPath);
+            var reloaded = await new ContainerToFeeVisualPlanService().LoadSidecarAsync(sidecarPath);
+            var reloadedContainer = reloaded.Plan?.Nodes.Single(node => node.Kind == VisualNodeKind.Container);
+            if (reloadedContainer?.TypeName != "Cylinder" ||
+                reloaded.Plan!.ContainerTypeOverrides.Count != 1 ||
+                !reloaded.Plan.Targets.Any(target => target.ContainerId == reloadedContainer.Id) ||
+                !reloaded.Plan.Nodes.Any(node =>
+                    node.ContainerId == reloadedContainer.Id && node.Kind == VisualNodeKind.Logic))
+                throw new InvalidOperationException("Signal-only container type was not restored from the sidecar.");
         }
         finally
         {

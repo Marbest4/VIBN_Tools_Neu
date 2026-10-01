@@ -14,6 +14,7 @@ namespace VIBN_Tools.Application.View
     {
         private const int WmMouseHorizontalWheel = 0x020E;
         private HwndSource? _windowSource;
+        private bool _deferredInitializationStarted;
 
         public MainWindow()
         {
@@ -22,13 +23,24 @@ namespace VIBN_Tools.Application.View
             var vm = new MainWindowVM();
             DataContext = vm;
 
-            _ = vm.InitializeAsync();
-
             WindowState = WindowState.Maximized;
             ResizeMode = ResizeMode.CanResize;
             SourceInitialized += OnSourceInitialized;
             Closed += OnClosed;
             PreviewMouseWheel += OnPreviewMouseWheel;
+            ContentRendered += async (_, _) =>
+            {
+                if (_deferredInitializationStarted)
+                    return;
+                _deferredInitializationStarted = true;
+                var startupElapsed = App.StartupElapsed;
+                ApplicationLogService.Instance.Information(
+                    "Anwendungsstart",
+                    $"Hauptfenster nach {startupElapsed.TotalMilliseconds:F0} ms dargestellt; nachgelagerte Rollen- und Rechnerinitialisierung startet jetzt.");
+                await System.Windows.Threading.Dispatcher.Yield(
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                await vm.InitializeAsync();
+            };
         }
 
         private void OnSourceInitialized(object? sender, EventArgs e)
@@ -57,11 +69,40 @@ namespace VIBN_Tools.Application.View
 
         private void OnPreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
         {
-            if ((System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) == 0)
+            var shiftPressed = (System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Shift) != 0;
+            if (shiftPressed)
+            {
+                if (TryScrollHorizontally(e.Delta))
+                    e.Handled = true;
+                return;
+            }
+
+            var hit = e.OriginalSource as DependencyObject;
+            if (FindAncestor<ComboBox>(hit) is not null)
                 return;
 
-            if (TryScrollHorizontally(e.Delta))
-                e.Handled = true;
+            var viewer = FindScrollableParent(hit, horizontal: false);
+            if (viewer is null)
+                return;
+
+            viewer.ScrollToVerticalOffset(viewer.VerticalOffset - ScaleWheelDelta(e.Delta));
+            e.Handled = true;
+        }
+
+        private static double ScaleWheelDelta(int delta) => delta / 120d * 32d;
+
+        private static T? FindAncestor<T>(DependencyObject? current) where T : DependencyObject
+        {
+            while (current is not null)
+            {
+                if (current is T match)
+                    return match;
+                current = current is Visual || current is System.Windows.Media.Media3D.Visual3D
+                    ? VisualTreeHelper.GetParent(current)
+                    : LogicalTreeHelper.GetParent(current);
+            }
+
+            return null;
         }
 
         private bool TryScrollHorizontally(int delta)
@@ -71,19 +112,20 @@ namespace VIBN_Tools.Application.View
 
             var point = PointFromScreen(new Point(cursor.X, cursor.Y));
             var hit = InputHitTest(point) as DependencyObject;
-            var viewer = FindScrollableParent(hit);
+            var viewer = FindScrollableParent(hit, horizontal: true);
             if (viewer is null)
                 return false;
 
-            viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - Math.Sign(delta) * 64);
+            viewer.ScrollToHorizontalOffset(viewer.HorizontalOffset - ScaleWheelDelta(delta));
             return true;
         }
 
-        private static ScrollViewer? FindScrollableParent(DependencyObject? current)
+        private static ScrollViewer? FindScrollableParent(DependencyObject? current, bool horizontal)
         {
             while (current is not null)
             {
-                if (current is ScrollViewer viewer && viewer.ScrollableWidth > 0)
+                if (current is ScrollViewer viewer &&
+                    (horizontal ? viewer.ScrollableWidth > 0 : viewer.ScrollableHeight > 0))
                     return viewer;
 
                 current = current is Visual || current is System.Windows.Media.Media3D.Visual3D
@@ -93,6 +135,12 @@ namespace VIBN_Tools.Application.View
 
             return null;
         }
+
+        /*
+         * Keep mouse-wheel navigation independent from item selection. WPF's
+         * default logical scrolling advances complete rows; pixel scrolling
+         * above prevents container details from disappearing between steps.
+         */
 
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out NativePoint point);

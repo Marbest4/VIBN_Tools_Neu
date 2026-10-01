@@ -117,6 +117,24 @@ internal static class RuntimeVisualPlanBinder
     {
         ArgumentNullException.ThrowIfNull(plan);
         var document = XDocument.Load(plan.SourceXmlPath, LoadOptions.None);
+        var allSourceContainers = document.Descendants("Container").ToArray();
+        var allPlanContainers = plan.Nodes.Where(node => node.Kind == VisualNodeKind.Container).ToArray();
+        if (allSourceContainers.Length == allPlanContainers.Length)
+        {
+            for (var index = 0; index < allSourceContainers.Length; index++)
+            {
+                if (!plan.ContainerTypeOverrides.Any(item => string.Equals(
+                        item.ContainerId,
+                        allPlanContainers[index].Id,
+                        StringComparison.Ordinal)))
+                    continue;
+                var typeElement = allSourceContainers[index].Element("Type");
+                if (typeElement is null)
+                    allSourceContainers[index].AddFirst(new XElement("Type", allPlanContainers[index].TypeName));
+                else
+                    typeElement.Value = allPlanContainers[index].TypeName;
+            }
+        }
         var supportedContainers = document.Descendants("Container")
             .Where(element => ContainerMetadataCatalog.TryGet(
                 element.Element("Type")?.Value ?? string.Empty,

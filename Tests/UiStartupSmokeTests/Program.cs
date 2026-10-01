@@ -32,7 +32,13 @@ internal static class Program
     [STAThread]
     private static int Main()
     {
-        _ = new System.Windows.Application();
+        _ = new System.Windows.Application
+        {
+            // The test deliberately constructs and closes MainWindow before it
+            // exercises the remaining pages. Closing that fixture must not put
+            // WPF's singleton Application into its irreversible shutdown state.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown
+        };
         Services.Initialize();
         var bindingTrace = PresentationTraceSources.DataBindingSource;
         var bindingErrors = new BindingErrorTraceListener();
@@ -46,6 +52,7 @@ internal static class Program
 
             var workspacePage = new ViCoWorkspacePage();
             ExerciseDeferredTemplates(workspacePage);
+            VerifyMainWindowUsesLazyTabContent();
             var feeVersionInfo = new FeeVersionInfoProvider().Read();
             if (string.Equals(feeVersionInfo.UsedSdkVersion, "Nicht erkannt", StringComparison.Ordinal))
                 throw new InvalidOperationException("The FEE SDK used by the running build must be visible in Project Settings.");
@@ -87,6 +94,12 @@ internal static class Program
                 ProjectCards: new[]
                 {
                     new ViCoProjectCardInfo(
+                        900,
+                        "GM1234/05-130 Planung",
+                        "Planung",
+                        new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
+                        new DateTimeOffset(2026, 7, 31, 0, 0, 0, TimeSpan.Zero)),
+                    new ViCoProjectCardInfo(
                         901,
                         "GM1234/05-130 Demo",
                         "In Arbeit",
@@ -96,9 +109,17 @@ internal static class Program
             var workstationRow = new ViCoWorkstationRowVM(workstation);
             if (workstationRow.WorkingStartSummary != "01.08.2026" ||
                 workstationRow.WorkingEndSummary != "30.09.2026" ||
-                workstationRow.WorkingStartSummary.Contains("Karte", StringComparison.OrdinalIgnoreCase))
+                workstationRow.WorkingStartSummary.Contains("Karte", StringComparison.OrdinalIgnoreCase) ||
+                workstationRow.PlanningStartProjects.Single().CardId != 900)
             {
                 throw new InvalidOperationException("ViCo project date columns must show only the resolved dates.");
+            }
+            if (ViCoFeatureBootstrapper.ResolveWorkingProjectForComputer("localhost", [workstation]) != "localhost" ||
+                ViCoFeatureBootstrapper.ResolveWorkingProjectForComputer("GM12345.example.local", [workstation]) !=
+                    "GM1234/05-130 Demo")
+            {
+                throw new InvalidOperationException(
+                    "The FEE header station did not resolve the connected workstation's In Arbeit project.");
             }
             if (ExportFileNamePolicy.Create("A/B", "fallback") == "A/B" ||
                 ExportFileNamePolicy.Create("", "fallback") != "fallback")
@@ -1290,6 +1311,40 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 "A successfully created configuration subtask would be posted again on Enter.");
+        }
+    }
+
+    private static void VerifyMainWindowUsesLazyTabContent()
+    {
+        var window = new MainWindow();
+        try
+        {
+            var hosts = FindLogicalChildren<LazyPageHost>(window).ToArray();
+            if (hosts.Length < 15)
+            {
+                throw new InvalidOperationException(
+                    $"Expected lazy hosts for the non-startup tabs, found only {hosts.Length}.");
+            }
+            if (hosts.Any(host => host.Content is not null))
+            {
+                throw new InvalidOperationException(
+                    "A non-visible main tab was created eagerly during MainWindow construction.");
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private static IEnumerable<T> FindLogicalChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+        {
+            if (child is T match)
+                yield return match;
+            foreach (var descendant in FindLogicalChildren<T>(child))
+                yield return descendant;
         }
     }
 

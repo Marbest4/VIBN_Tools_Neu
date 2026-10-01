@@ -75,6 +75,48 @@ public sealed class ContainerToFeeVisualPlanService
     public IReadOnlyList<VisualFeeSignalLink> DiscoveredFeeSignalLinks => _feeSignalLinks;
     public IReadOnlyList<VisualFeeObjectLink> DiscoveredFeeSimObjectLinks => _feeSimObjectLinks;
 
+    public IReadOnlyList<string> SupportedContainerTypes => ContainerMetadataCatalog.SupportedXmlTypes;
+
+    public bool CanClassifySignalOnlyContainer(string? containerId)
+    {
+        var plan = CurrentPlan;
+        var container = string.IsNullOrWhiteSpace(containerId) ? null : plan?.FindNode(containerId);
+        if (plan is null || container?.Kind != VisualNodeKind.Container)
+            return false;
+        if (plan.ContainerTypeOverrides.Any(item => string.Equals(item.ContainerId, container.Id, StringComparison.Ordinal)))
+            return true;
+        if (ContainerMetadataCatalog.TryGet(container.TypeName, out _))
+            return false;
+        return plan.Nodes.Any(node =>
+                   string.Equals(node.ContainerId, container.Id, StringComparison.Ordinal) &&
+                   node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal) &&
+               !plan.Targets.Any(target => string.Equals(target.ContainerId, container.Id, StringComparison.Ordinal));
+    }
+
+    public bool SetSignalOnlyContainerType(string containerId, string typeName)
+    {
+        var plan = CurrentPlan;
+        if (plan is null || !CanClassifySignalOnlyContainer(containerId) ||
+            !ContainerMetadataCatalog.TryGet(typeName, out _))
+            return false;
+
+        var current = plan.ContainerTypeOverrides.FirstOrDefault(item =>
+            string.Equals(item.ContainerId, containerId, StringComparison.Ordinal));
+        if (string.Equals(current?.TypeName, typeName, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        var before = Capture(plan);
+        var overrides = plan.ContainerTypeOverrides
+            .Where(item => !string.Equals(item.ContainerId, containerId, StringComparison.Ordinal))
+            .Append(new VisualContainerTypeOverride(containerId, typeName))
+            .ToArray();
+        plan.ReplaceContainerTypeOverrides(overrides);
+        plan.ReplaceAssignments(plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId) is not null));
+        RecordMutation(before);
+        RaisePlanChanged();
+        return true;
+    }
+
     public VisualFeeObjectConnectionSummary GetFeeObjectConnectionSummary(string feeObjectId)
     {
         var feeObject = FindFeeObject(feeObjectId);
@@ -1167,12 +1209,7 @@ public sealed class ContainerToFeeVisualPlanService
         var plan = CurrentPlan ?? throw new InvalidOperationException("Es ist kein visueller Plan geladen.");
         cancellationToken.ThrowIfCancellationRequested();
         var effectiveDocument = RuntimeVisualPlanBinder.CreateEffectiveDocument(plan);
-        var includedIds = plan.Nodes
-            .Where(node => node.Kind == VisualNodeKind.Container)
-            .Where(node => plan.IsGenerationSelected(node.Id) ||
-                           !ContainerMetadataCatalog.TryGet(node.TypeName, out _))
-            .Select(node => node.Id)
-            .ToHashSet(StringComparer.Ordinal);
+        var includedIds = CreateEffectiveIncludedContainerIds(plan, effectiveDocument);
         var snapshot = FeeContainerProvenanceCodec.Create(
             effectiveDocument,
             includedIds,
@@ -1181,6 +1218,56 @@ public sealed class ContainerToFeeVisualPlanService
         await Task.Run(
             () => FeeContainerProvenanceCodec.SaveAtomically(snapshot, targetPath),
             cancellationToken);
+    }
+
+    private static IReadOnlySet<string> CreateEffectiveIncludedContainerIds(
+        VisualPlan plan,
+        XDocument effectiveDocument)
+    {
+        var effectiveContainers = effectiveDocument.Descendants()
+            .Where(element => element.Name.LocalName == "Container")
+            .ToArray();
+        var planContainers = plan.Nodes
+            .Where(node => node.Kind == VisualNodeKind.Container)
+            .ToArray();
+        if (effectiveContainers.Length != planContainers.Length)
+        {
+            return planContainers
+                .Where(node => plan.IsGenerationSelected(node.Id) ||
+                               !ContainerMetadataCatalog.TryGet(node.TypeName, out _))
+                .Select(node => node.Id)
+                .ToHashSet(StringComparer.Ordinal);
+        }
+
+        // A type override changes the stable container identity because the type
+        // is part of that identity. Recreate the IDs from the effective XML while
+        // retaining the user's selection from the corresponding plan node.
+        var occurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        var includedIds = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < effectiveContainers.Length; index++)
+        {
+            var planContainer = planContainers[index];
+            if (!plan.IsGenerationSelected(planContainer.Id) &&
+                ContainerMetadataCatalog.TryGet(planContainer.TypeName, out _))
+                continue;
+
+            var element = effectiveContainers[index];
+            var sourceId = element.Attribute("id")?.Value ?? string.Empty;
+            var component = element.Elements().FirstOrDefault(child =>
+                child.Name.LocalName == "Component")?.Value ?? string.Empty;
+            var type = element.Elements().FirstOrDefault(child =>
+                child.Name.LocalName == "Type")?.Value ?? string.Empty;
+            var identity = $"{sourceId}\u001f{component}\u001f{type}";
+            occurrences.TryGetValue(identity, out var occurrence);
+            occurrences[identity] = ++occurrence;
+            includedIds.Add(ContainerXmlVisualPlanParser.CreateContainerId(
+                sourceId,
+                component,
+                type,
+                occurrence));
+        }
+
+        return includedIds;
     }
 
     public bool SetCreationRequested(string containerId, bool requested)
@@ -1742,7 +1829,24 @@ public sealed class ContainerToFeeVisualPlanService
         var signalAssignments = document.SignalAssignments ?? [];
         var addedSignals = document.AddedSignals ?? [];
         var slotOverrides = document.SlotOverrides ?? [];
+        var containerTypeOverrides = document.ContainerTypeOverrides ?? [];
         var removedSignalNodeIds = document.RemovedSignalNodeIds ?? [];
+
+        var validTypeOverrides = containerTypeOverrides.Where(typeOverride =>
+        {
+            var valid = plan.FindNode(typeOverride.ContainerId)?.Kind == VisualNodeKind.Container &&
+                        ContainerMetadataCatalog.TryGet(typeOverride.TypeName, out _);
+            if (!valid)
+            {
+                issues.Add(new VisualIssue(
+                    VisualIssueSeverity.Warning,
+                    "SIDECAR_CONTAINER_TYPE_INVALID",
+                    $"Die gespeicherte Containertyp-Auswahl '{typeOverride.TypeName}' ist nicht mehr gültig und wurde ignoriert.",
+                    typeOverride.ContainerId));
+            }
+            return valid;
+        }).ToArray();
+        plan.ReplaceContainerTypeOverrides(validTypeOverrides);
 
         var validAddedSignals = addedSignals.Where(added =>
         {
@@ -1883,16 +1987,6 @@ public sealed class ContainerToFeeVisualPlanService
                 "Die frühere Auswahl 'Signale erzeugen' ist entfallen. Signale werden automatisch gesucht, wiederverwendet oder in einem neuen AutoGenerated-Interface erzeugt."));
         }
 
-        plan.ReplaceAssignments(assignments);
-        plan.ReplaceCreationRequests(requests.Where(request =>
-            !request.IsRequested && plan.FindNode(request.ContainerId)?.SupportsCreation == true));
-        plan.ReplaceGenerationSelections(generationSelections.Where(selection =>
-            !selection.IsSelected &&
-            plan.FindNode(selection.ContainerId)?.Kind == VisualNodeKind.Container));
-        plan.ReplaceSignalCreationSelections([]);
-        plan.ReplaceSignalAssignments(signalAssignments.Where(assignment =>
-            plan.FindNode(assignment.SignalNodeId)?.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
-            !removedSignalNodeIds.Contains(assignment.SignalNodeId, StringComparer.Ordinal)));
         plan.ReplaceSlotOverrides(slotOverrides.Where(slotOverride =>
         {
             var signalNode = plan.FindNode(slotOverride.SignalNodeId);
@@ -1903,6 +1997,20 @@ public sealed class ContainerToFeeVisualPlanService
                    descriptor.Slots.Contains(slotOverride.Slot);
         }));
         plan.ReplaceRemovedSignalNodeIds(removedSignalNodeIds);
+        // Rebuild type-derived logic and SimObject targets after added signals
+        // and effective slots are restored. Otherwise an older sidecar order
+        // can remove those generated nodes or validate against stale slots.
+        plan.ReplaceContainerTypeOverrides(validTypeOverrides);
+        plan.ReplaceAssignments(assignments);
+        plan.ReplaceCreationRequests(requests.Where(request =>
+            !request.IsRequested && plan.FindNode(request.ContainerId)?.SupportsCreation == true));
+        plan.ReplaceGenerationSelections(generationSelections.Where(selection =>
+            !selection.IsSelected &&
+            plan.FindNode(selection.ContainerId)?.Kind == VisualNodeKind.Container));
+        plan.ReplaceSignalCreationSelections([]);
+        plan.ReplaceSignalAssignments(signalAssignments.Where(assignment =>
+            plan.FindNode(assignment.SignalNodeId)?.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
+            !removedSignalNodeIds.Contains(assignment.SignalNodeId, StringComparer.Ordinal)));
         plan.SetExistingInterfaceSelections(document.ExistingInterfaceSelections.Count > 0
             ? document.ExistingInterfaceSelections
             : document.ExistingInterfaceSelection is null
@@ -1913,28 +2021,8 @@ public sealed class ContainerToFeeVisualPlanService
 
     private static VisualPlan CloneWithIssues(VisualPlan plan, IEnumerable<VisualIssue> additionalIssues)
     {
-        var clone = new VisualPlan(
-            plan.SourceXmlPath,
-            plan.SidecarPath,
-            plan.SourceFingerprint,
-            plan.Nodes.Where(node => !plan.IsAddedSignal(node.Id)).ToArray(),
-            plan.Roots,
-            plan.Edges,
-            plan.Targets,
-            plan.Assignments,
-            plan.CreationRequests,
-            plan.GenerationSelections,
-            plan.SignalCreationSelections,
-            plan.SignalAssignments,
-            plan.AddedSignals,
-            plan.SlotOverrides,
-            [.. plan.RemovedSignalNodeIds],
-            plan.ExistingInterfaceSelection,
-            plan.Issues.Concat(additionalIssues)
-                .DistinctBy(issue => (issue.Severity, issue.Code, issue.Message, issue.NodeId))
-                .ToArray());
-        clone.SetExistingInterfaceSelections(plan.ExistingInterfaceSelections);
-        return clone;
+        plan.AddIssues(additionalIssues);
+        return plan;
     }
 
     private VisualFeeObject? FindFeeObject(string? feeObjectId) =>
@@ -2071,19 +2159,21 @@ public sealed class ContainerToFeeVisualPlanService
             [.. plan.SignalAssignments],
             [.. plan.AddedSignals],
             [.. plan.SlotOverrides],
+            [.. plan.ContainerTypeOverrides],
             [.. plan.RemovedSignalNodeIds],
             [.. plan.ExistingInterfaceSelections]);
 
     private static void Restore(VisualPlan plan, PlanState state)
     {
+        plan.ReplaceAddedSignals(state.AddedSignals);
+        plan.ReplaceSlotOverrides(state.SlotOverrides);
+        plan.ReplaceRemovedSignalNodeIds(state.RemovedSignalNodeIds);
+        plan.ReplaceContainerTypeOverrides(state.ContainerTypeOverrides);
         plan.ReplaceAssignments(state.Assignments);
         plan.ReplaceCreationRequests(state.CreationRequests);
         plan.ReplaceGenerationSelections(state.GenerationSelections);
         plan.ReplaceSignalCreationSelections(state.SignalCreationSelections);
-        plan.ReplaceAddedSignals(state.AddedSignals);
         plan.ReplaceSignalAssignments(state.SignalAssignments);
-        plan.ReplaceSlotOverrides(state.SlotOverrides);
-        plan.ReplaceRemovedSignalNodeIds(state.RemovedSignalNodeIds);
         plan.SetExistingInterfaceSelections(state.ExistingInterfaceSelections);
     }
 
@@ -2122,6 +2212,7 @@ public sealed class ContainerToFeeVisualPlanService
         IReadOnlyList<VisualSignalAssignment> SignalAssignments,
         IReadOnlyList<VisualAddedSignal> AddedSignals,
         IReadOnlyList<VisualSlotOverride> SlotOverrides,
+        IReadOnlyList<VisualContainerTypeOverride> ContainerTypeOverrides,
         IReadOnlyList<string> RemovedSignalNodeIds,
         IReadOnlyList<VisualExistingInterfaceSelection> ExistingInterfaceSelections);
 

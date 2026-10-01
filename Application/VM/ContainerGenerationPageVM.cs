@@ -1021,6 +1021,10 @@ namespace VIBN_Tools.Application.VM
             LastGenerationSettingsSummary = "Generiert mit: " + BuildGroupingRuleSummary() +
                 $" Namensquelle: {Settings.SelectedOption}; Substitution: " +
                 (string.IsNullOrWhiteSpace(Settings.RegexSubstitution) ? "keine" : $"'{Settings.RegexSubstitution}'") + ".";
+            AddActivity(
+                "Generierung",
+                "Grouping-Einstellungen verwendet",
+                LastGenerationSettingsSummary);
             using var measurement = PerformanceMeasurementService.Instance.Start(
                 "ContainerGeneration",
                 "Container generieren und Reimport abgleichen");
@@ -2746,10 +2750,17 @@ namespace VIBN_Tools.Application.VM
                 if (data == null)
                     return;
 
-                if (!data.Equals(SelectedUnassignedEntry) && !data.Equals(SelectedFilteredEntry))
+                if (!dataGrid.SelectedItems.Contains(data))
                     return;
 
+                var selectedEntries = dataGrid.SelectedItems
+                    .OfType<ContainerEntry>()
+                    .ToArray();
+                if (!selectedEntries.Contains(data))
+                    selectedEntries = [data];
+
                 var dataObj = new DataObject(data);
+                dataObj.SetData(typeof(ContainerEntry[]), selectedEntries);
                 dataObj.SetData("DragSource", dataGrid);
                 DragDrop.DoDragDrop(dataGrid, dataObj, DragDropEffects.Move);
             }
@@ -2782,9 +2793,15 @@ namespace VIBN_Tools.Application.VM
                 return;
             if (e.Source is not DataGrid DropDataGrid)
                 return;
-            if (e.Data.GetData(typeof(ContainerEntry)) is not ContainerEntry data)
-                return;
             if (e.Data.GetData("DragSource") is not DataGrid)
+                return;
+
+            var dataItems = e.Data.GetData(typeof(ContainerEntry[])) is ContainerEntry[] selectedItems
+                ? selectedItems.Distinct().ToArray()
+                : e.Data.GetData(typeof(ContainerEntry)) is ContainerEntry singleItem
+                    ? [singleItem]
+                    : Array.Empty<ContainerEntry>();
+            if (dataItems.Length == 0)
                 return;
 
             // Get the target row
@@ -2794,14 +2811,17 @@ namespace VIBN_Tools.Application.VM
                     "Signal als gefiltert einordnen",
                     () =>
                     {
-                        GenerationWorkspaceEditor.MoveToFiltered(
-                            data,
-                            ContainerList,
-                            UnassignedEntries,
-                            FilteredEntries);
-                        MarkAsManual(data, "Manuell als gefiltert eingeordnet.");
+                        foreach (var data in dataItems)
+                        {
+                            GenerationWorkspaceEditor.MoveToFiltered(
+                                data,
+                                ContainerList,
+                                UnassignedEntries,
+                                FilteredEntries);
+                            MarkAsManual(data, "Manuell als gefiltert eingeordnet.");
+                        }
                     },
-                    $"Signal „{data.Signal}“");
+                    DescribeDraggedSignals(dataItems));
             }
             else if (DropDataGrid.ItemsSource == UnassignedEntries)
             {
@@ -2809,15 +2829,18 @@ namespace VIBN_Tools.Application.VM
                     "Signal als nicht zugeordnet einordnen",
                     () =>
                     {
-                        GenerationWorkspaceEditor.MoveToUnassigned(
-                            data,
-                            data.Signal,
-                            ContainerList,
-                            UnassignedEntries,
-                            FilteredEntries);
-                        MarkAsManual(data, "Manuell als nicht zugeordnet eingeordnet.");
+                        foreach (var data in dataItems)
+                        {
+                            GenerationWorkspaceEditor.MoveToUnassigned(
+                                data,
+                                data.Signal,
+                                ContainerList,
+                                UnassignedEntries,
+                                FilteredEntries);
+                            MarkAsManual(data, "Manuell als nicht zugeordnet eingeordnet.");
+                        }
                     },
-                    $"Signal „{data.Signal}“");
+                    DescribeDraggedSignals(dataItems));
             }
             else
             {
@@ -2826,10 +2849,57 @@ namespace VIBN_Tools.Application.VM
                     ? $"Container „{target.Component}“ ({target.Type})"
                     : "neuer Container";
                 RunWorkspaceAction(
-                    "Signal einem Container zuordnen",
-                    () => MoveData(targetRow, data),
-                    $"Signal „{data.Signal}“ → {targetDescription}");
+                    dataItems.Length == 1 ? "Signal einem Container zuordnen" : "Signale einem Container zuordnen",
+                    () => MoveDataBatch(targetRow, dataItems),
+                    $"{DescribeDraggedSignals(dataItems)} → {targetDescription}");
             }
+        }
+
+        private static string DescribeDraggedSignals(IReadOnlyCollection<ContainerEntry> entries) =>
+            entries.Count == 1
+                ? $"Signal „{entries.First().Signal}“"
+                : $"{entries.Count} ausgewählte Signale";
+
+        private void MoveDataBatch(DataGridRow? targetRow, IReadOnlyList<ContainerEntry> entries)
+        {
+            if (targetRow?.Item is ContainerData)
+            {
+                foreach (var entry in entries)
+                    MoveData(targetRow, entry);
+                return;
+            }
+
+            if (targetRow is not null && targetRow.Item != CollectionView.NewItemPlaceholder)
+                return;
+
+            var first = entries.First();
+            var createdContainer = new ContainerData
+            {
+                Id = $"manual-{Guid.NewGuid():N}",
+                Component = CreateContainerName(first)
+            };
+
+            foreach (var entry in entries)
+            {
+                GenerationWorkspaceEditor.MoveToContainer(
+                    entry,
+                    createdContainer,
+                    ContainerList,
+                    UnassignedEntries,
+                    FilteredEntries);
+                AttachSlotChangedHandler(createdContainer, entry);
+                MarkAsManual(entry, "Manuell einem neuen Container zugeordnet.");
+                _actionLogger.LogAdded(
+                    createdContainer.Component,
+                    createdContainer.Type,
+                    entry,
+                    entry.Slot,
+                    null,
+                    null,
+                    GetActionLogSourceKey());
+            }
+
+            createdContainer.ManuallyChecked = false;
         }
 
 
@@ -3302,5 +3372,21 @@ namespace VIBN_Tools.Application.VM
         string? SourcePath = null)
     {
         public bool IsUserPreset => !string.IsNullOrWhiteSpace(SourcePath);
+
+        public string ToolTipText
+        {
+            get
+            {
+                var criteria = new List<string>();
+                if (GroupByComponent) criteria.Add("Component");
+                if (GroupByType) criteria.Add("Typ");
+                if (GroupById) criteria.Add($"ID mit /{RegexId}/");
+                if (GroupByAddress) criteria.Add($"Adresse mit /{RegexAddress}/");
+                var substitution = string.IsNullOrWhiteSpace(RegexSubstitution)
+                    ? "Der erkannte Component-/ID-Wert bleibt als Name erhalten."
+                    : $"Der Containername wird aus den Klammergruppen von /{RegexSubstitution}/ auf {SelectedOption} gebildet.";
+                return $"{Description}\nGruppenschlüssel: {string.Join(" + ", criteria.DefaultIfEmpty("keine Gruppierung"))}.\n{substitution}";
+            }
+        }
     }
 }

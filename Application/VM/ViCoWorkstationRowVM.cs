@@ -54,6 +54,9 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 		string.Equals(PcName, "Angelegt (Tool)", StringComparison.OrdinalIgnoreCase);
 	public string PlanningProjectHeader => FormatProjectHeader(PlanningProjects.Count);
 	public string WorkingProjectHeader => FormatProjectHeader(WorkingProjects.Count);
+	public IReadOnlyList<ViCoProjectCardItemVM> PlanningStartProjects => PlanningProjects
+		.Where(project => project.CanOpenCard && !string.Equals(project.Start, "nicht angegeben", StringComparison.Ordinal))
+		.ToArray();
 	public string PlanningStartSummary => FormatDates(Model.PlanningProjectCards, card => card.StartDate);
 	public string PlanningEndSummary => FormatDates(Model.PlanningProjectCards, card => card.Deadline);
 	public string WorkingStartSummary => FormatDates(Model.WorkingProjectCards, card => card.StartDate);

@@ -284,18 +284,13 @@
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
-                    <Expander Grid.Row="4" Margin="0,7,0,0" Header="Legende" IsExpanded="False">
-                        <StackPanel Margin="5">
-                            <WrapPanel>
-                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFC6EFCE"/><TextBlock Margin="0,0,10,0" Text="Grün: vorhanden und vollständig verknüpft"/>
-                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFE8D9F3"/><TextBlock Margin="0,0,10,0" Text="Lila: vorhanden, Verknüpfung fehlt"/>
-                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFFFF2CC"/><TextBlock Margin="0,0,10,0" Text="Gelb: fehlt und wird erzeugt / Unknown wird verarbeitet"/>
-                                <Border Width="16" Height="16" Margin="0,0,4,0" Background="#FFEF9A9A"/><TextBlock Text="Rot: Fehler oder fehlt und wird nicht erzeugt"/>
-                            </WrapPanel>
-                            <TextBlock Margin="0,5,0,0" TextWrapping="Wrap"
-                                       Text="Checkbox am Container: kompletter Container wird im Lauf berücksichtigt. Schreibgeschützte Checkbox am Unterobjekt: dieses Objekt wird tatsächlich neu erzeugt; leer bedeutet wiederverwenden, nur verknüpfen oder überspringen." />
-                        </StackPanel>
-                    </Expander>
+                    <WrapPanel Grid.Row="4" Margin="0,7,0,0"
+                               ToolTip="Farben werden für Signale, SimObjects und ihre übergeordneten Strukturknoten gleich ausgewertet.">
+                        <Border Width="13" Height="13" Background="#FFC6EFCE"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="gültig"/>
+                        <Border Width="13" Height="13" Background="#FFE8D9F3"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="Verknüpfung fehlt"/>
+                        <Border Width="13" Height="13" Background="#FFFFF2CC"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="wird erzeugt"/>
+                        <Border Width="13" Height="13" Background="#FFEF9A9A"/><TextBlock Margin="3,0,0,0" FontSize="10" Text="Fehler"/>
+                    </WrapPanel>
                 </Grid>
             </Border>
 
@@ -343,6 +338,15 @@
                                 <Button Content="Keine" Command="{Binding DeselectAllMissingCreationCommand}" Padding="7,2" Margin="4,0,0,0" />
                             </StackPanel>
                         </Grid>
+
+                        <StackPanel Margin="0,8,0,0"
+                                    Visibility="{Binding CanClassifySignalOnlyContainer, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Text="Signal-only-Container typisieren" />
+                            <ComboBox Margin="0,3,0,0" MinHeight="28"
+                                      ItemsSource="{Binding SignalOnlyContainerTypes}"
+                                      SelectedItem="{Binding SelectedSignalOnlyContainerType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="Wählt einen bekannten Containertyp. Dessen Logik- und SimObject-Ziele werden in den Plan übernommen; die Quell-XML bleibt unverändert, bis Container.xml speichern gewählt wird." />
+                        </StackPanel>
 
                         <StackPanel Margin="0,8,0,0"
                                     Visibility="{Binding SelectedTreeNode.CanEditSlot, Converter={StaticResource BooleanToVisibilityConverter}}">
@@ -558,8 +562,13 @@
                         <TextBox Grid.Row="1" MinHeight="29" Margin="0,0,0,6"
                                  Text="{Binding FeeObjectFilter, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Nach Name oder Typ filtern" />
-                        <CheckBox Grid.Row="2" Margin="0,0,0,6" Content="Nur kompatible Objekte"
-                                  IsChecked="{Binding ShowOnlyCompatibleFeeObjects}" />
+                        <WrapPanel Grid.Row="2" Margin="0,0,0,6">
+                            <CheckBox Content="Nur kompatible Objekte"
+                                      IsChecked="{Binding ShowOnlyCompatibleFeeObjects}" />
+                            <CheckBox Margin="12,0,0,0" Content="Details anzeigen"
+                                      IsChecked="{Binding ShowFeeObjectDetails}"
+                                      ToolTip="Blendet Live-Verknüpfungen und Plan-Zuordnungen ein oder aus." />
+                        </WrapPanel>
                         <ComboBox Grid.Row="3" MinHeight="28" Margin="0,0,0,6"
                                   ItemsSource="{Binding FeeObjectStatusFilters}"
                                   SelectedItem="{Binding SelectedFeeObjectStatusFilter}"
@@ -595,9 +604,11 @@
                                                 <TextBlock Text="{Binding DuplicateStateText}" Foreground="{Binding StateForeground}"
                                                            FontSize="10" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                 <TextBlock Text="{Binding ConnectionStateText}" Foreground="{Binding StateForeground}"
-                                                           FontSize="10" TextWrapping="Wrap" />
+                                                           FontSize="10" TextWrapping="Wrap"
+                                                           Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                 <TextBlock Text="{Binding PlanAssignmentText}" Foreground="#444444" FontSize="10"
-                                                           TextWrapping="Wrap" MaxHeight="42" />
+                                                           TextWrapping="Wrap" MaxHeight="42"
+                                                           Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                             </StackPanel>
                                             <Button Grid.Column="1" Margin="6,0,0,0" Padding="5,2" Content="Löschen"
                                                     Command="{Binding DataContext.DeleteFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
@@ -653,11 +664,17 @@
                         <TextBox Grid.Row="2" MinHeight="29" Margin="0,0,0,6"
                                   Text="{Binding FeeSignalFilter, UpdateSourceTrigger=PropertyChanged}"
                                   ToolTip="Nach Tag, Adresse/Pfad, Interface oder Datentyp filtern" />
-                        <ComboBox Grid.Row="3" MinHeight="28" Margin="0,0,0,6"
-                                  ItemsSource="{Binding FeeSignalStatusFilters}"
-                                  SelectedItem="{Binding SelectedFeeSignalStatusFilter}"
-                                  DisplayMemberPath="DisplayName"
-                                  ToolTip="Signale nach Zuordnung, Fehlern oder Duplikaten filtern" />
+                        <Grid Grid.Row="3" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <ComboBox MinHeight="28"
+                                      ItemsSource="{Binding FeeSignalStatusFilters}"
+                                      SelectedItem="{Binding SelectedFeeSignalStatusFilter}"
+                                      DisplayMemberPath="DisplayName"
+                                      ToolTip="Signale nach Zuordnung, Fehlern oder Duplikaten filtern" />
+                            <CheckBox Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"
+                                      Content="Details anzeigen" IsChecked="{Binding ShowFeeSignalDetails}"
+                                      ToolTip="Blendet Interface, Adresse und erkannte Zuordnung ein oder aus." />
+                        </Grid>
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeSignalsView}"
                                  SelectedItem="{Binding SelectedFeeSignal, Mode=TwoWay}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeSignal}"
@@ -674,9 +691,12 @@
                                             ToolTip="{Binding ToolTipText}">
                                         <StackPanel>
                                             <TextBlock FontWeight="SemiBold" Text="{Binding Tag}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock FontSize="10" Foreground="#666666" Text="{Binding Location}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock FontSize="10" Foreground="#777777" Text="{Binding InterfaceName, StringFormat=Interface: {0}}" TextTrimming="CharacterEllipsis" />
-                                            <TextBlock FontSize="10" Foreground="#FF356A35" Text="{Binding AssignmentText}" TextWrapping="Wrap" />
+                                            <TextBlock FontSize="10" Foreground="#666666" Text="{Binding Location}" TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding DataContext.ShowFeeSignalDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                            <TextBlock FontSize="10" Foreground="#777777" Text="{Binding InterfaceName, StringFormat=Interface: {0}}" TextTrimming="CharacterEllipsis"
+                                                       Visibility="{Binding DataContext.ShowFeeSignalDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                            <TextBlock FontSize="10" Foreground="#FF356A35" Text="{Binding AssignmentText}" TextWrapping="Wrap"
+                                                       Visibility="{Binding DataContext.ShowFeeSignalDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>

@@ -37,6 +37,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private ContainerToFeeVisualFeeInterfaceVM? _selectedExistingInterface;
     private ContainerToFeeVisualFeeObjectVM? _selectedFeeObject;
     private ContainerToFeeVisualFeeSignalVM? _selectedFeeSignal;
+    private string? _selectedSignalOnlyContainerType;
     private VisualIssue? _selectedIssue;
     private bool _synchronizeRelatedSelections = true;
     private bool _isSynchronizingSelections;
@@ -48,6 +49,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private VisualStatusFilterOption _selectedFeeObjectStatusFilter = VisualStatusFilterOption.All;
     private VisualStatusFilterOption _selectedFeeSignalStatusFilter = VisualStatusFilterOption.All;
     private bool _showOnlyCompatibleFeeObjects;
+    private bool _showFeeObjectDetails;
+    private bool _showFeeSignalDetails;
     private bool _isBusy;
     private string _statusText = "Container-XML öffnen, um eine Vorschau zu erstellen.";
     private string _sourceXmlPath = string.Empty;
@@ -443,6 +446,30 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
     }
 
+    public bool ShowFeeObjectDetails
+    {
+        get => _showFeeObjectDetails;
+        set
+        {
+            if (_showFeeObjectDetails == value)
+                return;
+            _showFeeObjectDetails = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool ShowFeeSignalDetails
+    {
+        get => _showFeeSignalDetails;
+        set
+        {
+            if (_showFeeSignalDetails == value)
+                return;
+            _showFeeSignalDetails = value;
+            OnPropertyChanged();
+        }
+    }
+
     public bool SelectedContainerSupportsCreation
     {
         get
@@ -450,6 +477,34 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             var containerId = SelectedTreeNode?.ContainerId;
             return containerId is not null &&
                    _planService.CurrentPlan?.FindNode(containerId)?.SupportsCreation == true;
+        }
+    }
+
+    public IReadOnlyList<string> SignalOnlyContainerTypes => _planService.SupportedContainerTypes;
+
+    public bool CanClassifySignalOnlyContainer =>
+        _planService.CanClassifySignalOnlyContainer(SelectedTreeNode?.ContainerId);
+
+    public string? SelectedSignalOnlyContainerType
+    {
+        get => _selectedSignalOnlyContainerType;
+        set
+        {
+            if (string.Equals(_selectedSignalOnlyContainerType, value, StringComparison.OrdinalIgnoreCase))
+                return;
+            _selectedSignalOnlyContainerType = value;
+            OnPropertyChanged();
+            if (_isApplyingPlan || string.IsNullOrWhiteSpace(value) ||
+                SelectedTreeNode?.ContainerId is not { } containerId)
+                return;
+            if (!_planService.SetSignalOnlyContainerType(containerId, value))
+            {
+                StatusText = "Der Signal-only-Container konnte nicht typisiert werden.";
+                return;
+            }
+            StatusText = $"Signal-only-Container wurde als '{value}' klassifiziert. Die dafür bekannten Logik- und SimObject-Ziele wurden in den Plan aufgenommen.";
+            _log.Information(LogArea, StatusText);
+            AddOperationDetail("Containertyp gewählt", StatusText);
         }
     }
 
@@ -542,7 +597,13 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             _selectedTreeNode = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedContainerSupportsCreation));
+            OnPropertyChanged(nameof(CanClassifySignalOnlyContainer));
             OnPropertyChanged(nameof(IsCreationRequestedForSelection));
+            _selectedSignalOnlyContainerType = value?.ContainerId is { } selectedContainerId
+                ? _planService.CurrentPlan?.ContainerTypeOverrides.FirstOrDefault(item =>
+                    string.Equals(item.ContainerId, selectedContainerId, StringComparison.Ordinal))?.TypeName
+                : null;
+            OnPropertyChanged(nameof(SelectedSignalOnlyContainerType));
             RefreshSelectionProjection();
             SynchronizeSelectionsFromTree(value);
         }
@@ -571,8 +632,15 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null || !SynchronizeRelatedSelections)
                 return;
-            SelectRelatedTreeNode(TreeRoots.SelectMany(root => root.SelfAndDescendants())
-                .FirstOrDefault(node => string.Equals(node.FeeObjectId, value.Id, StringComparison.Ordinal)));
+            var node = TreeRoots.SelectMany(root => root.SelfAndDescendants())
+                .FirstOrDefault(item => string.Equals(item.FeeObjectId, value.Id, StringComparison.Ordinal));
+            if (node is null)
+            {
+                var targetId = _planService.CurrentPlan?.Assignments.FirstOrDefault(assignment =>
+                    string.Equals(assignment.FeeObjectId, value.Id, StringComparison.Ordinal))?.TargetId;
+                node = FindTreeNode(targetId);
+            }
+            SelectRelatedTreeNode(node);
         }
     }
 
@@ -587,8 +655,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null || !SynchronizeRelatedSelections)
                 return;
-            var nodeId = _planService.CurrentPlan?.SignalAssignments.FirstOrDefault(assignment =>
-                string.Equals(assignment.FeeSignalGuid, value.GuidString, StringComparison.OrdinalIgnoreCase))?.SignalNodeId;
+            var nodeId = value.AssignedNodeIds.FirstOrDefault() ??
+                _planService.CurrentPlan?.SignalAssignments.FirstOrDefault(assignment =>
+                    string.Equals(assignment.FeeSignalGuid, value.GuidString, StringComparison.OrdinalIgnoreCase))?.SignalNodeId;
             SelectRelatedTreeNode(FindTreeNode(nodeId));
         }
     }
@@ -1612,7 +1681,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         var answer = MessageBox.Show(
             $"FEE-SimObject wirklich dauerhaft löschen?\n\nName: {item.Name}\nTyp: {item.FeeType}\n" +
-            $"Parent: {item.ParentName}\nGUID: {item.GuidString}\n" +
+            $"Parent: {item.ParentName}\n" +
             $"Live-Status: {item.ConnectionStateText}\n\n" +
             "Alle FEE-Verknüpfungen dieses Objekts gehen verloren. Diese Aktion kann im Tool nicht rückgängig gemacht werden.",
             "FEE-SimObject löschen",
@@ -2593,12 +2662,32 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         _isSynchronizingSelections = true;
         try
         {
+            if (!node.IsVisible)
+            {
+                TreeFilter = string.Empty;
+                SelectedTreeStatusFilter = VisualStatusFilterOption.All;
+                node = FindTreeNode(node.Id) ?? node;
+            }
+            ExpandTreeAncestors(node);
             SelectedTreeNode = node;
             node.IsExpanded = true;
         }
         finally
         {
             _isSynchronizingSelections = false;
+        }
+    }
+
+    private void ExpandTreeAncestors(ContainerToFeeVisualTreeNodeVM node)
+    {
+        var parentId = node.ParentId;
+        while (!string.IsNullOrWhiteSpace(parentId))
+        {
+            var parent = FindTreeNode(parentId);
+            if (parent is null)
+                break;
+            parent.IsExpanded = true;
+            parentId = parent.ParentId;
         }
     }
 
@@ -2609,14 +2698,20 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         _isSynchronizingSelections = true;
         try
         {
-            if (!string.IsNullOrWhiteSpace(node.FeeObjectId))
-                SelectedFeeObject = AvailableFeeObjects.FirstOrDefault(item => item.Id == node.FeeObjectId);
+            var feeObjectId = node.FeeObjectId;
+            if (string.IsNullOrWhiteSpace(feeObjectId) && node.Kind == VisualNodeKind.SimObjectTarget)
+            {
+                feeObjectId = _planService.CurrentPlan?.Assignments.FirstOrDefault(assignment =>
+                    string.Equals(assignment.TargetId, node.Id, StringComparison.Ordinal))?.FeeObjectId;
+            }
+            if (!string.IsNullOrWhiteSpace(feeObjectId))
+                SelectedFeeObject = AvailableFeeObjects.FirstOrDefault(item => item.Id == feeObjectId);
 
-            var signalAssignment = _planService.CurrentPlan?.SignalAssignments.FirstOrDefault(item =>
-                string.Equals(item.SignalNodeId, node.Id, StringComparison.Ordinal));
-            if (signalAssignment is not null)
+            if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
+            {
                 SelectedFeeSignal = AvailableFeeSignals.FirstOrDefault(item =>
-                    string.Equals(item.GuidString, signalAssignment.FeeSignalGuid, StringComparison.OrdinalIgnoreCase));
+                    item.AssignedNodeIds.Contains(node.Id, StringComparer.Ordinal));
+            }
 
             SelectedIssue = Issues.FirstOrDefault(issue =>
                 string.Equals(issue.NodeId, node.Id, StringComparison.Ordinal) ||
@@ -3141,7 +3236,6 @@ public sealed class ContainerToFeeVisualFeeObjectVM
     public bool HasError => HasExactDuplicate;
     public bool IsValid => !HasError && (IsAssigned || HasLiveConnections);
     public bool IsLinkMissing => !HasError && !HasLiveConnections;
-    public string GuidDisplay => $"GUID: {GuidString}";
     public string ConnectionStateText => !ConnectionSummary.WasRead
         ? "Live-Verknüpfungen noch nicht vollständig gelesen"
         : HasLiveConnections
@@ -3158,7 +3252,7 @@ public sealed class ContainerToFeeVisualFeeObjectVM
         ? $"Plan-Zuordnung: {string.Join("; ", AssignedTargets)}"
         : "Keine Plan-Zuordnung";
     public string AssignmentText => HasExactDuplicate
-        ? $"{DuplicateStateText}. Parent: {ParentName}. {GuidDisplay}. {ConnectionStateText}. " +
+        ? $"{DuplicateStateText}. Parent: {ParentName}. {ConnectionStateText}. " +
           PlanAssignmentText + "."
         : IsAssigned
             ? $"{PlanAssignmentText}. {ConnectionStateText}"
@@ -3173,8 +3267,8 @@ public sealed class ContainerToFeeVisualFeeObjectVM
         ? "#FF5B2C83"
         : HasExactDuplicate && !HasLiveConnections ? "#FF9C0006" : "#FF375623";
     public string DeleteToolTip => HasLiveConnections
-        ? $"ACHTUNG: Dieses Objekt besitzt Live-Verknüpfungen. {ConnectionStateText}. Löscht exakt GUID {GuidString} dauerhaft aus FEE."
-        : $"Löscht exakt GUID {GuidString} dauerhaft aus FEE. {ConnectionStateText}.";
+        ? $"ACHTUNG: '{Name}' besitzt Live-Verknüpfungen. {ConnectionStateText}. Löscht genau dieses ausgewählte Objekt unter '{ParentName}' dauerhaft aus FEE."
+        : $"Löscht genau das ausgewählte Objekt '{Name}' unter '{ParentName}' dauerhaft aus FEE. {ConnectionStateText}.";
 
     private static string DescribeAssignment(VisualPlan? plan, VisualAssignment assignment)
     {
@@ -3212,6 +3306,10 @@ public sealed class ContainerToFeeVisualFeeSignalVM
         var liveTargets = verifiedNodeIds?
             .Select(nodeId => DescribeSignalNode(plan, nodeId))
             .ToArray() ?? [];
+        AssignedNodeIds = assignments.Select(item => item.SignalNodeId)
+            .Concat(verifiedNodeIds ?? [])
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         AssignedTargets = explicitTargets.Concat(liveTargets)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -3234,6 +3332,7 @@ public sealed class ContainerToFeeVisualFeeSignalVM
     public string DataType => Model.DataType;
     public string Usage => Model.Usage;
     public IReadOnlyList<string> AssignedTargets { get; }
+    public IReadOnlyList<string> AssignedNodeIds { get; }
     public bool IsAssigned => AssignedTargets.Count > 0;
     public bool HasDuplicateName { get; }
     public bool HasDuplicateAssignment { get; }
@@ -3250,8 +3349,7 @@ public sealed class ContainerToFeeVisualFeeSignalVM
     public string StateBackground => HasError
         ? "#FFFFCDD2"
         : IsAssigned ? "#FFC6EFCE" : "#FFF3F5F7";
-    public string ToolTipText =>
-        $"Signal-GUID: {GuidString}{Environment.NewLine}{AssignmentText}";
+    public string ToolTipText => $"Signal: {Tag}{Environment.NewLine}{AssignmentText}";
 
     private static string DescribeSignalAssignment(VisualPlan? plan, VisualSignalAssignment assignment)
         => DescribeSignalNode(plan, assignment.SignalNodeId);

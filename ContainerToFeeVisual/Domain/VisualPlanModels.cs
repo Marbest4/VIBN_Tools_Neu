@@ -76,11 +76,11 @@ public sealed class VisualNode
 
     public string? ContainerId { get; }
 
-    public VisualNodeKind Kind { get; }
+    public VisualNodeKind Kind { get; internal set; }
 
     public string Name { get; }
 
-    public string TypeName { get; }
+    public string TypeName { get; internal set; }
 
     public string? Slot { get; }
 
@@ -94,7 +94,7 @@ public sealed class VisualNode
     /// Indicates that the unchanged legacy container can create its default
     /// simulation object when no suitable existing object is assigned.
     /// </summary>
-    public bool SupportsCreation { get; }
+    public bool SupportsCreation { get; internal set; }
 
     /// <summary>Signal address or symbolic path from the source XML, if applicable.</summary>
     public string SourceLocation { get; }
@@ -102,6 +102,9 @@ public sealed class VisualNode
     public IReadOnlyList<VisualNode> Children => _children;
 
     internal void AddChild(VisualNode node) => _children.Add(node);
+
+    internal void RemoveChildren(Func<VisualNode, bool> predicate) =>
+        _children.RemoveAll(child => predicate(child));
 }
 
 /// <summary>A directed relationship between two stable plan node IDs.</summary>
@@ -375,6 +378,13 @@ public sealed record VisualAddedSignal(
 public sealed record VisualSlotOverride(string SignalNodeId, string Slot);
 
 /// <summary>
+/// User-approved classification of an otherwise unknown signal-only
+/// container. It is kept in the sidecar; the imported source XML remains
+/// unchanged until the effective Container.xml is explicitly saved.
+/// </summary>
+public sealed record VisualContainerTypeOverride(string ContainerId, string TypeName);
+
+/// <summary>
 /// Per-container override for creating a missing default simulation object.
 /// Missing entries mean <c>true</c>; only opt-outs are persisted.
 /// </summary>
@@ -409,10 +419,15 @@ public sealed class VisualPlan
     private readonly List<VisualSignalAssignment> _signalAssignments;
     private readonly List<VisualAddedSignal> _addedSignals;
     private readonly List<VisualSlotOverride> _slotOverrides;
+    private readonly List<VisualContainerTypeOverride> _containerTypeOverrides;
     private readonly List<VisualExistingInterfaceSelection> _existingInterfaceSelections;
     private readonly HashSet<string> _removedSignalNodeIds;
     private readonly List<VisualEdge> _edges;
     private readonly List<VisualNode> _nodes;
+    private readonly List<VisualSimObjectTarget> _targets;
+    private readonly List<VisualIssue> _issues;
+    private readonly IReadOnlyDictionary<string, string> _sourceContainerTypes;
+    private readonly List<VisualIssue> _sourceIssues;
     private readonly HashSet<string> _sourceNodeIds;
 
     internal VisualPlan(
@@ -432,16 +447,20 @@ public sealed class VisualPlan
         IReadOnlyList<VisualSlotOverride>? slotOverrides,
         IReadOnlyList<string>? removedSignalNodeIds,
         VisualExistingInterfaceSelection? existingInterfaceSelection,
-        IReadOnlyList<VisualIssue> issues)
+        IReadOnlyList<VisualIssue> issues,
+        IReadOnlyList<VisualContainerTypeOverride>? containerTypeOverrides = null)
     {
         SourceXmlPath = sourceXmlPath;
         SidecarPath = sidecarPath;
         SourceFingerprint = sourceFingerprint;
         _nodes = [.. nodes];
+        _sourceContainerTypes = nodes
+            .Where(node => node.Kind == VisualNodeKind.Container)
+            .ToDictionary(node => node.Id, node => node.TypeName, StringComparer.Ordinal);
         _sourceNodeIds = nodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
         Roots = roots;
         _edges = [.. edges];
-        Targets = targets;
+        _targets = [.. targets];
         _assignments = assignments is null ? [] : [.. assignments];
         _creationRequests = creationRequests is null ? [] : [.. creationRequests];
         _generationSelections = generationSelections is null ? [] : [.. generationSelections];
@@ -449,12 +468,15 @@ public sealed class VisualPlan
         _signalAssignments = signalAssignments is null ? [] : [.. signalAssignments];
         _addedSignals = [];
         _slotOverrides = slotOverrides is null ? [] : [.. slotOverrides];
+        _containerTypeOverrides = [];
         _removedSignalNodeIds = removedSignalNodeIds is null
             ? new(StringComparer.Ordinal)
             : new(removedSignalNodeIds, StringComparer.Ordinal);
         ReplaceAddedSignals(addedSignals ?? []);
         _existingInterfaceSelections = existingInterfaceSelection is null ? [] : [existingInterfaceSelection];
-        Issues = issues;
+        _sourceIssues = [.. issues];
+        _issues = [.. _sourceIssues];
+        ReplaceContainerTypeOverrides(containerTypeOverrides ?? []);
     }
 
     public string SourceXmlPath { get; }
@@ -469,7 +491,7 @@ public sealed class VisualPlan
 
     public IReadOnlyList<VisualEdge> Edges => _edges;
 
-    public IReadOnlyList<VisualSimObjectTarget> Targets { get; }
+    public IReadOnlyList<VisualSimObjectTarget> Targets => _targets;
 
     public IReadOnlyList<VisualAssignment> Assignments => _assignments;
 
@@ -486,6 +508,8 @@ public sealed class VisualPlan
 
     public IReadOnlyList<VisualSlotOverride> SlotOverrides => _slotOverrides;
 
+    public IReadOnlyList<VisualContainerTypeOverride> ContainerTypeOverrides => _containerTypeOverrides;
+
     public IReadOnlySet<string> RemovedSignalNodeIds => _removedSignalNodeIds;
 
     /// <summary>
@@ -500,7 +524,7 @@ public sealed class VisualPlan
     public VisualExistingInterfaceSelection? ExistingInterfaceSelection =>
         _existingInterfaceSelections.FirstOrDefault();
 
-    public IReadOnlyList<VisualIssue> Issues { get; }
+    public IReadOnlyList<VisualIssue> Issues => _issues;
 
     public VisualNode? FindNode(string id) =>
         Nodes.FirstOrDefault(node => string.Equals(node.Id, id, StringComparison.Ordinal));
@@ -577,7 +601,11 @@ public sealed class VisualPlan
             .ToArray();
         _addedSignals.Clear();
         _addedSignals.AddRange(replacement);
-        _nodes.RemoveAll(node => !_sourceNodeIds.Contains(node.Id));
+        _nodes.RemoveAll(node =>
+            !_sourceNodeIds.Contains(node.Id) &&
+            !_containerTypeOverrides.Any(typeOverride => node.Id.StartsWith(
+                $"{typeOverride.ContainerId}:type-override:",
+                StringComparison.Ordinal)));
         _nodes.AddRange(replacement.Select(item => new VisualNode(
             item.NodeId,
             item.SignalGroupId,
@@ -595,6 +623,165 @@ public sealed class VisualPlan
         var replacement = overrides.ToArray();
         _slotOverrides.Clear();
         _slotOverrides.AddRange(replacement);
+    }
+
+    internal void ReplaceContainerTypeOverrides(IEnumerable<VisualContainerTypeOverride> overrides)
+    {
+        var requested = overrides
+            .Where(item => !string.IsNullOrWhiteSpace(item.ContainerId) &&
+                           ContainerMetadataCatalog.TryGet(item.TypeName, out _))
+            .DistinctBy(item => item.ContainerId, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var existing in _containerTypeOverrides.ToArray())
+            RemoveGeneratedTypeStructure(existing.ContainerId);
+        _containerTypeOverrides.Clear();
+        _issues.Clear();
+        _issues.AddRange(_sourceIssues);
+
+        foreach (var item in requested)
+        {
+            if (ApplyContainerTypeOverride(item))
+                _containerTypeOverrides.Add(item);
+        }
+    }
+
+    internal void AddIssues(IEnumerable<VisualIssue> issues)
+    {
+        var additions = issues
+            .Where(issue => !_sourceIssues.Contains(issue))
+            .ToArray();
+        _sourceIssues.AddRange(additions);
+        _issues.AddRange(additions.Where(issue => !_issues.Contains(issue)));
+    }
+
+    private bool ApplyContainerTypeOverride(VisualContainerTypeOverride item)
+    {
+        var container = FindNode(item.ContainerId);
+        if (container?.Kind != VisualNodeKind.Container ||
+            !ContainerMetadataCatalog.TryGet(item.TypeName, out var descriptor))
+            return false;
+
+        container.TypeName = item.TypeName;
+        container.SupportsCreation = descriptor.SupportsCreation;
+        foreach (var signal in _nodes.Where(node =>
+                     string.Equals(node.ContainerId, container.Id, StringComparison.Ordinal) &&
+                     node.Kind == VisualNodeKind.UnknownSignal))
+            signal.Kind = VisualNodeKind.Signal;
+
+        _issues.RemoveAll(issue =>
+            string.Equals(issue.NodeId, container.Id, StringComparison.Ordinal) &&
+            issue.Code == "CONTAINER_TYPE_UNKNOWN");
+        foreach (var signal in _nodes.Where(node =>
+                     string.Equals(node.ContainerId, container.Id, StringComparison.Ordinal) &&
+                     node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
+        {
+            _issues.RemoveAll(issue => string.Equals(issue.NodeId, signal.Id, StringComparison.Ordinal) &&
+                                       issue.Code == "SIGNAL_SLOT_UNKNOWN");
+            if (!descriptor.Slots.Contains(GetEffectiveSlot(signal)))
+            {
+                _issues.Add(new VisualIssue(
+                    VisualIssueSeverity.Error,
+                    "SIGNAL_SLOT_UNKNOWN",
+                    $"Slot '{GetEffectiveSlot(signal)}' ist für Container-Typ '{item.TypeName}' nicht definiert. " +
+                    $"Erwartet wird: {string.Join(", ", descriptor.Slots.OrderBy(value => value, StringComparer.Ordinal))}.",
+                    signal.Id));
+            }
+        }
+
+        var prefix = $"{container.Id}:type-override:";
+        string? logicNodeId = null;
+        if (!string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName))
+        {
+            logicNodeId = prefix + "logic";
+            AddGeneratedNode(new VisualNode(
+                logicNodeId, container.Id, container.Id, VisualNodeKind.Logic,
+                descriptor.ExpectedLogicName, "FeeLogic", null, false));
+        }
+
+        string? simObjectGroupId = null;
+        if (descriptor.Targets.Count > 0)
+        {
+            simObjectGroupId = prefix + "simobjects";
+            AddGeneratedNode(new VisualNode(
+                simObjectGroupId, container.Id, container.Id, VisualNodeKind.Group,
+                "SimObjects", "SimObject-Gruppe", null, false));
+        }
+
+        foreach (var (helperName, index) in descriptor.TechnicalHelpers.Select((name, index) => (name, index)))
+        {
+            AddGeneratedNode(new VisualNode(
+                $"{prefix}helper:{index}", logicNodeId ?? container.Id, container.Id,
+                VisualNodeKind.TechnicalHelper, helperName, "Technisches Hilfsobjekt", null, true));
+        }
+
+        foreach (var targetDescriptor in descriptor.Targets)
+        {
+            var targetId = $"{prefix}target:{targetDescriptor.Index}:{StableId.Encode(targetDescriptor.DisplayName)}";
+            _targets.Add(new VisualSimObjectTarget(
+                targetId,
+                container.Id,
+                targetDescriptor.DisplayName,
+                targetDescriptor.AllowedType.FullName ?? targetDescriptor.AllowedType.Name,
+                targetDescriptor.AllowMultiSelect));
+            AddGeneratedNode(new VisualNode(
+                targetId, simObjectGroupId ?? container.Id, container.Id,
+                VisualNodeKind.SimObjectTarget, targetDescriptor.DisplayName,
+                targetDescriptor.AllowedType.Name, null, false));
+            if (logicNodeId is not null)
+            {
+                _edges.Add(new VisualEdge(
+                    $"edge:type-override:{StableId.Encode(targetId)}:{StableId.Encode(logicNodeId)}",
+                    targetId,
+                    logicNodeId,
+                    VisualEdgeKind.SlotToSlot,
+                    "Container-Verknüpfung aus gewähltem Typ"));
+            }
+        }
+
+        return true;
+    }
+
+    private void AddGeneratedNode(VisualNode node)
+    {
+        _nodes.Add(node);
+        FindNode(node.ParentId ?? string.Empty)?.AddChild(node);
+        if (node.ParentId is not null)
+        {
+            _edges.Add(new VisualEdge(
+                $"edge:type-override:parent:{StableId.Encode(node.Id)}",
+                node.ParentId,
+                node.Id,
+                VisualEdgeKind.ParentChild,
+                "Aus gewähltem Containertyp ergänzt"));
+        }
+    }
+
+    private void RemoveGeneratedTypeStructure(string containerId)
+    {
+        var prefix = $"{containerId}:type-override:";
+        _nodes.RemoveAll(node => node.Id.StartsWith(prefix, StringComparison.Ordinal));
+        foreach (var node in _nodes)
+            node.RemoveChildren(child => child.Id.StartsWith(prefix, StringComparison.Ordinal));
+        _targets.RemoveAll(target => target.Id.StartsWith(prefix, StringComparison.Ordinal));
+        _edges.RemoveAll(edge => edge.Id.StartsWith("edge:type-override:", StringComparison.Ordinal) &&
+                                 (edge.SourceId.StartsWith(prefix, StringComparison.Ordinal) ||
+                                  edge.TargetId.StartsWith(prefix, StringComparison.Ordinal)));
+        _assignments.RemoveAll(assignment => assignment.TargetId.StartsWith(prefix, StringComparison.Ordinal));
+        if (FindNode(containerId) is { } container &&
+            _sourceContainerTypes.TryGetValue(containerId, out var sourceType))
+        {
+            container.TypeName = sourceType;
+            container.SupportsCreation = ContainerMetadataCatalog.TryGet(sourceType, out var descriptor) &&
+                                         descriptor.SupportsCreation;
+            if (!ContainerMetadataCatalog.TryGet(sourceType, out _))
+            {
+                foreach (var signal in _nodes.Where(node =>
+                             string.Equals(node.ContainerId, containerId, StringComparison.Ordinal) &&
+                             node.Kind == VisualNodeKind.Signal))
+                    signal.Kind = VisualNodeKind.UnknownSignal;
+            }
+        }
     }
 
     internal void ReplaceRemovedSignalNodeIds(IEnumerable<string> nodeIds)
