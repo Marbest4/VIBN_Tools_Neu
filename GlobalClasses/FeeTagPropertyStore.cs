@@ -1,3 +1,4 @@
+using FS.SDK;
 using FS.SDK.Components;
 
 namespace VIBN_Tools.GlobalClasses;
@@ -10,12 +11,21 @@ namespace VIBN_Tools.GlobalClasses;
 /// </summary>
 public static class FeeTagPropertyStore
 {
+    /// <summary>
+    /// FEE exposes TagEntries as a property of the SceneObject.Tags component.
+    /// The concrete component type is TagComponent, but the SDK property path
+    /// must use the owning SceneObject property name ("Tags").
+    /// </summary>
+    public static string ComponentName => nameof(SceneObject.Tags);
+
+    public static string PropertyName => nameof(TagComponent.TagEntries);
+
     public static async Task<IReadOnlyDictionary<string, string>> ReadAsync(Guid objectGuid)
     {
         var xml = await Services.ApiInstance.Object.GetPropertyAsync(
             objectGuid,
-            nameof(TagComponent.TagEntries),
-            nameof(TagComponent));
+            PropertyName,
+            ComponentName);
         return Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(xml);
     }
 
@@ -44,11 +54,14 @@ public static class FeeTagPropertyStore
         foreach (var item in properties)
             merged[item.Key] = item.Value;
 
-        await Services.ApiInstance.Object.SetPropertyAsync(
+        var accepted = await Services.ApiInstance.Object.SetPropertyAsync(
             objectGuid,
-            nameof(TagComponent.TagEntries),
+            PropertyName,
             merged,
-            nameof(TagComponent));
+            ComponentName);
+        if (!accepted)
+            throw new InvalidOperationException(
+                $"FEE hat das Schreiben von {ComponentName}.{PropertyName} abgelehnt.");
 
         if (verifyAfterWrite)
             await VerifyAsync(objectGuid, properties);

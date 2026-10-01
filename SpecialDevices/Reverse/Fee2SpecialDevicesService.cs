@@ -1,4 +1,3 @@
-using FS.SDK.Components;
 using FS.SDK.Scene.Objects;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -218,11 +217,7 @@ public sealed class Fee2SpecialDevicesService
     {
         try
         {
-            var tagsXml = await Services.ApiInstance!.Object.GetPropertyAsync(
-                guid,
-                nameof(TagComponent.TagEntries),
-                nameof(TagComponent));
-            return Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+            return await FeeTagPropertyStore.ReadAsync(guid);
         }
         catch
         {

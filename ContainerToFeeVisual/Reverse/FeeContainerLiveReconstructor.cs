@@ -284,6 +284,12 @@ public static class FeeContainerLiveReconstructor
         string? xmlType = string.IsNullOrWhiteSpace(item.ProvenanceContainerType)
             ? null
             : item.ProvenanceContainerType;
+        xmlType = xmlType switch
+        {
+            "Switch" => "CabinetSwitch",
+            "Fuse" => "CabinetFuse",
+            _ => xmlType,
+        };
         // SDK/FEE versions do not always expose a logic-bearing scene object
         // under the literal type name LogicObject. The persisted, known logic
         // definition is the stable discriminator also used by ModelValidation.
@@ -384,7 +390,7 @@ public static class FeeContainerLiveReconstructor
                 "OUTPUT 01" => "PLC_IN_Signal",
                 _ => null,
             },
-            "Switch" or "EStop" => normalizedSlot switch
+            "Switch" or "CabinetSwitch" or "EStop" => normalizedSlot switch
             {
                 "NO1" => "PLC_IN_NO1",
                 "NO2" => "PLC_IN_NO2",
@@ -392,7 +398,7 @@ public static class FeeContainerLiveReconstructor
                 "NC2" => "PLC_IN_NC2",
                 _ => null,
             },
-            "Fuse" => normalizedSlot switch
+            "Fuse" or "CabinetFuse" => normalizedSlot switch
             {
                 "NO" => "PLC_IN_NO",
                 "NC" => "PLC_IN_NC",
@@ -434,14 +440,14 @@ public static class FeeContainerLiveReconstructor
         if (normalized.Contains("GROBNOTAUS", StringComparison.Ordinal))
             return "EStop";
         if (normalized.Contains("FUSE", StringComparison.Ordinal))
-            return "Fuse";
+            return "CabinetFuse";
         if (normalized.Contains("LAMP", StringComparison.Ordinal))
             return "CabinetLamp";
         if (normalized.Contains("GROB2POSITIONSWITCH", StringComparison.Ordinal) ||
             normalized.Contains("POSITIONSWITCH2", StringComparison.Ordinal) ||
             normalized.Contains("2POSITIONSWITCH", StringComparison.Ordinal) ||
             normalized.Contains("TWOPOSITIONSWITCH", StringComparison.Ordinal))
-            return "Switch";
+            return "CabinetSwitch";
         return null;
     }
 

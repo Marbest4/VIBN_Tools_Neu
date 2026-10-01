@@ -63,6 +63,9 @@
                         <Setter Property="BorderBrush" Value="Transparent" />
                         <Setter Property="BorderThickness" Value="3" />
                         <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSynchronizationMatch}" Value="True">
+                                <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type TreeViewItem}}}" Value="True">
                                 <Setter Property="BorderBrush" Value="#FF0D47A1" />
                             </DataTrigger>
@@ -401,6 +404,10 @@
                                             <Setter Property="BorderBrush" Value="#C7D7EA" />
                                             <Setter Property="BorderThickness" Value="1" />
                                             <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSynchronizationMatch}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                    <Setter Property="BorderThickness" Value="3" />
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
                                                     <Setter Property="BorderBrush" Value="#FF0D47A1" />
                                                     <Setter Property="BorderThickness" Value="3" />
@@ -489,6 +496,10 @@
                                             <Setter Property="BorderBrush" Value="#C7D7EA" />
                                             <Setter Property="BorderThickness" Value="1" />
                                             <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSynchronizationMatch}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                    <Setter Property="BorderThickness" Value="3" />
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
                                                     <Setter Property="BorderBrush" Value="#FF0D47A1" />
                                                     <Setter Property="BorderThickness" Value="3" />
@@ -642,6 +653,10 @@
                                                 <Setter Property="BorderBrush" Value="{Binding StateBorderBrush}" />
                                                 <Setter Property="BorderThickness" Value="1" />
                                                 <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSynchronizationMatch}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                        <Setter Property="BorderThickness" Value="3" />
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
                                                         <Setter Property="BorderBrush" Value="#FF0D47A1" />
                                                         <Setter Property="BorderThickness" Value="3" />
@@ -684,7 +699,8 @@
                                                            TextWrapping="Wrap" MaxHeight="42"
                                                            Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                             </StackPanel>
-                                            <Button Grid.Column="1" Margin="6,0,0,0" Padding="5,2" Content="Löschen"
+                                            <Button Grid.Column="1" Width="68" Height="26" Margin="6,0,0,0"
+                                                    VerticalAlignment="Top" Padding="5,2" Content="Löschen"
                                                     Command="{Binding DataContext.DeleteFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                                     CommandParameter="{Binding}"
                                                     ToolTip="{Binding DeleteToolTip}" />
@@ -769,6 +785,9 @@
                                                 <Setter Property="BorderBrush" Value="Transparent" />
                                                 <Setter Property="BorderThickness" Value="3" />
                                                 <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSynchronizationMatch}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                    </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
                                                         <Setter Property="BorderBrush" Value="#FF0D47A1" />
                                                     </DataTrigger>

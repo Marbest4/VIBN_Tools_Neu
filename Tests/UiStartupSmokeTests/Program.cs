@@ -1027,7 +1027,7 @@ internal static class Program
             if (availableObject.ConnectionDetails.Count != 1 ||
                 !availableObject.ConnectionDetails[0].Contains("InTarget", StringComparison.Ordinal) ||
                 !availableObject.ConnectionDetails[0].Contains("SIM_TargetPosition", StringComparison.Ordinal) ||
-                !availableObject.ConnectionDetails[0].Contains("Logik: Axis_1", StringComparison.Ordinal) ||
+                !availableObject.ConnectionDetails[0].Contains("Logik 'Axis_1'", StringComparison.Ordinal) ||
                 availableObject.ConnectionDetails[0].Contains(logicGuid.ToString("D"), StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
@@ -1044,10 +1044,20 @@ internal static class Program
             }
             viewModel.SelectedTreeNode = target;
             if (!ReferenceEquals(viewModel.SelectedFeeObject, availableObject) ||
-                !string.Equals(viewModel.SelectedTarget?.Id, target.Id, StringComparison.Ordinal))
+                !string.Equals(viewModel.SelectedTarget?.Id, target.Id, StringComparison.Ordinal) ||
+                !availableObject.IsSynchronizationMatch ||
+                !target.IsSynchronizationMatch ||
+                !simObject.IsSynchronizationMatch)
             {
                 throw new InvalidOperationException(
                     "Selecting a visual tree target did not synchronize the related lists.");
+            }
+            viewModel.SelectedTreeNode = container;
+            if (!availableObject.IsSynchronizationMatch ||
+                nodes.Where(item => item.ContainerId == container.Id).Any(item => !item.IsSynchronizationMatch))
+            {
+                throw new InvalidOperationException(
+                    "Selecting a parent container did not mark all related descendants and available FEE objects.");
             }
             if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||

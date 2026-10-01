@@ -55,6 +55,7 @@ internal static class Program
         ValidateReimportDecisionStaging();
         ValidateWorkspaceBlockingMarker();
         ValidateSlotMultiplicityPolicy();
+        ValidateFeeTagPropertyContract();
         await ValidateContainerToFeeModelContractsAsync();
         await ValidateVisualMotionJointReuseAsync();
         await ValidateVisualFeeSignalStatusAsync();
@@ -182,6 +183,16 @@ internal static class Program
             .Any(issue => issue.Code == "STOP_STATUS_MISSING"))
         {
             throw new InvalidOperationException("Der Stopper-Preflight erkennt die fehlende Rückmeldung nicht.");
+        }
+    }
+
+    private static void ValidateFeeTagPropertyContract()
+    {
+        if (!string.Equals(FeeTagPropertyStore.ComponentName, "Tags", StringComparison.Ordinal) ||
+            !string.Equals(FeeTagPropertyStore.PropertyName, "TagEntries", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "FEE Tag-Properties must use SceneObject.Tags / TagComponent.TagEntries for write and read-back.");
         }
     }
 
@@ -463,11 +474,11 @@ internal static class Program
                 .Descendants("Slot").Single().Value != "PLC_OUT_Signal" ||
             containers.Single(item => item.Element("Type")?.Value == "PneumaticSupply")
                 .Descendants("Note").Single().Value.Contains("PRÜFEN", StringComparison.Ordinal) == false ||
-            containers.Single(item => item.Element("Type")?.Value == "Switch")
+            containers.Single(item => item.Element("Type")?.Value == "CabinetSwitch")
                 .Element("Component")?.Value != "Selector_1" ||
-            containers.Single(item => item.Element("Type")?.Value == "Switch")
+            containers.Single(item => item.Element("Type")?.Value == "CabinetSwitch")
                 .Descendants("Slot").Single().Value != "PLC_IN_NO1" ||
-            containers.Single(item => item.Element("Type")?.Value == "Fuse")
+            containers.Single(item => item.Element("Type")?.Value == "CabinetFuse")
                 .Descendants("Slot").Single().Value != "PLC_IN_NC")
         {
             throw new InvalidOperationException(
@@ -689,6 +700,18 @@ internal static class Program
                 throw new InvalidOperationException(
                     "An explicitly confirmed duplicate multi-select identity was not retained and downgraded to a warning.");
             }
+            var confirmedObjectVm = new ContainerToFeeVisualFeeObjectVM(
+                objects[0],
+                loaded.Plan,
+                new VisualFeeObjectConnectionSummary(true, ["Verknüpft mit Logik 'Axis_1'"]),
+                isDuplicateConfirmed: true);
+            if (confirmedObjectVm.HasError ||
+                confirmedObjectVm.StateBackground != "#FFC6EFCE" ||
+                !confirmedObjectVm.DuplicateStateText.Contains("BESTÄTIGT", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "A confirmed exact duplicate remained red or lacked its explicit confirmation label.");
+            }
             var objectLinks = objects.Select(item => new VisualFeeObjectLink(
                     item.GuidString,
                     "InTarget",
@@ -716,11 +739,28 @@ internal static class Program
             var linkedDuplicate = service.GetFeeObjectConnectionSummary(objects[0].Id);
             var unlinkedDuplicate = service.GetFeeObjectConnectionSummary(objects[1].Id);
             if (!linkedDuplicate.WasRead || !linkedDuplicate.HasConnections ||
-                !linkedDuplicate.Details.Any(detail => detail.Contains("Logik: Axis_1", StringComparison.Ordinal)) ||
+                !linkedDuplicate.Details.Any(detail => detail.Contains("Logik 'Axis_1'", StringComparison.Ordinal)) ||
                 unlinkedDuplicate.HasConnections)
             {
                 throw new InvalidOperationException(
                     "Exact duplicate SimObjects do not expose their GUID-specific live link state.");
+            }
+            typeof(ContainerToFeeVisualPlanService)
+                .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .SetValue(service, new[]
+                {
+                    new VisualFeeObjectLink(
+                        objects[0].GuidString,
+                        string.Empty,
+                        logicGuid.ToString("D"),
+                        "SIM_TargetPosition")
+                });
+            var omittedOwnSlot = service.GetFeeObjectConnectionSummary(objects[0].Id);
+            if (omittedOwnSlot.Details.Any(detail => detail.Contains("nicht gemeldet", StringComparison.OrdinalIgnoreCase)) ||
+                !omittedOwnSlot.Details.Any(detail => detail.Contains("SIM_TargetPosition", StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(
+                    "Unreported own slots were shown instead of keeping only the reported linked-object slot.");
             }
             typeof(ContainerToFeeVisualPlanService)
                 .GetField("_feeSimObjectLinks", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -1012,9 +1052,13 @@ internal static class Program
             var loaded = await service.LoadXmlAsync(path);
             var container = loaded.Plan?.Nodes.Single(node => node.Kind == VisualNodeKind.Container)
                 ?? throw new InvalidOperationException("Signal-only test plan could not be loaded.");
+            if (service.Validate().Issues.Any(issue => issue.Code == "SIGNAL_ONLY_CONTAINER_UNDEFINED"))
+                throw new InvalidOperationException("The intentional unknown/interface-only fallback was reported as a signal-only error.");
             if (!service.CanClassifySignalOnlyContainer(container.Id) ||
                 !service.SetSignalOnlyContainerType(container.Id, "Cylinder"))
                 throw new InvalidOperationException("Unknown signal-only container could not be classified.");
+            if (!service.CanClassifySignalOnlyContainer(container.Id))
+                throw new InvalidOperationException("A classified container with source signals no longer allowed correcting its type.");
             if (container.TypeName != "Cylinder" ||
                 !loaded.Plan!.Targets.Any(target => target.ContainerId == container.Id) ||
                 !loaded.Plan.Nodes.Any(node => node.ContainerId == container.Id && node.Kind == VisualNodeKind.Logic))

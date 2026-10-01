@@ -18,7 +18,7 @@
     </UserControl.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <Grid Margin="20" MinWidth="1120">
+    <Grid Margin="20" MinWidth="860">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -64,16 +64,16 @@
                   EnableRowVirtualization="False" EnableColumnVirtualization="False">
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Export" ToolTip="Legt fest, ob dieser oberste BasicFrame in das ContainerFile übernommen wird." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
-                <DataGridTextColumn Binding="{Binding Name}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="FEE-Root" ToolTip="Name des obersten BasicFrames, der den auszulesenden FEE-Teilbaum begrenzt." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding Guid}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="GUID" ToolTip="Eindeutige FEE-Objektkennung des Hauptknotens." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding SourceKind}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quelle" ToolTip="Zeigt, ob der Inhalt aus Provenienz oder durch Live-Rekonstruktion des FEE-Modells stammt." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding ContainerCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Container" ToolTip="Anzahl der unter diesem Root sicher erkannten Container." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding SignalCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Signale" ToolTip="Anzahl der dem Root zugeordneten Signale im rekonstruierten ContainerFile." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding UpdatedSignalCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Aktuell gelesen" ToolTip="Signale, deren aktuelle Daten erfolgreich aus FEE gelesen wurden." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding MissingSignalCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Fehlend" ToolTip="Provenienz-Signale, die im aktuellen FEE-Projekt nicht mehr gefunden wurden." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding UpdatedSlotCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Slotrouten" ToolTip="Signalzuordnungen, deren aktueller FEE-Slot eindeutig ermittelt wurde." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding UnresolvedSlotCount}" Width="*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Slot ungeklärt" ToolTip="Signalzuordnungen ohne eindeutig rekonstruierbaren Zielslot; vor Export prüfen." /></DataGridTextColumn.Header></DataGridTextColumn>
-                <DataGridTextColumn Binding="{Binding Provenance.SourceFingerprint, TargetNullValue=-}" Width="2*" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quellfingerprint" ToolTip="Hash des ContainerFiles, aus dem dieser Root ursprünglich erzeugt wurde; '-' bedeutet keine Provenienz." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding Name}" Width="220" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="FEE-Root" ToolTip="Name des obersten BasicFrames, der den auszulesenden FEE-Teilbaum begrenzt." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding Guid}" Width="250" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="GUID" ToolTip="Eindeutige FEE-Objektkennung des Hauptknotens." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding SourceKind}" Width="210" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quelle" ToolTip="Zeigt, ob der Inhalt aus Provenienz oder durch Live-Rekonstruktion des FEE-Modells stammt." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding ContainerCount}" Width="110" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Container" ToolTip="Anzahl der unter diesem Root sicher erkannten Container." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding SignalCount}" Width="105" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Signale" ToolTip="Anzahl der dem Root zugeordneten Signale im rekonstruierten ContainerFile." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding UpdatedSignalCount}" Width="125" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Aktuell gelesen" ToolTip="Signale, deren aktuelle Daten erfolgreich aus FEE gelesen wurden." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding MissingSignalCount}" Width="105" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Fehlend" ToolTip="Provenienz-Signale, die im aktuellen FEE-Projekt nicht mehr gefunden wurden." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding UpdatedSlotCount}" Width="115" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Slotrouten" ToolTip="Signalzuordnungen, deren aktueller FEE-Slot eindeutig ermittelt wurde." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding UnresolvedSlotCount}" Width="125" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Slot ungeklärt" ToolTip="Signalzuordnungen ohne eindeutig rekonstruierbaren Zielslot; vor Export prüfen." /></DataGridTextColumn.Header></DataGridTextColumn>
+                <DataGridTextColumn Binding="{Binding Provenance.SourceFingerprint, TargetNullValue=-}" Width="260" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quellfingerprint" ToolTip="Hash des ContainerFiles, aus dem dieser Root ursprünglich erzeugt wurde; '-' bedeutet keine Provenienz." /></DataGridTextColumn.Header></DataGridTextColumn>
             </DataGrid.Columns>
         </DataGrid>
 
@@ -103,9 +103,9 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" MinWidth="360" />
+                <ColumnDefinition Width="2*" MinWidth="220" />
                 <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="3*" MinWidth="520" />
+                <ColumnDefinition Width="3*" MinWidth="280" />
             </Grid.ColumnDefinitions>
             <GroupBox Header="Erkannte Container">
                 <Grid>
@@ -124,9 +124,9 @@
                           EnableRowVirtualization="False" EnableColumnVirtualization="False">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
-                        <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="2*" />
-                        <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="*" />
-                        <DataGridTextColumn Header="Zugeordnete FEE-Objekte" Binding="{Binding AssociatedObjects}" Width="2*" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="190" />
+                        <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="145" />
+                        <DataGridTextColumn Header="Zugeordnete FEE-Objekte" Binding="{Binding AssociatedObjects}" Width="240" IsReadOnly="True" />
                         <DataGridTextColumn Header="Ursprüngliche Einträge" Binding="{Binding OriginalSignalCount}" Width="Auto" IsReadOnly="True" />
                         <DataGridTemplateColumn Header="Aktion" Width="Auto">
                             <DataGridTemplateColumn.CellTemplate>
@@ -141,7 +141,8 @@
                 </DataGrid>
                 </Grid>
             </GroupBox>
-            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
+            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext" ShowsPreview="True" />
             <GroupBox Grid.Column="2" Header="Erkannte Signalzuordnungen">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -159,12 +160,12 @@
                           EnableRowVirtualization="False" EnableColumnVirtualization="False">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
-                        <DataGridTextColumn Header="Zugeordnet zu Container" Binding="{Binding Container}" Width="2*" IsReadOnly="True" />
-                        <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="2*" />
-                        <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="2*" />
-                        <DataGridTextColumn Header="Adresse/Pfad" Binding="{Binding Address}" Width="*" />
-                        <DataGridTextColumn Header="Datentyp" Binding="{Binding DataType}" Width="*" />
-                        <DataGridTextColumn Header="Status" Binding="{Binding AssignmentState}" Width="2*" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Zugeordnet zu Container" Binding="{Binding Container}" Width="210" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="190" />
+                        <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="175" />
+                        <DataGridTextColumn Header="Adresse/Pfad" Binding="{Binding Address}" Width="150" />
+                        <DataGridTextColumn Header="Datentyp" Binding="{Binding DataType}" Width="115" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding AssignmentState}" Width="230" IsReadOnly="True" />
                         <DataGridTemplateColumn Header="Aktion" Width="Auto">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -179,7 +180,8 @@
                 </Grid>
             </GroupBox>
 
-            <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" />
+            <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
+                          ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" ShowsPreview="True" />
             <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="Nicht containerrelevante FEE-Objekte – vollständig prüfen und bei Bedarf manuell zuordnen">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
@@ -194,10 +196,10 @@
                           VirtualizingPanel.IsVirtualizing="False"
                           EnableRowVirtualization="False" EnableColumnVirtualization="False">
                     <DataGrid.Columns>
-                        <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="2*" IsReadOnly="True" />
-                        <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="*" IsReadOnly="True" />
-                        <DataGridTextColumn Header="Grund" Binding="{Binding Reason}" Width="3*" IsReadOnly="True" />
-                        <DataGridTextColumn Header="Komponente" Binding="{Binding TargetComponent, UpdateSourceTrigger=PropertyChanged}" Width="2*" />
+                        <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="210" IsReadOnly="True" />
+                        <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="150" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Grund" Binding="{Binding Reason}" Width="340" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Komponente" Binding="{Binding TargetComponent, UpdateSourceTrigger=PropertyChanged}" Width="210" />
                         <DataGridTemplateColumn Header="Als Containertyp" Width="180">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>

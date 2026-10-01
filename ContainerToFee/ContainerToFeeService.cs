@@ -161,8 +161,8 @@ namespace VIBN_Tools.ContainerToFee
 
                 "CabinetLamp" => new CabinetLamp_Container(),
                 "EStop" => new CabinetEStop_Container(),
-                "Fuse" => new CabinetFuse_Container(),
-                "Switch" => new CabinetSwitch_Container(),
+                "Fuse" or "CabinetFuse" => new CabinetFuse_Container(),
+                "Switch" or "CabinetSwitch" => new CabinetSwitch_Container(),
                 _ => null
             };
 

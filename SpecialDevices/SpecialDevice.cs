@@ -167,11 +167,7 @@ namespace VIBN_Tools.SpecialDevices
                 var rootGuid = Guid.Parse(root.GuidText);
                 try
                 {
-                    var tagsXml = await ApiInstance.Object.GetPropertyAsync(
-                        rootGuid,
-                        nameof(FS.SDK.Components.TagComponent.TagEntries),
-                        nameof(FS.SDK.Components.TagComponent));
-                    var tags = ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+                    var tags = await FeeTagPropertyStore.ReadAsync(rootGuid);
                     if (FeeSpecialDeviceProvenanceCodec.TryRead(tags, out _, out _))
                         return true;
                 }
@@ -230,15 +226,13 @@ namespace VIBN_Tools.SpecialDevices
             // SDK transaction remains deliberately ineligible for reverse export.
             var provenance = FeeSpecialDeviceProvenanceCodec.Encode(
                 FeeSpecialDeviceProvenanceCodec.Create(this));
-            if (!await ApiInstance.Object.SetPropertyAsync(
+            var tagWrite = await FeeTagPropertyStore.TryWriteAndVerifyAsync(
                 DeviceBasicFrame.Guid,
-                nameof(FS.SDK.Components.TagComponent.TagEntries),
-                new Dictionary<string, string>(provenance, StringComparer.Ordinal),
-                nameof(FS.SDK.Components.TagComponent)))
-            {
-                LastCreationWarning =
-                    "Das Gerät wurde erzeugt, FEE hat aber das Schreiben der Provenienz abgelehnt.";
-            }
+                provenance,
+                preserveExisting: true,
+                verifyAfterWrite: false);
+            if (!tagWrite.Confirmed)
+                LastCreationWarning = tagWrite.Warning;
 
             // SetPropertyAsync updates the SDK-side object wrapper. Sending the
             // already existing root is required to persist the changed component
@@ -265,11 +259,7 @@ namespace VIBN_Tools.SpecialDevices
             {
                 try
                 {
-                    var tagsXml = await ApiInstance.Object.GetPropertyAsync(
-                        DeviceBasicFrame.Guid,
-                        nameof(FS.SDK.Components.TagComponent.TagEntries),
-                        nameof(FS.SDK.Components.TagComponent));
-                    var actual = ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+                    var actual = await FeeTagPropertyStore.ReadAsync(DeviceBasicFrame.Guid);
                     if (expected.All(item =>
                             actual.TryGetValue(item.Key, out var value) &&
                             string.Equals(value, item.Value, StringComparison.Ordinal)))

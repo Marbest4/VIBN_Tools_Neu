@@ -83,14 +83,12 @@ public sealed class ContainerToFeeVisualPlanService
         var container = string.IsNullOrWhiteSpace(containerId) ? null : plan?.FindNode(containerId);
         if (plan is null || container?.Kind != VisualNodeKind.Container)
             return false;
-        if (plan.ContainerTypeOverrides.Any(item => string.Equals(item.ContainerId, container.Id, StringComparison.Ordinal)))
-            return true;
-        if (ContainerMetadataCatalog.TryGet(container.TypeName, out _))
-            return false;
+        // The XML can already contain a known type while still carrying only
+        // signal entries. Keep the type selector available so that an incorrect
+        // or obsolete declaration can be corrected without editing the source.
         return plan.Nodes.Any(node =>
                    string.Equals(node.ContainerId, container.Id, StringComparison.Ordinal) &&
-                   node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal) &&
-               !plan.Targets.Any(target => string.Equals(target.ContainerId, container.Id, StringComparison.Ordinal));
+                   node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal);
     }
 
     public bool SetSignalOnlyContainerType(string containerId, string typeName)
@@ -134,11 +132,13 @@ public sealed class ContainerToFeeVisualPlanService
                 item.GuidString,
                 signalLink.SignalGuidString,
                 StringComparison.OrdinalIgnoreCase));
-            details.Add(
-                $"Eigener Slot '{DisplaySlot(signalLink.SlotName)}' ← Signal " +
-                $"'{signal?.Tag ?? "Name nicht auflösbar"}' aus Interface " +
+            var signalDescription =
+                $"Signal '{signal?.Tag ?? "Name nicht auflösbar"}' aus Interface " +
                 $"'{signal?.InterfaceName ?? "unbekannt"}'" +
-                (signalLink.IsIndirect ? " (über MoveBit)" : string.Empty));
+                (signalLink.IsIndirect ? " (über MoveBit)" : string.Empty);
+            details.Add(string.IsNullOrWhiteSpace(signalLink.SlotName)
+                ? $"Verknüpft mit {signalDescription}"
+                : $"Eigener Slot '{signalLink.SlotName.Trim()}' ← {signalDescription}");
         }
 
         foreach (var objectLink in _feeSimObjectLinks.Where(link =>
@@ -154,9 +154,15 @@ public sealed class ContainerToFeeVisualPlanService
                 : objectLink.ObjectGuidString;
             var ownSlot = isSource ? objectLink.SlotName : objectLink.LinkedSlotName;
             var otherSlot = isSource ? objectLink.LinkedSlotName : objectLink.SlotName;
-            details.Add(
-                $"Eigener Slot '{DisplaySlot(ownSlot)}' ↔ {DescribeLinkedFeeObject(otherGuid)}, " +
-                $"Slot '{DisplaySlot(otherSlot)}'");
+            var linkedObject = DescribeLinkedFeeObject(otherGuid);
+            details.Add((string.IsNullOrWhiteSpace(ownSlot), string.IsNullOrWhiteSpace(otherSlot)) switch
+            {
+                (false, false) =>
+                    $"Eigener Slot '{ownSlot.Trim()}' ↔ {linkedObject}, dort Slot '{otherSlot.Trim()}'",
+                (false, true) => $"Eigener Slot '{ownSlot.Trim()}' ↔ {linkedObject}",
+                (true, false) => $"Verknüpft mit {linkedObject}, dort Slot '{otherSlot.Trim()}'",
+                _ => $"Verknüpft mit {linkedObject}",
+            });
         }
 
         return new VisualFeeObjectConnectionSummary(
@@ -1538,6 +1544,16 @@ public sealed class ContainerToFeeVisualPlanService
                 node.Kind is VisualNodeKind.Logic or VisualNodeKind.SimObjectTarget or VisualNodeKind.TechnicalHelper);
             if (!hasRuntimeObject && signalNodes.Length > 0 && plan.IsGenerationSelected(container.Id))
             {
+                var isUnknownContainer =
+                    string.Equals(container.TypeName, "unknown", StringComparison.OrdinalIgnoreCase) ||
+                    signalNodes.All(node => node.Kind == VisualNodeKind.UnknownSignal);
+                if (isUnknownContainer)
+                {
+                    // Unknown is the deliberate interface-only fallback. The
+                    // parser's CONTAINER_TYPE_UNKNOWN warning remains visible;
+                    // an additional signal-only error would be contradictory.
+                    continue;
+                }
                 var isDeclaredSignalOnly = ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor) &&
                                            string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) &&
                                            string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType) &&
@@ -2048,7 +2064,7 @@ public sealed class ContainerToFeeVisualPlanService
                 VisualFeeContainerObjectKind.CabinetElement => "CabinetElement",
                 _ => "FEE-Objekt",
             };
-            return $"{kind}: {containerObject.Name}";
+            return $"{kind} '{containerObject.Name}'";
         }
 
         var signal = _feeSignals.FirstOrDefault(item => string.Equals(
@@ -2056,19 +2072,16 @@ public sealed class ContainerToFeeVisualPlanService
             guidString,
             StringComparison.OrdinalIgnoreCase));
         if (signal is not null)
-            return $"Signal: {signal.InterfaceName} / {signal.Tag}";
+            return $"Signal '{signal.Tag}' aus Interface '{signal.InterfaceName}'";
 
         var simObject = _feeObjects.FirstOrDefault(item => string.Equals(
             item.GuidString,
             guidString,
             StringComparison.OrdinalIgnoreCase));
         return simObject is null
-            ? "FEE-Objekt: Name nicht auflösbar"
-            : $"SimObject: {simObject.Name}";
+            ? "FEE-Objekt 'Name nicht auflösbar'"
+            : $"SimObject '{simObject.Name}'";
     }
-
-    private static string DisplaySlot(string? slot) =>
-        string.IsNullOrWhiteSpace(slot) ? "nicht gemeldet" : slot.Trim();
 
     private static string CreateDuplicateIdentity(VisualFeeObject item) => string.Join(
         "\u001f",
