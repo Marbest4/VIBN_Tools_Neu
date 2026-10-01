@@ -1023,6 +1023,32 @@ internal static class Program
             var target = nodes.Single(node => node.Kind == VisualNodeKind.SimObjectTarget);
             var group = nodes.Single(node => node.Kind == VisualNodeKind.Group && node.Name == "SimObjects");
             var container = nodes.Single(node => node.Kind == VisualNodeKind.Container);
+            var availableObject = viewModel.AvailableFeeObjects.Single();
+            if (availableObject.ConnectionDetails.Count != 1 ||
+                !availableObject.ConnectionDetails[0].Contains("InTarget", StringComparison.Ordinal) ||
+                !availableObject.ConnectionDetails[0].Contains("SIM_TargetPosition", StringComparison.Ordinal) ||
+                !availableObject.ConnectionDetails[0].Contains("Logik: Axis_1", StringComparison.Ordinal) ||
+                availableObject.ConnectionDetails[0].Contains(logicGuid.ToString("D"), StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "FEE-SimObject link details must show resolved names and both slots instead of a GUID.");
+            }
+            viewModel.SelectedFeeObject = availableObject;
+            if (!ReferenceEquals(viewModel.SelectedTreeNode, simObject) ||
+                !string.Equals(viewModel.SelectedTarget?.Id, target.Id, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Selecting a FEE-SimObject did not synchronize the related tree node and target. " +
+                    $"Tree={viewModel.SelectedTreeNode?.Kind}/{viewModel.SelectedTreeNode?.Id}; " +
+                    $"Target={viewModel.SelectedTarget?.Id}; expected={simObject.Id}/{target.Id}.");
+            }
+            viewModel.SelectedTreeNode = target;
+            if (!ReferenceEquals(viewModel.SelectedFeeObject, availableObject) ||
+                !string.Equals(viewModel.SelectedTarget?.Id, target.Id, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    "Selecting a visual tree target did not synchronize the related lists.");
+            }
             if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||

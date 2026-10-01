@@ -52,12 +52,24 @@
 
         <HierarchicalDataTemplate DataType="{x:Type vm:ContainerToFeeVisualTreeNodeVM}"
                                   ItemsSource="{Binding Children}">
-            <Grid Margin="2" Background="{Binding DisplayBackground}"
-                  Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
-                  behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
-                  behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
-                  behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
-                <Grid.ContextMenu>
+            <Border Margin="2" Padding="2" CornerRadius="3"
+                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                    behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
+                    behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
+                    behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{Binding DisplayBackground}" />
+                        <Setter Property="BorderBrush" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="3" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type TreeViewItem}}}" Value="True">
+                                <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <Border.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Löschen"
                                   Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
@@ -69,7 +81,8 @@
                                   Command="{Binding PlacementTarget.Tag.ConfirmDuplicateFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
                                   CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
                     </ContextMenu>
-                </Grid.ContextMenu>
+                </Border.ContextMenu>
+                <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -121,7 +134,8 @@
                         </Style.Triggers>
                     </Style>
                 </Grid.Style>
-            </Grid>
+                </Grid>
+            </Border>
         </HierarchicalDataTemplate>
     </UserControl.Resources>
 
@@ -177,10 +191,10 @@
                             ToolTip="Ordnet freie Ziele nach identischem Komponentenname und kompatiblem FEE-Typ zu." />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Abbrechen"
                             Command="{Binding CancelCommand}" />
-                    <Button Style="{StaticResource VisualToolbarButton}" MinWidth="165"
-                            Content="FEE hart trennen"
+                    <Button Style="{StaticResource VisualToolbarButton}" MinWidth="185"
+                            Content="SDK-Aufruf isolieren"
                             Command="{Binding HardAbortFeeCommand}"
-                            ToolTip="Nur bei blockierendem SDK-Aufruf: trennt FEE nach ausdrücklicher Bestätigung. Keine Rücknahme bereits erfolgter Änderungen." />
+                            ToolTip="Nur bei blockierendem SDK-Aufruf: gibt die Oberfläche frei und versucht die FEE-Verbindung höchstens zwei Sekunden lang zu trennen. Der öffentliche Remote-SDK kann einen bereits laufenden In-Process-Aufruf nicht hart beenden; dafür muss die Anwendung geschlossen werden. Keine Rücknahme bereits erfolgter Änderungen." />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Letzten Lauf reparieren"
                             Command="{Binding ResumeLastGenerationCommand}"
                             ToolTip="Wählt anhand des letzten Vorher-/Nachher-Manifests nur fehlgeschlagene oder offene Container erneut aus." />
@@ -360,6 +374,7 @@
 
                     <ListBox Grid.Row="2" ItemsSource="{Binding Targets}"
                              SelectedItem="{Binding SelectedTarget, Mode=TwoWay}"
+                             behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedTarget}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -375,12 +390,24 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="9" BorderBrush="#C7D7EA" BorderThickness="1" CornerRadius="4"
-                                        Background="{Binding StateBackground}"
+                                <Border Padding="9" CornerRadius="4"
                                         ToolTip="{Binding ToolTipText}"
                                         behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
                                         behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
                                         behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{Binding StateBackground}" />
+                                            <Setter Property="BorderBrush" Value="#C7D7EA" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                    <Setter Property="BorderThickness" Value="3" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
@@ -435,6 +462,8 @@
                     <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,8,0,4"
                                Text="Signalslots des ausgewählten Containers" />
                     <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}" MinHeight="190"
+                             SelectedItem="{Binding SelectedSignalSlot, Mode=TwoWay}"
+                             behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedSignalSlot}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                              ScrollViewer.CanContentScroll="True"
@@ -449,12 +478,24 @@
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="9" BorderBrush="#C7D7EA" BorderThickness="1" CornerRadius="4"
-                                        Background="{Binding StateBackground}"
+                                <Border Padding="9" CornerRadius="4"
                                         ToolTip="{Binding ToolTipText}"
                                         behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget="True"
                                         behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget="{Binding}"
                                         behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand="{Binding DataContext.DropCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{Binding StateBackground}" />
+                                            <Setter Property="BorderBrush" Value="#C7D7EA" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
+                                                    <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                    <Setter Property="BorderThickness" Value="3" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
@@ -591,11 +632,34 @@
                             </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Padding="7,5" Margin="1" CornerRadius="3" BorderThickness="1"
-                                            Background="{Binding StateBackground}"
-                                            BorderBrush="{Binding StateBorderBrush}"
+                                    <Border Padding="7,5" Margin="1" CornerRadius="3"
+                                            Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                             ToolTip="{Binding AssignmentText}"
                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{Binding StateBackground}" />
+                                                <Setter Property="BorderBrush" Value="{Binding StateBorderBrush}" />
+                                                <Setter Property="BorderThickness" Value="1" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                        <Setter Property="BorderThickness" Value="3" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Border.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Header="In FEE selektieren – mit Remote-SDK nicht verfügbar"
+                                                          IsEnabled="False"
+                                                          ToolTipService.ShowOnDisabled="True"
+                                                          ToolTip="Die Remote-FEE-API liefert ausgewählte GUIDs, bietet aber keinen Aufruf zum Setzen der Auswahl. Die lokale Host-API verwendet nicht auflösbare Laufzeit-IDs." />
+                                                <MenuItem Header="Aus FEE löschen"
+                                                          Command="{Binding PlacementTarget.Tag.DeleteFeeObjectCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}" />
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
                                         <Grid>
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                             <StackPanel>
@@ -606,6 +670,16 @@
                                                 <TextBlock Text="{Binding ConnectionStateText}" Foreground="{Binding StateForeground}"
                                                            FontSize="10" TextWrapping="Wrap"
                                                            Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <ItemsControl ItemsSource="{Binding ConnectionDetails}"
+                                                              Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Margin="8,1,0,0" FontSize="10" TextWrapping="Wrap">
+                                                                <Run Text="• " /><Run Text="{Binding Mode=OneWay}" />
+                                                            </TextBlock>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
                                                 <TextBlock Text="{Binding PlanAssignmentText}" Foreground="#444444" FontSize="10"
                                                            TextWrapping="Wrap" MaxHeight="42"
                                                            Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -686,9 +760,21 @@
                                  VirtualizingPanel.VirtualizationMode="Recycling">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Margin="1" Padding="6,4" CornerRadius="3" Background="{Binding StateBackground}"
+                                    <Border Margin="1" Padding="6,4" CornerRadius="3"
                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
                                             ToolTip="{Binding ToolTipText}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="{Binding StateBackground}" />
+                                                <Setter Property="BorderBrush" Value="Transparent" />
+                                                <Setter Property="BorderThickness" Value="3" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#FF0D47A1" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
                                         <StackPanel>
                                             <TextBlock FontWeight="SemiBold" Text="{Binding Tag}" TextTrimming="CharacterEllipsis" />
                                             <TextBlock FontSize="10" Foreground="#666666" Text="{Binding Location}" TextTrimming="CharacterEllipsis"
@@ -728,12 +814,17 @@
                                         <Border.Style>
                                             <Style TargetType="Border">
                                                 <Setter Property="Background" Value="#FFE8F1FA" />
+                                                <Setter Property="BorderBrush" Value="Transparent" />
+                                                <Setter Property="BorderThickness" Value="3" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Severity}" Value="{x:Static visual:VisualIssueSeverity.Warning}">
                                                         <Setter Property="Background" Value="#FFFFF2CC" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Severity}" Value="{x:Static visual:VisualIssueSeverity.Error}">
                                                         <Setter Property="Background" Value="#FFFFC7CE" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType={x:Type ListBoxItem}}}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#FF0D47A1" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>

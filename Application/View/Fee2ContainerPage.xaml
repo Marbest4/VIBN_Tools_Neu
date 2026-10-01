@@ -22,8 +22,9 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="150" />
-            <RowDefinition Height="*" />
+            <RowDefinition Height="150" MinHeight="90" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="*" MinHeight="220" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -55,6 +56,7 @@
         <DataGrid Grid.Row="2" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedRoot}"
                   AutoGenerateColumns="False" IsReadOnly="False"
                   CanUserAddRows="False" CanUserDeleteRows="False"
+                  CanUserResizeRows="True" CanUserReorderColumns="True"
                   MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -75,7 +77,11 @@
             </DataGrid.Columns>
         </DataGrid>
 
-        <Grid Grid.Row="3" Margin="0,10,0,0">
+        <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      Background="#FFE0E0E0" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                      ToolTip="Ziehen, um die Höhe der Root-Liste und der Ergebnislisten anzupassen." />
+
+        <Grid Grid.Row="4" Margin="0,10,0,0">
             <Grid.Resources>
                 <Style x:Key="Fee2RelatedRowStyle" TargetType="DataGridRow">
                     <Setter Property="Background" Value="Transparent" />
@@ -110,6 +116,7 @@
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          CanUserResizeRows="True" CanUserReorderColumns="True"
                           MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -144,6 +151,7 @@
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding SignalRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          CanUserResizeRows="True" CanUserReorderColumns="True"
                           MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -179,6 +187,7 @@
                              ToolTip="Nicht zugeordnete Objekte nach Name, FEE-Typ, Grund oder Zielcontainer durchsuchen." />
                 <DataGrid Grid.Row="1" ItemsSource="{Binding NonContainerObjectsView}" AutoGenerateColumns="False"
                           IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                          CanUserResizeRows="True" CanUserReorderColumns="True"
                           MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -212,7 +221,7 @@
             </GroupBox>
         </Grid>
 
-        <ItemsControl Grid.Row="4" Margin="0,8,0,0" ItemsSource="{Binding Issues}">
+        <ItemsControl Grid.Row="5" Margin="0,8,0,0" ItemsSource="{Binding Issues}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <TextBlock Foreground="DarkRed" TextWrapping="Wrap" Text="{Binding}" />
@@ -220,7 +229,7 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <StackPanel Grid.Row="5" Margin="0,10,0,0">
+        <StackPanel Grid.Row="6" Margin="0,10,0,0">
             <ProgressBar Height="7" Minimum="0" Maximum="100" Value="{Binding ProgressValue, Mode=OneWay}">
                 <ProgressBar.Style>
                     <Style TargetType="ProgressBar">

@@ -135,8 +135,9 @@ public sealed class ContainerToFeeVisualPlanService
                 signalLink.SignalGuidString,
                 StringComparison.OrdinalIgnoreCase));
             details.Add(
-                $"Signal: {signal?.InterfaceName ?? "Interface unbekannt"} / " +
-                $"{signal?.Tag ?? signalLink.SignalGuidString} -> {signalLink.SlotName}" +
+                $"Eigener Slot '{DisplaySlot(signalLink.SlotName)}' ← Signal " +
+                $"'{signal?.Tag ?? "Name nicht auflösbar"}' aus Interface " +
+                $"'{signal?.InterfaceName ?? "unbekannt"}'" +
                 (signalLink.IsIndirect ? " (über MoveBit)" : string.Empty));
         }
 
@@ -153,7 +154,9 @@ public sealed class ContainerToFeeVisualPlanService
                 : objectLink.ObjectGuidString;
             var ownSlot = isSource ? objectLink.SlotName : objectLink.LinkedSlotName;
             var otherSlot = isSource ? objectLink.LinkedSlotName : objectLink.SlotName;
-            details.Add($"{DescribeLinkedFeeObject(otherGuid)}: {ownSlot} <-> {otherSlot}");
+            details.Add(
+                $"Eigener Slot '{DisplaySlot(ownSlot)}' ↔ {DescribeLinkedFeeObject(otherGuid)}, " +
+                $"Slot '{DisplaySlot(otherSlot)}'");
         }
 
         return new VisualFeeObjectConnectionSummary(
@@ -2060,9 +2063,12 @@ public sealed class ContainerToFeeVisualPlanService
             guidString,
             StringComparison.OrdinalIgnoreCase));
         return simObject is null
-            ? $"FEE-Objekt: {guidString}"
+            ? "FEE-Objekt: Name nicht auflösbar"
             : $"SimObject: {simObject.Name}";
     }
+
+    private static string DisplaySlot(string? slot) =>
+        string.IsNullOrWhiteSpace(slot) ? "nicht gemeldet" : slot.Trim();
 
     private static string CreateDuplicateIdentity(VisualFeeObject item) => string.Join(
         "\u001f",

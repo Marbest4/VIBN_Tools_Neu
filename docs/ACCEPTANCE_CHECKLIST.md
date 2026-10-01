@@ -111,7 +111,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Container Generation lädt nach einer Requirements-XML ein bestehendes ContainerFile als aktiven Arbeitsstand; ohne aktiven Stand ist der Vergleich deaktiviert.
 - [ ] **Aktiven Stand vergleichen** fragt nur einen Kandidaten ab und zeigt feldgenaue Unterschiede zum sichtbaren Workspace; **Arbeitsstand laden** lädt weiterhin ausschließlich das interne Workspaceformat.
 - [ ] Der bestehende Container2Fee-Reiter arbeitet unverändert.
-- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 9 einschließlich Mehrfach-Interfaceauswahl, zeigt alle deklarierten Signalslots und erlaubt Signale beziehungsweise SimObjects ausschließlich auf ihren getrennten, kompatiblen Drag-and-drop-Zielen.
+- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 10 einschließlich Mehrfach-Interfaceauswahl und Signal-only-Typkorrektur, zeigt alle deklarierten Signalslots und erlaubt Signale beziehungsweise SimObjects ausschließlich auf ihren getrennten, kompatiblen Drag-and-drop-Zielen.
 - [ ] `Entf`, Kontextmenü und die mittlere Signalliste entfernen Signale nur aus dem wirksamen Plan; Rückgängig stellt sie wieder her und **Container.xml speichern** schreibt genau den bearbeiteten Stand.
 - [ ] Auswahl, Aufklappzustand und Scrollposition der Containerstruktur bleiben nach Drag-and-drop erhalten; helllila kennzeichnet gefundene, aber noch nicht bestätigt verknüpfte Elemente.
 - [ ] Gefundene FEE-Signale lassen sich auf Signal-Knoten ziehen; die bestätigte GUID bleibt nach erneutem Öffnen erhalten und löst einen dokumentierten Tag-/Adresskonflikt eindeutig auf.
@@ -128,7 +128,9 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] **Nur SimObjects verknüpfen** verbindet nach Model Validation → Update Objects vorhandene SimObjects mit genau einer gleichnamigen vorhandenen Logik und erzeugt kein Modellobjekt neu.
 - [ ] Container2FEE Visual erzeugt mit denselben Zuordnungen fachlich dasselbe Ergebnis wie der bestehende Executor; Erzeugen und Überspringen sind geprüft.
 - [ ] Die Statusfilter begrenzen Containerbaum, verfügbare SimObjects und FEE-Signale auf den gewählten Zustand; bei Baumtreffern bleiben die benötigten Elternknoten sichtbar.
-- [ ] Ein Abbruch gibt die UI sofort frei und verhindert einen neuen FEE-Vorgang, bis ein bereits laufender nicht abbrechbarer SDK-Aufruf beendet ist.
+- [ ] Ein Abbruch gibt die UI sofort frei und verhindert einen neuen FEE-Vorgang, bis ein bereits laufender nicht abbrechbarer SDK-Aufruf beendet ist; **SDK-Aufruf isolieren** blockiert höchstens zwei Sekunden auf `Disconnect` und nennt die In-Process-Grenze ausdrücklich.
+- [ ] Bei aktiver Auswahl-Synchronisierung markieren Baum, Ziele, Signalslots, SimObjects, Signale und Validierung ihr eindeutig zuordenbares Gegenstück mit einem dunkelblauen 3-Pixel-Rahmen und zentrieren es im jeweiligen Scrollbereich.
+- [ ] FEE2Container erlaubt in allen vier Tabellen das Ändern und Umordnen der Spalten; Trenner ändern Root-/Ergebnisbereich sowie die drei Ergebnislisten in Breite und Höhe.
 - [ ] Ein vorhandenes gleichnamiges Cabinet wird wiederverwendet; mehrere gleichnamige Cabinets blockieren als Mehrdeutigkeit und erzeugen kein weiteres Duplikat.
 - [ ] Ein Stopper-Floor besitzt nach Erzeugung oder Link-only-Aktualisierung einen aktiven `CollisionSlot`; `SIM_Collision` und alle gewählten `Floor/Collision`-Slots sind nach Save/Reload verbunden.
 - [ ] Eine von FEE abgewiesene Variablen- oder Slotverknüpfung wird mit GUID-/Slot-Kontext als Fehler gemeldet und nicht als Erfolg angezeigt.

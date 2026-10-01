@@ -167,7 +167,29 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             // not send the user back to its beginning. Keep the edited node
             // as the visual scroll anchor.
             container.BringIntoView();
+            treeView.UpdateLayout();
+            CenterContainer(treeView, container);
         });
+    }
+
+    private static void CenterContainer(TreeView treeView, FrameworkElement container)
+    {
+        var viewer = FindVisualChild<ScrollViewer>(treeView);
+        if (viewer is null)
+            return;
+        try
+        {
+            var position = container.TransformToAncestor(viewer).Transform(new Point(0, 0));
+            var delta = position.Y - Math.Max(0d, (viewer.ViewportHeight - container.ActualHeight) / 2d);
+            var scrollDelta = viewer.CanContentScroll
+                ? delta / Math.Max(1d, container.ActualHeight)
+                : delta;
+            viewer.ScrollToVerticalOffset(Math.Max(0d, viewer.VerticalOffset + scrollDelta));
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+        {
+            // A freshly rebuilt tree can replace the container before centering.
+        }
     }
 
     private static TreeViewItem? FindContainer(ItemsControl parent, object item)

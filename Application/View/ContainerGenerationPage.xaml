@@ -235,11 +235,14 @@
                         </StackPanel>
                     </GroupBox>
                     </Grid>
-                    <Border Margin="5" Padding="9" BorderBrush="#FFB8C7D1" BorderThickness="1" CornerRadius="4">
-                        <Grid>
+                    <Expander Margin="5,2" Header="Aktive Suche und Vorschau" IsExpanded="False"
+                              ToolTip="Blendet die konkrete Regex-Auswertung des aktuell gewählten Signals ein oder aus.">
+                        <StackPanel>
+                        <Border Margin="0,4,0,0" Padding="9" BorderBrush="#FFB8C7D1" BorderThickness="1" CornerRadius="4">
+                            <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="160"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                            <TextBlock Grid.ColumnSpan="2" FontWeight="SemiBold" Text="Aktive Suche und Vorschau"/>
+                            <TextBlock Grid.ColumnSpan="2" FontWeight="SemiBold" Text="Auswertung der aktiven Grouping-Regeln"/>
                             <TextBlock Grid.Row="1" Margin="0,5,8,0" FontWeight="SemiBold" Text="Gesucht wird:"/>
                             <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,5,0,0" Text="{Binding GroupingRuleSummary}" TextWrapping="Wrap"/>
                             <TextBlock Grid.Row="2" Margin="0,4,8,0" FontWeight="SemiBold" Text="Ausgewähltes Signal:"/>
@@ -250,10 +253,12 @@
                             <TextBlock Grid.Row="4" Grid.Column="1" Margin="0,4,0,0" TextWrapping="Wrap">
                                 <Run Text="{Binding GroupingPreviewKey, Mode=OneWay}"/><Run Text="  |  Containername: "/><Run Text="{Binding GroupingPreviewContainerName, Mode=OneWay}"/>
                             </TextBlock>
-                        </Grid>
-                    </Border>
-                    <TextBlock Margin="7,0,7,4" Foreground="#FF455A64" TextWrapping="Wrap"
-                               Text="Vorschau verwenden: Regex bzw. Gruppierung aktivieren und danach ein Signal in Nicht zugeordnet, Gefiltert oder der Hauptliste anklicken. Auswertung, Gruppenschlüssel und resultierender Containername werden oben sofort für dieses Signal angezeigt." />
+                            </Grid>
+                        </Border>
+                        <TextBlock Margin="2,4,2,4" Foreground="#FF455A64" TextWrapping="Wrap"
+                                   Text="Regex bzw. Gruppierung aktivieren und danach ein Signal in Nicht zugeordnet, Gefiltert oder der Hauptliste anklicken. Auswertung, Gruppenschlüssel und resultierender Containername werden sofort angezeigt." />
+                        </StackPanel>
+                    </Expander>
                     <TextBlock Margin="7,0,7,5" Foreground="#FF455A64" TextWrapping="Wrap"
                                Text="{Binding LastGenerationSettingsSummary}" />
                 </StackPanel>

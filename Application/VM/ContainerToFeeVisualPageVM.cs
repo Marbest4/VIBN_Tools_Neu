@@ -27,6 +27,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 {
     private const string LogArea = "Container2FEE Visual";
     private static readonly TimeSpan DeleteFeeObjectResponseTimeout = TimeSpan.FromSeconds(12);
+    private static readonly TimeSpan FeeDisconnectResponseTimeout = TimeSpan.FromSeconds(2);
     private readonly ContainerToFeeVisualPlanService _planService;
     private readonly ApplicationLogService _log;
     private readonly FeeConnectionService _connection;
@@ -37,6 +38,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private ContainerToFeeVisualFeeInterfaceVM? _selectedExistingInterface;
     private ContainerToFeeVisualFeeObjectVM? _selectedFeeObject;
     private ContainerToFeeVisualFeeSignalVM? _selectedFeeSignal;
+    private ContainerToFeeVisualSignalSlotVM? _selectedSignalSlot;
     private string? _selectedSignalOnlyContainerType;
     private VisualIssue? _selectedIssue;
     private bool _synchronizeRelatedSelections = true;
@@ -135,7 +137,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         CancelCommand = new RelayCommand(CancelOperation, () => IsBusy);
         HardAbortFeeCommand = new AsyncRelayCommand(
             HardAbortFeeConnectionAsync,
-            () => (IsBusy || HasPendingFeeSdkOperation) && Connection.CanUseFeeFeatures);
+            () => IsBusy || HasPendingFeeSdkOperation);
         UndoCommand = new RelayCommand(Undo, () => _planService.CanUndo && !IsBusy);
         RedoCommand = new RelayCommand(Redo, () => _planService.CanRedo && !IsBusy);
         DropCommand = new RelayCommand<ContainerToFeeVisualDropRequest>(
@@ -662,6 +664,21 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
     }
 
+    public ContainerToFeeVisualSignalSlotVM? SelectedSignalSlot
+    {
+        get => _selectedSignalSlot;
+        set
+        {
+            if (ReferenceEquals(_selectedSignalSlot, value))
+                return;
+            _selectedSignalSlot = value;
+            OnPropertyChanged();
+            if (value is null || !SynchronizeRelatedSelections)
+                return;
+            SelectRelatedTreeNode(FindTreeNode(value.PrimaryNodeId));
+        }
+    }
+
     public VisualIssue? SelectedIssue
     {
         get => _selectedIssue;
@@ -688,6 +705,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             _selectedTarget = value;
             OnPropertyChanged();
             FeeObjectsView.Refresh();
+            if (value is not null && SynchronizeRelatedSelections)
+                SelectRelatedTreeNode(FindTreeNode(value.Id));
         }
     }
 
@@ -1639,14 +1658,17 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private async Task HardAbortFeeConnectionAsync()
     {
-        if ((!IsBusy && !HasPendingFeeSdkOperation) || !Connection.CanUseFeeFeatures)
+        if (!IsBusy && !HasPendingFeeSdkOperation)
             return;
         var answer = MessageBox.Show(
-            "ACHTUNG: Die FEE-Verbindung wird getrennt, um einen blockierenden SDK-Aufruf zu unterbrechen. " +
+            "ACHTUNG: Die FEE-Verbindung wird getrennt und die Oberfläche sofort freigegeben. " +
+            "Die verwendete FEE-SDK besitzt jedoch keinen Abbruch für einen bereits laufenden Remote-Aufruf. " +
+            "Der Aufruf selbst kann innerhalb dieses Prozesses nicht sicher hart beendet werden und wird deshalb isoliert. " +
+            "Vollständig beendet wird er spätestens beim Schließen der Anwendung. " +
             "Eine bereits begonnene FEE-Änderung besitzt keine transaktionale Rücknahme und kann teilweise " +
             "ausgeführt worden sein. Danach ist ein erneutes Verbinden und 'FEE aktualisieren' erforderlich.\n\n" +
-            "FEE-Verbindung jetzt hart trennen?",
-            "FEE-SDK-Aufruf hart unterbrechen",
+            "FEE-Verbindung jetzt trennen und den Aufruf isolieren?",
+            "Blockierenden FEE-SDK-Aufruf isolieren",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning,
             MessageBoxResult.No);
@@ -1656,16 +1678,38 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         CancelOperation();
         try
         {
-            await Task.Run(() => Services.ApiInstance?.Disconnect());
-            GenerationProgressText = "FEE-Verbindung wurde getrennt.";
-            StatusText = "FEE-Verbindung hart getrennt. Projektzustand vor dem nächsten Lauf aktualisieren.";
+            var disconnectTask = Task.Run(() => Services.ApiInstance?.Disconnect());
+            var completed = await Task.WhenAny(
+                disconnectTask,
+                Task.Delay(FeeDisconnectResponseTimeout));
+            if (ReferenceEquals(completed, disconnectTask))
+                await disconnectTask;
+            else
+                _ = ObserveDetachedDisconnectAsync(disconnectTask);
+
+            GenerationProgressText = "Abgebrochen; SDK-Aufruf isoliert";
+            StatusText = ReferenceEquals(completed, disconnectTask)
+                ? "FEE-Verbindung getrennt. Ein bereits blockierter SDK-Aufruf bleibt bis zu seiner Rückkehr isoliert."
+                : "Die FEE-Trennung antwortet ebenfalls nicht. Oberfläche ist freigegeben; zum sicheren Beenden des SDK-Aufrufs Anwendung schließen.";
             _log.Warning(LogArea, StatusText);
-            AddOperationDetail("Harter Abbruch", StatusText);
+            AddOperationDetail("SDK-Aufruf isoliert", StatusText);
         }
         catch (Exception exception)
         {
             StatusText = "Auch das Trennen der FEE-Verbindung ist fehlgeschlagen; Anwendung kontrolliert schließen.";
             _log.Error(LogArea, StatusText, exception);
+        }
+    }
+
+    private async Task ObserveDetachedDisconnectAsync(Task disconnectTask)
+    {
+        try
+        {
+            await disconnectTask.ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            _log.Error(LogArea, "Der im Hintergrund isolierte FEE-Trennaufruf ist fehlgeschlagen.", exception);
         }
     }
 
@@ -1823,6 +1867,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         {
             cancellation.Dispose();
             _cancelledOperationFinishing = null;
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.CheckAccess())
+                InvalidateCommands();
+            else
+                await dispatcher.InvokeAsync(InvalidateCommands);
         }
     }
 
@@ -2669,6 +2718,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 node = FindTreeNode(node.Id) ?? node;
             }
             ExpandTreeAncestors(node);
+            if (ReferenceEquals(SelectedTreeNode, node))
+            {
+                // Force the reveal behavior to run again when a related item
+                // points at the tree node that is already selected but has
+                // meanwhile been scrolled out of view.
+                _selectedTreeNode = null;
+                OnPropertyChanged(nameof(SelectedTreeNode));
+            }
             SelectedTreeNode = node;
             node.IsExpanded = true;
         }
@@ -2676,6 +2733,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         {
             _isSynchronizingSelections = false;
         }
+        // Selecting an item in an outer list first moves the tree selection.
+        // Project that tree node back into every related list afterwards so
+        // all synchronized views receive the same visible selection anchor.
+        SynchronizeSelectionsFromTree(node);
     }
 
     private void ExpandTreeAncestors(ContainerToFeeVisualTreeNodeVM node)
@@ -2704,18 +2765,52 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 feeObjectId = _planService.CurrentPlan?.Assignments.FirstOrDefault(assignment =>
                     string.Equals(assignment.TargetId, node.Id, StringComparison.Ordinal))?.FeeObjectId;
             }
-            if (!string.IsNullOrWhiteSpace(feeObjectId))
-                SelectedFeeObject = AvailableFeeObjects.FirstOrDefault(item => item.Id == feeObjectId);
+            var relatedFeeObject = string.IsNullOrWhiteSpace(feeObjectId)
+                ? null
+                : AvailableFeeObjects.FirstOrDefault(item => item.Id == feeObjectId);
+            if (ReferenceEquals(SelectedFeeObject, relatedFeeObject) && relatedFeeObject is not null)
+                SelectedFeeObject = null;
+            SelectedFeeObject = relatedFeeObject;
+
+            var targetId = node.Kind switch
+            {
+                VisualNodeKind.SimObjectTarget => node.Id,
+                VisualNodeKind.SimObject => node.ParentId,
+                _ => null,
+            };
+            var relatedTarget = string.IsNullOrWhiteSpace(targetId)
+                ? null
+                : Targets.FirstOrDefault(item => string.Equals(item.Id, targetId, StringComparison.Ordinal));
+            if (ReferenceEquals(SelectedTarget, relatedTarget) && relatedTarget is not null)
+                SelectedTarget = null;
+            SelectedTarget = relatedTarget;
 
             if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
             {
-                SelectedFeeSignal = AvailableFeeSignals.FirstOrDefault(item =>
+                var relatedSignal = AvailableFeeSignals.FirstOrDefault(item =>
                     item.AssignedNodeIds.Contains(node.Id, StringComparer.Ordinal));
+                var relatedSlot = SignalSlots.FirstOrDefault(item =>
+                    string.Equals(item.ContainerId, node.ContainerId, StringComparison.Ordinal) &&
+                    string.Equals(item.Slot, node.Slot, StringComparison.Ordinal));
+                if (ReferenceEquals(SelectedFeeSignal, relatedSignal) && relatedSignal is not null)
+                    SelectedFeeSignal = null;
+                SelectedFeeSignal = relatedSignal;
+                if (ReferenceEquals(SelectedSignalSlot, relatedSlot) && relatedSlot is not null)
+                    SelectedSignalSlot = null;
+                SelectedSignalSlot = relatedSlot;
+            }
+            else
+            {
+                SelectedFeeSignal = null;
+                SelectedSignalSlot = null;
             }
 
-            SelectedIssue = Issues.FirstOrDefault(issue =>
+            var relatedIssue = Issues.FirstOrDefault(issue =>
                 string.Equals(issue.NodeId, node.Id, StringComparison.Ordinal) ||
                 string.Equals(issue.NodeId, node.ContainerId, StringComparison.Ordinal));
+            if (ReferenceEquals(SelectedIssue, relatedIssue) && relatedIssue is not null)
+                SelectedIssue = null;
+            SelectedIssue = relatedIssue;
         }
         finally
         {
@@ -3239,8 +3334,9 @@ public sealed class ContainerToFeeVisualFeeObjectVM
     public string ConnectionStateText => !ConnectionSummary.WasRead
         ? "Live-Verknüpfungen noch nicht vollständig gelesen"
         : HasLiveConnections
-            ? $"Live verknüpft: {string.Join("; ", ConnectionSummary.Details)}"
+            ? $"{ConnectionSummary.Details.Count} Live-Verknüpfung(en) gefunden"
             : "Keine Live-Verknüpfung zu Logik, Signal oder SimObject gefunden";
+    public IReadOnlyList<string> ConnectionDetails => ConnectionSummary.Details;
     public string DuplicateStateText => !HasExactDuplicate
         ? string.Empty
         : !ConnectionSummary.WasRead
@@ -3457,6 +3553,7 @@ public sealed class ContainerToFeeVisualSignalSlotVM
 
     public string ContainerId { get; }
     public string Slot { get; }
+    public string? PrimaryNodeId => Assignments.FirstOrDefault()?.NodeId;
     public bool AllowMultiSelect => global::VIBN_Tools.ContainerGeneration.Models.ContainerSlotMultiplicityPolicy.IsPlcInput(Slot);
     public string SelectionMode => AllowMultiSelect ? "Mehrfachbelegung" : "Einzelbelegung";
     public ObservableCollection<ContainerToFeeVisualSignalEntryVM> Assignments { get; }
