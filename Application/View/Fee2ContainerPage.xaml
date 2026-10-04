@@ -17,8 +17,8 @@
         </Style>
     </UserControl.Resources>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-    <Grid Margin="20" MinWidth="820" MinHeight="560">
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <Grid Margin="20" MinWidth="860">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -60,8 +60,9 @@
                   MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
                   ScrollViewer.VerticalScrollBarVisibility="Auto"
-                  VirtualizingPanel.IsVirtualizing="False"
-                  EnableRowVirtualization="False" EnableColumnVirtualization="False">
+                  VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.VirtualizationMode="Recycling"
+                  EnableRowVirtualization="True" EnableColumnVirtualization="True">
             <DataGrid.Columns>
                 <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Export" ToolTip="Legt fest, ob dieser oberste BasicFrame in das ContainerFile übernommen wird." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
                 <DataGridTextColumn Binding="{Binding Name}" Width="220" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="FEE-Root" ToolTip="Name des obersten BasicFrames, der den auszulesenden FEE-Teilbaum begrenzt." /></DataGridTextColumn.Header></DataGridTextColumn>
@@ -120,8 +121,9 @@
                           MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          VirtualizingPanel.IsVirtualizing="False"
-                          EnableRowVirtualization="False" EnableColumnVirtualization="False">
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="190" />
@@ -156,8 +158,9 @@
                           MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          VirtualizingPanel.IsVirtualizing="False"
-                          EnableRowVirtualization="False" EnableColumnVirtualization="False">
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Zugeordnet zu Container" Binding="{Binding Container}" Width="210" IsReadOnly="True" />
@@ -193,8 +196,9 @@
                           MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
                           ScrollViewer.HorizontalScrollBarVisibility="Auto"
                           ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          VirtualizingPanel.IsVirtualizing="False"
-                          EnableRowVirtualization="False" EnableColumnVirtualization="False">
+                          VirtualizingPanel.IsVirtualizing="True"
+                          VirtualizingPanel.VirtualizationMode="Recycling"
+                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="210" IsReadOnly="True" />
                         <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="150" IsReadOnly="True" />

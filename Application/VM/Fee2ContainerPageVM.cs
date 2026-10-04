@@ -67,11 +67,11 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         _connection.PropertyChanged += OnConnectionPropertyChanged;
     }
 
-    public ObservableCollection<Fee2ContainerRootSelectionVM> Roots { get; } = new();
-    public ObservableCollection<string> Issues { get; } = new();
-    public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; } = new();
-    public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; } = new();
-    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new();
+    public ObservableCollection<Fee2ContainerRootSelectionVM> Roots { get; } = new RangeObservableCollection<Fee2ContainerRootSelectionVM>();
+    public ObservableCollection<string> Issues { get; } = new RangeObservableCollection<string>();
+    public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; } = new RangeObservableCollection<Fee2ContainerFoundContainerVM>();
+    public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; } = new RangeObservableCollection<Fee2ContainerFoundSignalVM>();
+    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new RangeObservableCollection<Fee2ContainerUnmappedObjectVM>();
     public ICollectionView FoundContainersView { get; }
     public ICollectionView FoundSignalsView { get; }
     public ICollectionView NonContainerObjectsView { get; }
@@ -184,7 +184,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             ApplyCrossListSelectionSafely(selection, revealTarget, revision);
             return;
         }
-        _ = dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        _ = dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
             ApplyCrossListSelectionSafely(selection, revealTarget, revision)));
     }
 
@@ -457,7 +457,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             return;
         }
 
-        _ = dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        _ = dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
             RefreshSelectionDetailsSafely(selection, revision)));
     }
 

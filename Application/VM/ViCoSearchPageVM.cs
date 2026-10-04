@@ -507,14 +507,17 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         StatusText = "PC- und Projektdaten werden geladen …";
         try
         {
+            var cancellationToken = _lifetimeCancellation.Token;
             var stopwatch = Stopwatch.StartNew();
-            var catalogTask = _catalog.LoadAsync();
-            var resolverTask = _pathResolverFactory(CancellationToken.None);
+            var catalogTask = _catalog.LoadAsync(cancellationToken);
+            var resolverTask = _pathResolverFactory(cancellationToken);
             var combinedTask = Task.WhenAll(catalogTask, resolverTask);
-            var completed = await Task.WhenAny(combinedTask, Task.Delay(TimeSpan.FromSeconds(10)));
+            var completed = await Task.WhenAny(
+                combinedTask,
+                Task.Delay(TimeSpan.FromSeconds(10), cancellationToken));
             if (!ReferenceEquals(completed, combinedTask))
             {
-                var previous = await _lastActiveSnapshotStore.LoadAsync();
+                var previous = await _lastActiveSnapshotStore.LoadAsync(cancellationToken);
                 if (previous is { Workstations.Count: > 0 })
                 {
                     ApplyWorkstations(previous.Workstations);
@@ -529,7 +532,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
             if (snapshot.Workstations.Count == 0)
             {
-                var previous = await _lastActiveSnapshotStore.LoadAsync();
+                var previous = await _lastActiveSnapshotStore.LoadAsync(cancellationToken);
                 if (previous is { Workstations.Count: > 0 })
                 {
                     ApplyWorkstations(previous.Workstations);
@@ -546,7 +549,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             {
                 await _lastActiveSnapshotStore.SaveAsync(new ViCoLastActiveSnapshot(
                     DateTimeOffset.Now,
-                    snapshot.Workstations));
+                    snapshot.Workstations), cancellationToken);
             }
             StatusText = completionMessage ?? BuildWorkstationLoadStatus(snapshot);
             if (stopwatch.Elapsed > TimeSpan.FromSeconds(10))
@@ -554,6 +557,11 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             _log.Information("Rechnerübersicht", StatusText);
             foreach (var warning in snapshot.Warnings)
                 _log.Warning("Rechnerübersicht", "Eine Datenquelle konnte nicht gelesen werden.", warning);
+        }
+        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+        {
+            // The page or application is closing; do not keep network-share
+            // enumeration alive and do not turn an expected shutdown into an error.
         }
         catch (Exception exception)
         {

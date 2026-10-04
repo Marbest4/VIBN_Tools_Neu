@@ -13,6 +13,8 @@ namespace VIBN_Tools.Application.View
     public partial class MainWindow : Window
     {
         private const int WmMouseHorizontalWheel = 0x020E;
+        private const int WmGetMinMaxInfo = 0x0024;
+        private const uint MonitorDefaultToNearest = 0x00000002;
         private HwndSource? _windowSource;
         private bool _deferredInitializationStarted;
 
@@ -23,12 +25,12 @@ namespace VIBN_Tools.Application.View
             var vm = new MainWindowVM();
             DataContext = vm;
 
-            WindowState = WindowState.Maximized;
             ResizeMode = ResizeMode.CanResize;
             SourceInitialized += OnSourceInitialized;
             Closed += OnClosed;
             PreviewMouseWheel += OnPreviewMouseWheel;
             SizeChanged += (_, _) => vm.EnsureNavigationFits(ActualWidth);
+            LocationChanged += (_, _) => UpdateMaximumWindowSize();
             ContentRendered += async (_, _) =>
             {
                 if (_deferredInitializationStarted)
@@ -49,6 +51,11 @@ namespace VIBN_Tools.Application.View
         {
             _windowSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
             _windowSource?.AddHook(WindowMessageHook);
+            UpdateMaximumWindowSize();
+            // Maximize only after the native work-area hook is active. Custom
+            // chrome otherwise uses the virtual desktop and can extend beyond
+            // the current monitor or underneath its taskbar.
+            WindowState = WindowState.Maximized;
         }
 
         private void OnClosed(object? sender, EventArgs e)
@@ -59,6 +66,13 @@ namespace VIBN_Tools.Application.View
 
         private IntPtr WindowMessageHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
+            if (message == WmGetMinMaxInfo)
+            {
+                ConstrainMaximizedWindowToWorkArea(hwnd, lParam);
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             if (message != WmMouseHorizontalWheel)
                 return IntPtr.Zero;
 
@@ -147,11 +161,89 @@ namespace VIBN_Tools.Application.View
         [DllImport("user32.dll")]
         private static extern bool GetCursorPos(out NativePoint point);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(IntPtr windowHandle, uint flags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfo(IntPtr monitorHandle, ref MonitorInfo monitorInfo);
+
+        private static void ConstrainMaximizedWindowToWorkArea(IntPtr windowHandle, IntPtr minMaxInfoPointer)
+        {
+            var monitorHandle = MonitorFromWindow(windowHandle, MonitorDefaultToNearest);
+            if (monitorHandle == IntPtr.Zero)
+                return;
+
+            var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (!GetMonitorInfo(monitorHandle, ref monitorInfo))
+                return;
+
+            var minMaxInfo = Marshal.PtrToStructure<MinMaxInfo>(minMaxInfoPointer);
+            var workArea = monitorInfo.WorkArea;
+            var monitorArea = monitorInfo.MonitorArea;
+            minMaxInfo.MaxPosition.X = workArea.Left - monitorArea.Left;
+            minMaxInfo.MaxPosition.Y = workArea.Top - monitorArea.Top;
+            minMaxInfo.MaxSize.X = workArea.Right - workArea.Left;
+            minMaxInfo.MaxSize.Y = workArea.Bottom - workArea.Top;
+            minMaxInfo.MaxTrackSize = minMaxInfo.MaxSize;
+            Marshal.StructureToPtr(minMaxInfo, minMaxInfoPointer, false);
+        }
+
+        private void UpdateMaximumWindowSize()
+        {
+            var windowHandle = new WindowInteropHelper(this).Handle;
+            if (windowHandle == IntPtr.Zero)
+                return;
+            var monitorHandle = MonitorFromWindow(windowHandle, MonitorDefaultToNearest);
+            var monitorInfo = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            if (monitorHandle == IntPtr.Zero || !GetMonitorInfo(monitorHandle, ref monitorInfo))
+                return;
+
+            var source = PresentationSource.FromVisual(this);
+            var fromDevice = source?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+            var topLeft = fromDevice.Transform(new Point(
+                monitorInfo.WorkArea.Left,
+                monitorInfo.WorkArea.Top));
+            var bottomRight = fromDevice.Transform(new Point(
+                monitorInfo.WorkArea.Right,
+                monitorInfo.WorkArea.Bottom));
+            MaxWidth = Math.Max(MinWidth, bottomRight.X - topLeft.X);
+            MaxHeight = Math.Max(MinHeight, bottomRight.Y - topLeft.Y);
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         private struct NativePoint
         {
             public int X;
             public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MinMaxInfo
+        {
+            public NativePoint Reserved;
+            public NativePoint MaxSize;
+            public NativePoint MaxPosition;
+            public NativePoint MinTrackSize;
+            public NativePoint MaxTrackSize;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeRect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct MonitorInfo
+        {
+            public int Size;
+            public NativeRect MonitorArea;
+            public NativeRect WorkArea;
+            public uint Flags;
         }
 
         // Event for functions that are triggerd by selecting a new TabItem

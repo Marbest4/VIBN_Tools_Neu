@@ -143,9 +143,9 @@
     </UserControl.Resources>
 
     <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto"
+                  VerticalScrollBarVisibility="Disabled"
                   CanContentScroll="False">
-    <Grid Margin="10" MinWidth="960" MinHeight="620">
+    <Grid Margin="10" MinWidth="960">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -867,7 +867,9 @@
 
         <Grid Grid.Row="3" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-            <ProgressBar Height="7" Minimum="0" Maximum="100" Value="{Binding GenerationProgress, Mode=OneWay}" />
+            <ProgressBar Height="7" Minimum="0" Maximum="100"
+                         Value="{Binding GenerationProgress, Mode=OneWay}"
+                         IsIndeterminate="{Binding IsProgressIndeterminate, Mode=OneWay}" />
             <TextBlock Grid.Row="1" Margin="0,3,0,0" Text="{Binding GenerationProgressText}" TextWrapping="Wrap" />
         </Grid>
 

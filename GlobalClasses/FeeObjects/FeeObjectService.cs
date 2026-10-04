@@ -28,8 +28,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         private readonly HashSet<FeeAbstractObject> _subscribedObjects = new HashSet<FeeAbstractObject>();
 
         private readonly List<Task> _debounceTasks = new();
-
-
+        private readonly object _updateSync = new();
+        private Task? _activeUpdate;
         private bool _isLoadingFeeData = false;
 
 
@@ -93,45 +93,50 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
 
 
-        public async Task UpdateFeeDataAsync()
+        public Task UpdateFeeDataAsync()
+        {
+            lock (_updateSync)
+                return _activeUpdate is { IsCompleted: false }
+                    ? _activeUpdate
+                    : _activeUpdate = UpdateFeeDataCoreAsync();
+        }
+
+        private async Task UpdateFeeDataCoreAsync()
         {
             var startTime = DateTime.Now;            
 
             _isLoadingFeeData = true;
-
-            // Load all FEE objects
-            var oldObjects = AllFeeObjects;
-            var newObjects = await GetAllFeeObjectsAsync();
-
-            // Parent-Mapping
-            FindAndAssignParents(newObjects);
-
-            // Subscripe to PropertyChanged
-            SubscribePropertyChanges(newObjects);
-
-            // Plausibility checks of every object
-            await RunPlausibilityChecks(newObjects);
-
-            // Save Acknowledge status
-            AllFeeObjects = MergeAcknowledgeInformation(oldObjects, newObjects);
-
-            _isLoadingFeeData = false;
-
-            //==================================================================================
-            await Task.WhenAll(_debounceTasks);
-            _debounceTasks.Clear();
-
-
-            var stopTime = DateTime.Now;
-
-            // Inform ViewModels
-            await Task.Yield();       // let UI breath :)
-
-
-            FeeObjectsUpdated?.Invoke(this, new FeeObjectsUpdatedEventargs
+            try
             {
-                ElapsedTime = stopTime - startTime,
-            });
+                // A single shared batch is used by Model Validation,
+                // Container2FEE Visual and FEE2Container. Concurrent callers
+                // await this same operation instead of allocating a second
+                // complete project snapshot and racing the vendor client.
+                var oldObjects = AllFeeObjects;
+                var newObjects = await GetAllFeeObjectsAsync();
+
+                FindAndAssignParents(newObjects);
+                SubscribePropertyChanges(newObjects);
+                await RunPlausibilityChecks(newObjects);
+                AllFeeObjects = MergeAcknowledgeInformation(oldObjects, newObjects);
+
+                var pendingChanges = _debounceTasks.ToArray();
+                if (pendingChanges.Length > 0)
+                    await Task.WhenAll(pendingChanges);
+                _debounceTasks.Clear();
+
+                await Task.Yield();
+                FeeObjectsUpdated?.Invoke(this, new FeeObjectsUpdatedEventargs
+                {
+                    ElapsedTime = DateTime.Now - startTime,
+                });
+            }
+            finally
+            {
+                _isLoadingFeeData = false;
+                lock (_updateSync)
+                    _activeUpdate = null;
+            }
 
         }
 
@@ -201,13 +206,16 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
 
             // Store data
-            var xmlList = (await xmlTask).ToList();
-            var xmlElements = xmlList.Select(XElement.Parse).ToList();
+            var xmlList = (await xmlTask).ToArray();
+            var xmlElements = new XElement[xmlList.Length];
+            Parallel.For(0, xmlList.Length, index =>
+                xmlElements[index] = XElement.Parse(xmlList[index]));
 
             var positions = (await posTask).Select(x => Services.ApiInstance.XmlHelper.ConvertToVector3(x)).ToList();
             var rotations = (await rotTask).Select(x => Services.ApiInstance.XmlHelper.ConvertToVector3(x)).ToList();
 
-            var allLogicDefinitions = await logicDefsTask;
+            IReadOnlyList<ApiLogicDefinition> allLogicDefinitions =
+                (await logicDefsTask).ToArray();
 
 
 
@@ -259,7 +267,9 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                     IsPick = pickPlacePickDict.TryGetValue(id, out var isPick) ? isPick : null,
                     IsDrop = pickPlaceDropDict.TryGetValue(id, out var isDrop) ? isDrop : null,
 
-                    AllLogicDefinitions = allLogicDefinitions.ToList(),
+                    // Logic definitions are immutable snapshot data. Sharing
+                    // one array avoids one complete list copy per scene object.
+                    AllLogicDefinitions = allLogicDefinitions,
                 };
             }
 
@@ -267,7 +277,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
             var sceneObjects = new FeeAbstractObject[stringGuids.Length];
 
-            await Parallel.ForEachAsync(Enumerable.Range(0, stringGuids.Length), async (i, _) =>
+            Parallel.For(0, stringGuids.Length, i =>
             {
                 var guid = stringGuids[i];
                 var xElmt = xmlElements[i];
@@ -581,7 +591,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         public float? IsActualPosition { get; set; }
 
         // Logic
-        public List<ApiLogicDefinition> AllLogicDefinitions { get; set; }
+        public IReadOnlyList<ApiLogicDefinition> AllLogicDefinitions { get; set; } =
+            Array.Empty<ApiLogicDefinition>();
 
         // Surface
         public bool? SurfaceManualModeActive { get; set; }

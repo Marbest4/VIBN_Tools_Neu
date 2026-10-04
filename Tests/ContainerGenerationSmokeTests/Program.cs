@@ -14,6 +14,7 @@ using VIBN_Tools.Application.Behaviors;
 using VIBN_Tools.ContainerToFee;
 using VIBN_Tools.ContainerToFee.GrobStandard;
 using VIBN_Tools.ContainerToFeeVisual;
+using VIBN_Tools.Core.Collections;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 using VIBN_Tools.ModelValidation;
@@ -63,6 +64,7 @@ internal static class Program
         await ValidateSignalOnlyContainerClassificationAsync();
         ValidateFee2ContainerSelectionHighlighting();
         ValidateRapidFee2ContainerRootSwitching();
+        ValidateRangeCollectionBatchUpdates();
         ValidateWpfVirtualizationExceptionPolicy();
         ValidatePlcInputFanInParsing();
         ValidateContainerFileComparison();
@@ -1201,6 +1203,27 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 "FEE2Container did not canonicalize the legacy Fuse alias during editing/export.");
+        }
+    }
+
+    private static void ValidateRangeCollectionBatchUpdates()
+    {
+        var collection = new RangeObservableCollection<int>();
+        var changeCount = 0;
+        System.Collections.Specialized.NotifyCollectionChangedAction? lastAction = null;
+        collection.CollectionChanged += (_, args) =>
+        {
+            changeCount++;
+            lastAction = args.Action;
+        };
+
+        collection.ReplaceWith([1, 2, 3, 4]);
+        if (changeCount != 1 ||
+            lastAction != System.Collections.Specialized.NotifyCollectionChangedAction.Reset ||
+            !collection.SequenceEqual([1, 2, 3, 4]))
+        {
+            throw new InvalidOperationException(
+                "Large WPF result sets must be replaced with one coherent reset notification.");
         }
     }
 

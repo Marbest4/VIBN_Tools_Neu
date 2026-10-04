@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using VIBN_Tools.Core.ViCo;
@@ -16,13 +17,27 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
 
     public async Task<ViCoWorkstationSnapshot> LoadAsync(CancellationToken cancellationToken = default)
     {
-        var warnings = new List<string>();
-        var lanes = await ReadLinesAsync("AllPCLaneInfosWithChilds.txt", warnings, cancellationToken);
-        var cards = await ReadLinesAsync("AllCardsOfPCsV2.txt", warnings, cancellationToken);
-        var robotCards = await ReadLinesAsync("AllRobyCards.txt", warnings, cancellationToken);
-        var robotNames = await ReadLinesAsync("AllRobyCardsRobyName.txt", warnings, cancellationToken);
-        var robotColumns = await ReadLinesAsync("AllRobyColumns.txt", warnings, cancellationToken);
-        var boardData = await ReadBoardDataAsync(warnings, cancellationToken);
+        var warnings = new ConcurrentQueue<string>();
+        var lanesTask = ReadLinesAsync("AllPCLaneInfosWithChilds.txt", warnings, cancellationToken);
+        var cardsTask = ReadLinesAsync("AllCardsOfPCsV2.txt", warnings, cancellationToken);
+        var robotCardsTask = ReadLinesAsync("AllRobyCards.txt", warnings, cancellationToken);
+        var robotNamesTask = ReadLinesAsync("AllRobyCardsRobyName.txt", warnings, cancellationToken);
+        var robotColumnsTask = ReadLinesAsync("AllRobyColumns.txt", warnings, cancellationToken);
+        var boardDataTask = ReadBoardDataAsync(warnings, cancellationToken);
+        await Task.WhenAll(
+            lanesTask,
+            cardsTask,
+            robotCardsTask,
+            robotNamesTask,
+            robotColumnsTask,
+            boardDataTask);
+
+        var lanes = await lanesTask;
+        var cards = await cardsTask;
+        var robotCards = await robotCardsTask;
+        var robotNames = await robotNamesTask;
+        var robotColumns = await robotColumnsTask;
+        var boardData = await boardDataTask;
         var combined = CombineLegacyCards(lanes, cards);
         return new ViCoWorkstationSnapshot(
             ParseWorkstations(
@@ -34,12 +49,12 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
                 boardData.ConfigurationColumns,
                 boardData.ProjectCards,
                 boardData.CompletedProjectsByMachineKey),
-            warnings);
+            warnings.ToArray());
     }
 
     private async Task<IReadOnlyList<string>> ReadLinesAsync(
         string name,
-        ICollection<string> warnings,
+        ConcurrentQueue<string> warnings,
         CancellationToken cancellationToken)
     {
         var path = Path.Combine(_cacheRoot, name);
@@ -51,13 +66,13 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            warnings.Add($"{path}: {exception.Message}");
+            warnings.Enqueue($"{path}: {exception.Message}");
             return Array.Empty<string>();
         }
     }
 
     private async Task<CachedBoardData> ReadBoardDataAsync(
-        ICollection<string> warnings,
+        ConcurrentQueue<string> warnings,
         CancellationToken cancellationToken)
     {
         var path = Path.Combine(_cacheRoot, "WorkstationBoardCache.json");
@@ -142,7 +157,7 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
         {
-            warnings.Add($"{path}: {exception.Message}");
+            warnings.Enqueue($"{path}: {exception.Message}");
             return CachedBoardData.Empty;
         }
     }
@@ -173,6 +188,15 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
         IReadOnlyList<string> lanes,
         IReadOnlyList<string> cards)
     {
+        var cardsByLane = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        for (var cardIndex = 1; cardIndex < cards.Count; cardIndex++)
+        {
+            var laneId = cards[cardIndex];
+            if (!cardsByLane.TryGetValue(laneId, out var laneCards))
+                cardsByLane[laneId] = laneCards = new List<string>();
+            laneCards.Add(cards[cardIndex - 1]);
+        }
+
         var combined = new List<string>();
         for (var laneIndex = 1; laneIndex < lanes.Count; laneIndex++)
         {
@@ -187,14 +211,7 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
             }
 
             var laneId = lanes[laneIndex - 1];
-            var matchingCards = new List<string>();
-            for (var cardIndex = 1; cardIndex < cards.Count; cardIndex++)
-            {
-                if (string.Equals(cards[cardIndex], laneId, StringComparison.Ordinal))
-                    matchingCards.Add(cards[cardIndex - 1]);
-            }
-
-            if (matchingCards.Count == 0)
+            if (!cardsByLane.TryGetValue(laneId, out var matchingCards) || matchingCards.Count == 0)
                 continue;
 
             combined.Add("NEW_Lane");

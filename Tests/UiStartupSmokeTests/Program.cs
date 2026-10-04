@@ -270,6 +270,14 @@ internal static class Program
                 DataContext = visualContainerViewModel
             };
             var fee2ContainerPage = new Fee2ContainerPage();
+            if (visualContainerPage.Content is not ScrollViewer visualPageScroll ||
+                visualPageScroll.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled ||
+                fee2ContainerPage.Content is not ScrollViewer fee2PageScroll ||
+                fee2PageScroll.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
+            {
+                throw new InvalidOperationException(
+                    "FEE pages must keep vertical sizing finite so their inner trees and tables scroll independently.");
+            }
             var fee2ContainerViewModel = (Fee2ContainerPageVM)fee2ContainerPage.DataContext;
             if (fee2ContainerViewModel.CanExport ||
                 string.IsNullOrWhiteSpace(fee2ContainerViewModel.ExportUnavailableReason))

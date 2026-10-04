@@ -61,6 +61,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private IReadOnlyList<VisualIssue> _lastExecutionIssues = Array.Empty<VisualIssue>();
     private int _generationProgress;
     private string _generationProgressText = string.Empty;
+    private bool _isProgressIndeterminate;
     private string _feeRefreshHint =
         "Nach Änderungen im FEE-Projekt zuerst 'FEE aktualisieren'. Fehlen danach erwartete Objekte, einmal Model Validation ausführen und anschließend erneut aktualisieren.";
     private readonly HashSet<string> _verifiedContainerIds = new(StringComparer.Ordinal);
@@ -177,23 +178,23 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public FeeConnectionService Connection => _connection;
 
-    public ObservableCollection<ContainerToFeeVisualTreeNodeVM> TreeRoots { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualTreeNodeVM> TreeRoots { get; } = new RangeObservableCollection<ContainerToFeeVisualTreeNodeVM>();
 
-    public ObservableCollection<ContainerToFeeVisualTargetVM> Targets { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualTargetVM> Targets { get; } = new RangeObservableCollection<ContainerToFeeVisualTargetVM>();
 
-    public ObservableCollection<ContainerToFeeVisualSignalSlotVM> SignalSlots { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualSignalSlotVM> SignalSlots { get; } = new RangeObservableCollection<ContainerToFeeVisualSignalSlotVM>();
 
-    public ObservableCollection<ContainerToFeeVisualEdgeVM> VisibleEdges { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualEdgeVM> VisibleEdges { get; } = new RangeObservableCollection<ContainerToFeeVisualEdgeVM>();
 
-    public ObservableCollection<ContainerToFeeVisualOperationDetailVM> OperationDetails { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualOperationDetailVM> OperationDetails { get; } = new RangeObservableCollection<ContainerToFeeVisualOperationDetailVM>();
 
-    public ObservableCollection<ContainerToFeeVisualFeeObjectVM> AvailableFeeObjects { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualFeeObjectVM> AvailableFeeObjects { get; } = new RangeObservableCollection<ContainerToFeeVisualFeeObjectVM>();
 
-    public ObservableCollection<ContainerToFeeVisualFeeInterfaceVM> AvailableFeeInterfaces { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualFeeInterfaceVM> AvailableFeeInterfaces { get; } = new RangeObservableCollection<ContainerToFeeVisualFeeInterfaceVM>();
 
-    public ObservableCollection<ContainerToFeeVisualFeeSignalVM> AvailableFeeSignals { get; } = new();
+    public ObservableCollection<ContainerToFeeVisualFeeSignalVM> AvailableFeeSignals { get; } = new RangeObservableCollection<ContainerToFeeVisualFeeSignalVM>();
 
-    public ObservableCollection<VisualIssue> Issues { get; } = new();
+    public ObservableCollection<VisualIssue> Issues { get; } = new RangeObservableCollection<VisualIssue>();
 
     public ICollectionView FeeObjectsView { get; }
     public ICollectionView FeeSignalsView { get; }
@@ -827,6 +828,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         await RunBusyAsync("FEE-SimObjects werden gelesen …", async cancellationToken =>
         {
+            GenerationProgressText = "FEE-Projektzustand wird als Batch eingelesen …";
             FeeRefreshSnapshot snapshot = await RefreshFeeStateAsync(cancellationToken);
             FeeObjectsView.Refresh();
             FeeRefreshHint = snapshot.ObjectCount == 0 || snapshot.SignalCount == 0
@@ -910,6 +912,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             VisualExecutionResult? result = null;
             try
             {
+                IsProgressIndeterminate = false;
                 GenerationProgress = 0;
                 GenerationProgressText = "Generierung wird vorbereitet …";
                 var progress = new Progress<VisualGenerationProgress>(update =>
@@ -1162,6 +1165,18 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         private set
         {
             _generationProgressText = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsProgressIndeterminate
+    {
+        get => _isProgressIndeterminate;
+        private set
+        {
+            if (_isProgressIndeterminate == value)
+                return;
+            _isProgressIndeterminate = value;
             OnPropertyChanged();
         }
     }
@@ -1469,8 +1484,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private async Task<FeeRefreshSnapshot> RefreshFeeStateAsync(CancellationToken cancellationToken)
     {
+        GenerationProgressText = "1/6: FEE-SimObjects und Modellzustand werden gelesen …";
         IReadOnlyList<VisualFeeObject> objects =
             await _planService.DiscoverFeeObjectsAsync(cancellationToken);
+        GenerationProgressText = "2/6: FEE-Interfaces und Signale werden zugeordnet …";
         IReadOnlyList<VisualFeeInterface> interfaces =
             await _planService.DiscoverFeeInterfacesAsync(cancellationToken);
         RefreshFeeObjectProjection(objects);
@@ -1480,8 +1497,10 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         // live discovery states afterwards, otherwise that rebuild can mask a
         // missing SimObject-slot link with a stale green container state.
         int automaticAssignments = _planService.AutoAssignMatches();
+        GenerationProgressText = "3/6: Signalverknüpfungen werden gelesen …";
         IReadOnlyList<VisualFeeSignalLink> signalLinks =
             await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
+        GenerationProgressText = "4/6: SimObject-Verknüpfungen werden gelesen …";
         IReadOnlyList<VisualFeeObjectLink> simObjectLinks =
             await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
         // Rebuild the list after both link reads so identical SimObjects are
@@ -1491,12 +1510,14 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         ApplyDiscoveredSimObjectStates();
         ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
         RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
+        GenerationProgressText = "5/6: Vorhandene Container und Provenienz werden abgeglichen …";
         IReadOnlySet<string> verifiedContainers = await _planService
             .DiscoverVerifiedContainerIdsAsync(cancellationToken);
         _verifiedContainerIds.Clear();
         _verifiedContainerIds.UnionWith(verifiedContainers);
         _planService.DeselectVerifiedContainers(verifiedContainers);
         ApplyVerifiedContainerStates(verifiedContainers);
+        GenerationProgressText = "6/6: Anzeige wird aktualisiert …";
 
         return new FeeRefreshSnapshot(
             objects.Count,
@@ -1838,6 +1859,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         _operationCancellation = cancellation;
         IsBusy = true;
         StatusText = status;
+        GenerationProgress = 0;
+        GenerationProgressText = status;
+        IsProgressIndeterminate = true;
         Task operationTask = Task.CompletedTask;
         using var measurement = PerformanceMeasurementService.Instance.Start(LogArea, status);
         try
@@ -1870,6 +1894,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 _operationCancellation = null;
             cancellation?.Dispose();
             IsBusy = false;
+            IsProgressIndeterminate = false;
         }
     }
 
