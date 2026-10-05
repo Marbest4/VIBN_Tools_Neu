@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -1484,12 +1485,17 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private async Task<FeeRefreshSnapshot> RefreshFeeStateAsync(CancellationToken cancellationToken)
     {
+        var totalWatch = Stopwatch.StartNew();
+        var stageWatch = Stopwatch.StartNew();
         GenerationProgressText = "1/6: FEE-SimObjects und Modellzustand werden gelesen …";
         IReadOnlyList<VisualFeeObject> objects =
             await _planService.DiscoverFeeObjectsAsync(cancellationToken);
+        var objectReadTime = stageWatch.Elapsed;
+        stageWatch.Restart();
         GenerationProgressText = "2/6: FEE-Interfaces und Signale werden zugeordnet …";
         IReadOnlyList<VisualFeeInterface> interfaces =
             await _planService.DiscoverFeeInterfacesAsync(cancellationToken);
+        var interfaceReadTime = stageWatch.Elapsed;
         RefreshFeeObjectProjection(objects);
         RefreshFeeInterfaceProjection(interfaces);
 
@@ -1497,12 +1503,16 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         // live discovery states afterwards, otherwise that rebuild can mask a
         // missing SimObject-slot link with a stale green container state.
         int automaticAssignments = _planService.AutoAssignMatches();
+        stageWatch.Restart();
         GenerationProgressText = "3/6: Signalverknüpfungen werden gelesen …";
         IReadOnlyList<VisualFeeSignalLink> signalLinks =
             await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
+        var signalLinkTime = stageWatch.Elapsed;
+        stageWatch.Restart();
         GenerationProgressText = "4/6: SimObject-Verknüpfungen werden gelesen …";
         IReadOnlyList<VisualFeeObjectLink> simObjectLinks =
             await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
+        var simObjectLinkTime = stageWatch.Elapsed;
         // Rebuild the list after both link reads so identical SimObjects are
         // distinguished by their GUID-specific live connection state.
         RefreshFeeObjectProjection(objects);
@@ -1510,14 +1520,22 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         ApplyDiscoveredSimObjectStates();
         ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
         RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
+        stageWatch.Restart();
         GenerationProgressText = "5/6: Vorhandene Container und Provenienz werden abgeglichen …";
         IReadOnlySet<string> verifiedContainers = await _planService
             .DiscoverVerifiedContainerIdsAsync(cancellationToken);
+        var provenanceTime = stageWatch.Elapsed;
         _verifiedContainerIds.Clear();
         _verifiedContainerIds.UnionWith(verifiedContainers);
         _planService.DeselectVerifiedContainers(verifiedContainers);
         ApplyVerifiedContainerStates(verifiedContainers);
         GenerationProgressText = "6/6: Anzeige wird aktualisiert …";
+        _log.Information(
+            LogArea,
+            $"FEE-Abgleich in {totalWatch.Elapsed.TotalSeconds:F1} s: " +
+            $"Objekte {objectReadTime.TotalSeconds:F1} s, Interfaces {interfaceReadTime.TotalSeconds:F1} s, " +
+            $"Signallinks {signalLinkTime.TotalSeconds:F1} s, SimObject-Links {simObjectLinkTime.TotalSeconds:F1} s, " +
+            $"Provenienz {provenanceTime.TotalSeconds:F1} s.");
 
         return new FeeRefreshSnapshot(
             objects.Count,

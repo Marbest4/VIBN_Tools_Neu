@@ -319,7 +319,7 @@ Der Unterreiter **Regelvorschläge** wertet strukturierte manuelle Slotkorrektur
 
 ### Model Validation, Model Control und Interface Operation
 
-Diese Reiter arbeiten auf dem aktuell verbundenen FEE-Modell. Model Validation aktualisiert und prüft Daten; Statuszeile und Log nennen Objektzahl und Dauer. Die Interfacevariablen werden bei **Update Objects** nur einmal als Gesamtsnapshot aus dem SDK gelesen und anschließend pro Interface gruppiert. Model Control steuert die jeweils ausgewählten Robotik-/Achsen-/Objektfunktionen; Interface Operation lädt und verbindet Schnittstellen und Signale. Vor schreibenden Aktionen immer das Zielmodell und die Auswahl in der Statusanzeige kontrollieren.
+Diese Reiter arbeiten auf dem aktuell verbundenen FEE-Modell. Model Validation aktualisiert und prüft Daten; die Statuszeile nennt Objektzahl, gesamte Dauer sowie getrennt die FEE-Lesezeit und die lokale Prüfzeit. Damit lässt sich bei großen Stationen unterscheiden, ob das SDK oder die anschließende Validierung den Lauf dominiert. Sensor-Slotprüfungen verwenden den bereits gebündelt gelesenen XML-Snapshot und lösen keine zusätzliche FEE-Abfrage je Sensor aus. Die Interfacevariablen werden bei **Update Objects** nur einmal als Gesamtsnapshot aus dem SDK gelesen und anschließend pro Interface gruppiert. Model Control steuert die jeweils ausgewählten Robotik-/Achsen-/Objektfunktionen; Interface Operation lädt und verbindet Schnittstellen und Signale. Vor schreibenden Aktionen immer das Zielmodell und die Auswahl in der Statusanzeige kontrollieren.
 
 ## Separate IBN-Remote-Ausgabe
 

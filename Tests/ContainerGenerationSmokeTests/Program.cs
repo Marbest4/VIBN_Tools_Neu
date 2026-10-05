@@ -49,6 +49,7 @@ internal static class Program
 
         await ValidateGoldenMasterCorpusAsync();
         await ValidateSensorXAndSlotValidationAsync();
+        await ValidateSensorPlausibilityUsesLoadedSnapshotAsync();
 
         ValidateWorkspacePersistenceAndAutoSaveSettings();
         ValidateGroupingPreview();
@@ -185,6 +186,29 @@ internal static class Program
             .Any(issue => issue.Code == "STOP_STATUS_MISSING"))
         {
             throw new InvalidOperationException("Der Stopper-Preflight erkennt die fehlende Rückmeldung nicht.");
+        }
+    }
+
+    private static async Task ValidateSensorPlausibilityUsesLoadedSnapshotAsync()
+    {
+        var sensor = new FeeSensor
+        {
+            Slots = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Channel1"] = Guid.NewGuid(),
+            },
+            DetectPayload = true,
+        };
+
+        // This intentionally runs without an initialized FEE API. Validation
+        // must consume the already loaded project snapshot instead of making
+        // one extra vendor call for every sensor.
+        await sensor.CheckObjectIssuesAsync([]);
+        if (sensor.PlausibilityIssues.Any(issue =>
+                issue.Message.Contains("Weder Slot", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                "Sensor validation ignored the slot assignment from the loaded XML snapshot.");
         }
     }
 

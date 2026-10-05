@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using System.Diagnostics;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 using static VIBN_Tools.GlobalClasses.Interfaces;
@@ -8,7 +9,8 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 internal sealed record VisualFeeDiscoveryResult(
     IReadOnlyList<VisualFeeObject> Objects,
     IReadOnlyDictionary<string, FeeAbstractObject> RuntimeObjects,
-    IReadOnlyList<VisualFeeContainerObject> ContainerObjects);
+    IReadOnlyList<VisualFeeContainerObject> ContainerObjects,
+    IReadOnlyDictionary<Guid, string> TopLevelBasicFrames);
 
 /// <summary>Reads selectable FEE objects and keeps SDK instances out of the view model.</summary>
 internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
@@ -16,12 +18,13 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
     public async Task<VisualFeeDiscoveryResult> DiscoverAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        // Reuse the canonical batched snapshot used by ModelValidation. The
-        // previous parallel type queries raced the stateful vendor client and
-        // could leave large projects waiting indefinitely.
-        await Services.FeeObjects.UpdateFeeDataAsync();
+        var stopwatch = Stopwatch.StartNew();
+        // Container2FEE needs names, types, parents, definitions and slots, but
+        // no ModelValidation issues, interfaces or simulation live values.
+        // Reading this lean snapshot avoids a large amount of unrelated work.
+        var allObjects = await Services.FeeObjects
+            .ReadFeeSceneObjectsForDiscoveryAsync(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        var allObjects = Services.FeeObjects.AllFeeObjects ?? [];
         var runtimeObjects = allObjects
             .Where(item => item is IAssignableSimObject)
             .ToArray();
@@ -77,9 +80,15 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 string.Empty)))
             .ToArray();
 
+        var topLevelBasicFrames = allObjects.OfType<FeeBasicFrame>()
+            .Where(frame => frame.Parent is not FeeBasicFrame)
+            .GroupBy(frame => frame.Guid)
+            .ToDictionary(group => group.Key, group => group.First().Name ?? string.Empty);
+
         logger.Information(
-            $"{objects.Count} zuweisbare FEE-SimObjects und {containerObjects.Length} vorhandene Logik-/Cabinet-Objekte gelesen.");
-        return new VisualFeeDiscoveryResult(objects, byId, containerObjects);
+            $"{objects.Count} zuweisbare FEE-SimObjects, {containerObjects.Length} vorhandene Logik-/Cabinet-Objekte " +
+            $"und {topLevelBasicFrames.Count} Root(s) in {stopwatch.Elapsed.TotalSeconds:F1} s gelesen (schlanker Snapshot).");
+        return new VisualFeeDiscoveryResult(objects, byId, containerObjects, topLevelBasicFrames);
     }
 
     internal static string CreateFeeObjectId(string guidString) =>

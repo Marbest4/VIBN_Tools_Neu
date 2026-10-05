@@ -33,6 +33,8 @@ public sealed class ContainerToFeeVisualPlanService
     private IReadOnlyList<VisualFeeSignal> _feeSignals = [];
     private IReadOnlyList<VisualFeeSignalLink> _feeSignalLinks = [];
     private IReadOnlyList<VisualFeeObjectLink> _feeSimObjectLinks = [];
+    private IReadOnlyDictionary<Guid, string> _topLevelBasicFrames =
+        new Dictionary<Guid, string>();
     private IReadOnlyDictionary<string, FeeInterface> _runtimeInterfaces =
         new Dictionary<string, FeeInterface>(StringComparer.OrdinalIgnoreCase);
     private bool _hasDiscoveredFeeObjects;
@@ -339,6 +341,7 @@ public sealed class ContainerToFeeVisualPlanService
         _feeObjects = result.Objects;
         _runtimeObjects = result.RuntimeObjects;
         _feeContainerObjects = result.ContainerObjects;
+        _topLevelBasicFrames = result.TopLevelBasicFrames;
         _hasDiscoveredFeeObjects = true;
         _feeSimObjectLinks = [];
         _hasDiscoveredFeeSimObjectLinks = false;
@@ -673,7 +676,8 @@ public sealed class ContainerToFeeVisualPlanService
         var reverseService = new Fee2ContainerService();
         var discovery = await reverseService.DiscoverAsync(
             cancellationToken,
-            reconstructLegacyRoots: false);
+            reconstructLegacyRoots: false,
+            knownTopLevelRoots: _topLevelBasicFrames);
         var documents = new List<XDocument>();
         foreach (var root in discovery.Roots)
         {

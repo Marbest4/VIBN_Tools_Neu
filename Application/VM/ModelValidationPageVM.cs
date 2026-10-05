@@ -281,7 +281,8 @@ namespace VIBN_Tools.Application.VM
             CalculateColumnWidths();
 
             IsBusyUpdatingFeeData = false;
-            UpdateStatusText = $"{allFeeObjects.Count} FEE-Objekte in {e.ElapsedTime.TotalSeconds:F1} s aktualisiert.";
+            UpdateStatusText = $"{allFeeObjects.Count} FEE-Objekte in {e.ElapsedTime.TotalSeconds:F1} s aktualisiert " +
+                               $"(FEE lesen {e.SnapshotReadTime.TotalSeconds:F1} s, prüfen {e.ValidationTime.TotalSeconds:F1} s).";
             ApplicationLogService.Instance.Information("Model Validation", UpdateStatusText);
         }
 

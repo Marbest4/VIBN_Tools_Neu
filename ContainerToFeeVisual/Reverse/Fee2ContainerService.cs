@@ -55,7 +55,8 @@ public sealed class Fee2ContainerService
     public async Task<Fee2ContainerDiscoveryResult> DiscoverAsync(
         CancellationToken cancellationToken = default,
         bool reconstructLegacyRoots = true,
-        IProgress<Fee2ContainerProgress>? progress = null)
+        IProgress<Fee2ContainerProgress>? progress = null,
+        IReadOnlyDictionary<Guid, string>? knownTopLevelRoots = null)
     {
         if (Services.Connection?.CanUseFeeFeatures != true || Services.ApiInstance is null)
             throw new InvalidOperationException(FeeConnectionService.MissingConnectionMessage);
@@ -66,11 +67,20 @@ public sealed class Fee2ContainerService
         var roots = new List<Fee2ContainerRoot>();
         var issues = new List<Fee2ContainerDiscoveryIssue>();
         var ignored = 0;
-        var guidValues = await Services.ApiInstance.Object
-            .GetSceneObjectGuidsOfTypeAsync(nameof(BasicFrame)) ?? [];
-        var topLevel = await FeeTopLevelBasicFrameDiscovery.DiscoverAsync(guidValues, cancellationToken);
-        issues.AddRange(topLevel.Issues.Select(message =>
-            new Fee2ContainerDiscoveryIssue(null, string.Empty, message)));
+        IReadOnlyList<Guid> topLevelRoots;
+        if (knownTopLevelRoots is not null)
+        {
+            topLevelRoots = knownTopLevelRoots.Keys.ToArray();
+        }
+        else
+        {
+            var guidValues = await Services.ApiInstance.Object
+                .GetSceneObjectGuidsOfTypeAsync(nameof(BasicFrame)) ?? [];
+            var topLevel = await FeeTopLevelBasicFrameDiscovery.DiscoverAsync(guidValues, cancellationToken);
+            issues.AddRange(topLevel.Issues.Select(message =>
+                new Fee2ContainerDiscoveryIssue(null, string.Empty, message)));
+            topLevelRoots = topLevel.Roots;
+        }
         var currentVariables = (await Services.ApiInstance.Interface.GetAllVariablesAsync() ?? [])
             .Select(variable => new FeeContainerVariableState(
                 variable.VariableGuid,
@@ -81,16 +91,19 @@ public sealed class Fee2ContainerService
                 variable.Comment ?? string.Empty))
             .ToArray();
 
-        foreach (var guid in topLevel.Roots)
+        foreach (var guid in topLevelRoots)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string name = guid.ToString("D");
+            string name = knownTopLevelRoots?.GetValueOrDefault(guid) ?? guid.ToString("D");
             try
             {
-                var nameXml = await Services.ApiInstance.Object.GetPropertyAsync(
-                    guid,
-                    nameof(FS.SDK.SceneObject.Name));
-                name = Services.ApiInstance.XmlHelper.ConvertToString(nameXml);
+                if (knownTopLevelRoots is null)
+                {
+                    var nameXml = await Services.ApiInstance.Object.GetPropertyAsync(
+                        guid,
+                        nameof(FS.SDK.SceneObject.Name));
+                    name = Services.ApiInstance.XmlHelper.ConvertToString(nameXml);
+                }
 
                 var tags = await ReadOptionalTagsAsync(guid);
                 if (!tags.ContainsKey(FeeContainerProvenanceCodec.SchemaKey))

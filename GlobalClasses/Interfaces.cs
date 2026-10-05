@@ -26,6 +26,8 @@ namespace VIBN_Tools.GlobalClasses
         {
             IReadOnlyList<FeeAbstractObject> AllFeeObjects { get; }
             Task UpdateFeeDataAsync();
+            Task<IReadOnlyList<FeeAbstractObject>> ReadFeeSceneObjectsForDiscoveryAsync(
+                CancellationToken cancellationToken = default);
         }
 
 

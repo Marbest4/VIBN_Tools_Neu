@@ -23,19 +23,32 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
             .ToArray();
         var links = new List<VisualFeeObjectLink>();
         var failures = 0;
+        var reusedBulkAssignments = 0;
         foreach (var item in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var assignedSlotNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var direct in item.Slots ?? new Dictionary<string, Guid>())
             {
                 if (direct.Value != Guid.Empty)
+                {
                     links.Add(new VisualFeeObjectLink(
                         item.Guid.ToString("D"), direct.Key, direct.Value.ToString("D"), string.Empty));
+                    assignedSlotNames.Add(direct.Key);
+                }
             }
 
             foreach (var slotName in GetRelevantSlotNames(item))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // The project-wide object XML already contains this concrete
+                // assignment. Per-slot reads are retained only for slots absent
+                // from that batch (including SDK/version-specific routes).
+                if (assignedSlotNames.Contains(slotName))
+                {
+                    reusedBulkAssignments++;
+                    continue;
+                }
                 try
                 {
                     var assignments = await Services.ApiInstance.Interface
@@ -70,7 +83,9 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
         var distinct = links.Distinct().ToArray();
         if (failures > 0)
             logger.Warning($"{failures} FEE-SimObject-Slot(s) konnten nicht rückgelesen werden.");
-        logger.Information($"{distinct.Length} vorhandene SimObject-Slotverknüpfung(en) gelesen.");
+        logger.Information(
+            $"{distinct.Length} vorhandene SimObject-Slotverknüpfung(en) gelesen; " +
+            $"{reusedBulkAssignments} bereits aus dem gebündelten Objekt-Snapshot übernommen.");
         return new VisualFeeObjectLinkDiscoveryResult(distinct, failures);
     }
 

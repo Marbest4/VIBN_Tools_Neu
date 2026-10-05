@@ -25,6 +25,10 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
             return new VisualFeeSignalLinkDiscoveryResult([], 0);
 
         var results = new List<SignalRead>(candidates.Length);
+        // Several variables can terminate at the same MoveBit. Its Input 01
+        // fan-in is object-specific, so reading it once per variable only
+        // repeats the same comparatively expensive SDK request.
+        var moveBitLinks = new Dictionary<Guid, IReadOnlyList<IndirectLink>>();
         foreach (var signal in candidates)
         {
             try
@@ -50,17 +54,26 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
                         if (!string.Equals(slotName, "Output 01", StringComparison.OrdinalIgnoreCase))
                             continue;
 
-                        var linkedSlots = await Services.ApiInstance.Interface
-                            .GetSlotSlotAssignmentAsync(objectGuid, "Input 01");
-                        if (linkedSlots is null)
-                            continue;
-                        foreach (var (linkedGuidText, names) in linkedSlots)
+                        if (!moveBitLinks.TryGetValue(objectGuid, out var resolvedLinks))
                         {
-                            if (!Guid.TryParse(linkedGuidText, out var linkedGuid))
-                                continue;
-                            foreach (var name in names ?? [])
-                                endpoints.Add(new RawLink(signal.GuidString, linkedGuid, name, true));
+                            var linkedSlots = await Services.ApiInstance.Interface
+                                .GetSlotSlotAssignmentAsync(objectGuid, "Input 01");
+                            resolvedLinks = (linkedSlots ?? [])
+                                .SelectMany(pair => Guid.TryParse(pair.SceneObjectGuid, out var linkedGuid)
+                                    ? (pair.SlotNames ?? []).Select(name => new IndirectLink(
+                                        linkedGuid,
+                                        name ?? string.Empty))
+                                    : [])
+                                .Distinct()
+                                .ToArray();
+                            moveBitLinks[objectGuid] = resolvedLinks;
                         }
+                        foreach (var linked in resolvedLinks)
+                            endpoints.Add(new RawLink(
+                                signal.GuidString,
+                                linked.ObjectGuid,
+                                linked.SlotName,
+                                true));
                     }
                 }
                 results.Add(new SignalRead(endpoints, null));
@@ -134,6 +147,8 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
         Guid ObjectGuid,
         string SlotName,
         bool IsIndirect);
+
+    private sealed record IndirectLink(Guid ObjectGuid, string SlotName);
 
     private sealed record SignalRead(
         IReadOnlyList<RawLink> Links,

@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using System.Xml.Linq;
@@ -29,6 +30,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
         private readonly List<Task> _debounceTasks = new();
         private readonly object _updateSync = new();
+        private readonly SemaphoreSlim _sdkReadGate = new(1, 1);
         private Task? _activeUpdate;
         private bool _isLoadingFeeData = false;
 
@@ -104,6 +106,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         private async Task UpdateFeeDataCoreAsync()
         {
             var startTime = DateTime.Now;            
+            var snapshotReadTime = TimeSpan.Zero;
+            var validationTime = TimeSpan.Zero;
 
             _isLoadingFeeData = true;
             try
@@ -113,11 +117,24 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 // await this same operation instead of allocating a second
                 // complete project snapshot and racing the vendor client.
                 var oldObjects = AllFeeObjects;
-                var newObjects = await GetAllFeeObjectsAsync();
+                var snapshotWatch = Stopwatch.StartNew();
+                await _sdkReadGate.WaitAsync();
+                List<FeeAbstractObject> newObjects;
+                try
+                {
+                    newObjects = await GetAllFeeObjectsAsync();
+                }
+                finally
+                {
+                    _sdkReadGate.Release();
+                }
+                snapshotReadTime = snapshotWatch.Elapsed;
 
                 FindAndAssignParents(newObjects);
                 SubscribePropertyChanges(newObjects);
+                var validationWatch = Stopwatch.StartNew();
                 await RunPlausibilityChecks(newObjects);
+                validationTime = validationWatch.Elapsed;
                 AllFeeObjects = MergeAcknowledgeInformation(oldObjects, newObjects);
 
                 var pendingChanges = _debounceTasks.ToArray();
@@ -129,6 +146,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 FeeObjectsUpdated?.Invoke(this, new FeeObjectsUpdatedEventargs
                 {
                     ElapsedTime = DateTime.Now - startTime,
+                    SnapshotReadTime = snapshotReadTime,
+                    ValidationTime = validationTime,
                 });
             }
             finally
@@ -138,6 +157,64 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                     _activeUpdate = null;
             }
 
+        }
+
+        /// <summary>
+        /// Reads the scene hierarchy required by Container2FEE Visual without
+        /// loading interfaces, simulation live values or ModelValidation
+        /// issues. The same SDK gate as the full refresh is used because the
+        /// vendor client is stateful and must not receive competing project
+        /// reads from two tabs.
+        /// </summary>
+        public async Task<IReadOnlyList<FeeAbstractObject>> ReadFeeSceneObjectsForDiscoveryAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await _sdkReadGate.WaitAsync(cancellationToken);
+            try
+            {
+                var sceneObjects = await GetFeeSceneObjectsForDiscoveryAsync();
+                cancellationToken.ThrowIfCancellationRequested();
+                FindAndAssignParents(sceneObjects);
+                return sceneObjects;
+            }
+            finally
+            {
+                _sdkReadGate.Release();
+            }
+        }
+
+        private static async Task<List<FeeAbstractObject>> GetFeeSceneObjectsForDiscoveryAsync()
+        {
+            var guidTask = Services.ApiInstance.Object.GetSceneObjectGuidsAsync();
+            var logicDefinitionsTask = Services.ApiInstance.Logic.GetAllAvailableLogicDefinitionsAsync();
+            var guidTexts = (await guidTask).ToArray();
+            var xmlTask = Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(guidTexts);
+            await Task.WhenAll(logicDefinitionsTask, xmlTask);
+
+            var xmlTexts = (await xmlTask).ToArray();
+            var logicDefinitions = (IReadOnlyList<ApiLogicDefinition>)(await logicDefinitionsTask).ToArray();
+            var sceneObjects = new FeeAbstractObject[guidTexts.Length];
+            var count = Math.Min(guidTexts.Length, xmlTexts.Length);
+            Parallel.For(0, count, index =>
+            {
+                var xml = XElement.Parse(xmlTexts[index]);
+                var guidText = guidTexts[index];
+                var name = xml.Attribute("Name")?.Value;
+                var type = xml.Attribute("Type")?.Value ?? xml.Name.LocalName;
+                var item = FeeObjectFactory.Create(type, name, guidText);
+                if (item is null)
+                    return;
+
+                item.StoreXmlObjectProperties(xml, Guid.Parse(guidText));
+                item.ApplyBatchData(new FeePropertyBatchData
+                {
+                    AllLogicDefinitions = logicDefinitions,
+                });
+                sceneObjects[index] = item;
+            });
+
+            return sceneObjects.Where(item => item is not null).ToList();
         }
 
 
@@ -522,6 +599,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
     public class FeeObjectsUpdatedEventargs : EventArgs
     {
         public TimeSpan ElapsedTime { get; set; }
+        public TimeSpan SnapshotReadTime { get; set; }
+        public TimeSpan ValidationTime { get; set; }
     }
 
 
