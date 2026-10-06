@@ -22,8 +22,10 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
         // Container2FEE needs names, types, parents, definitions and slots, but
         // no ModelValidation issues, interfaces or simulation live values.
         // Reading this lean snapshot avoids a large amount of unrelated work.
-        var allObjects = await Services.FeeObjects
-            .ReadFeeSceneObjectsForDiscoveryAsync(cancellationToken);
+        var allObjects = (await Services.FeeObjects
+                .ReadFeeSceneObjectsForDiscoveryAsync(cancellationToken))
+            .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item))
+            .ToArray();
         cancellationToken.ThrowIfCancellationRequested();
         var runtimeObjects = allObjects
             .Where(item => item is IAssignableSimObject)

@@ -4,6 +4,8 @@
 
 Der Reiter **Container2FEE Visual** ist ein zusätzlicher, levelgeschützter Arbeitsbereich. Der bestehende Reiter **Container2Fee** und dessen Ablauf bleiben unverändert. Beide Wege verwenden am Ende dieselben Containerklassen und denselben `ContainerToFeeService`; dadurch entsteht kein zweiter Generator mit abweichendem Verhalten.
 
+FEE-Szenenobjekte vom Typ `Decoration` gehören nicht zum Containerbestand und werden deshalb bereits beim Bestandsabruf ausgeschlossen. Die GUID-Vorfilterung spart für diese Objekte XML-, Positions- und Rotationsabfragen; eine zusätzliche Typprüfung des XML-Snapshots verhindert Einträge bei älteren oder unvollständigen SDK-Antworten. Die Decoration-Verarbeitung des CAD-Wizards verwendet einen eigenen Zugriff und wird nicht verändert.
+
 Die visuelle Seite kann eine Container-XML bereits ohne FEE-Verbindung lesen und als Plan darstellen. Erst das Laden vorhandener SimObjects und **Start Generation** benötigen die in Project Settings bestätigte FEE-Verbindung.
 
 ![Visueller Container2FEE-Plan mit synthetischen Testdaten](screenshots/container2fee-visual.png)

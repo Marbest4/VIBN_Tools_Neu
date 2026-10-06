@@ -57,6 +57,7 @@ internal static class Program
         ValidateReimportDecisionStaging();
         ValidateWorkspaceBlockingMarker();
         ValidateWorkspaceContainerMergeAndAssignmentWarning();
+        ValidateDecorationExclusionPolicy();
         ValidateSlotMultiplicityPolicy();
         ValidateFeeTagPropertyContract();
         await ValidateContainerToFeeModelContractsAsync();
@@ -1319,6 +1320,21 @@ internal static class Program
         sourceEntry.Slot = "PLC_OUT_Command";
         if (sourceEntry.HasAssignmentWarning)
             throw new InvalidOperationException("The PLC_IN address warning was not cleared after correcting the slot.");
+    }
+
+    private static void ValidateDecorationExclusionPolicy()
+    {
+        if (!FeeSceneObjectReadPolicy.IsIgnoredType("Decoration") ||
+            !FeeSceneObjectReadPolicy.IsIgnoredType("decoration") ||
+            !FeeSceneObjectReadPolicy.IsIgnoredType("FS.SDK.Scene.Objects.Decoration") ||
+            !FeeSceneObjectReadPolicy.IsIgnoredObject(new FeeDecoration()) ||
+            FeeSceneObjectReadPolicy.IsIgnoredType("SurfaceDecoration") ||
+            FeeSceneObjectReadPolicy.IsIgnoredType("Surface") ||
+            FeeSceneObjectReadPolicy.IsIgnoredObject(new FeeSurface()))
+        {
+            throw new InvalidOperationException(
+                "Decoration objects are not isolated correctly from the shared FEE read snapshot.");
+        }
     }
 
     private static void ValidateWorkspaceBlockingMarker()

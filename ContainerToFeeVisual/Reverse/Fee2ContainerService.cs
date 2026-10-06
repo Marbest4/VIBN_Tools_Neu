@@ -453,7 +453,9 @@ public sealed class Fee2ContainerService
         await Services.FeeObjects.UpdateFeeDataAsync();
         cancellationToken.ThrowIfCancellationRequested();
 
-        var allObjects = Services.FeeObjects.AllFeeObjects?.ToArray() ?? [];
+        var allObjects = Services.FeeObjects.AllFeeObjects?
+            .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item))
+            .ToArray() ?? [];
         var roots = allObjects
             .OfType<FeeBasicFrame>()
             .Where(IsTopLevelInSnapshot)

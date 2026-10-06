@@ -10,6 +10,7 @@ using FS.SDK.Extensibility.Interfaces;
 using FS.SDK.Mathematics;
 using FS.SDK.Scene.Objects;
 using ReadingUnitPlugin.SO;
+using VIBN_Tools.Application;
 using VIBN_Tools.ModelValidation;
 using static VIBN_Tools.GlobalClasses.Interfaces;
 
@@ -187,8 +188,13 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         private static async Task<List<FeeAbstractObject>> GetFeeSceneObjectsForDiscoveryAsync()
         {
             var guidTask = Services.ApiInstance.Object.GetSceneObjectGuidsAsync();
+            var ignoredDecorationGuidsTask = ReadIgnoredDecorationGuidsAsync();
             var logicDefinitionsTask = Services.ApiInstance.Logic.GetAllAvailableLogicDefinitionsAsync();
-            var guidTexts = (await guidTask).ToArray();
+            await Task.WhenAll(guidTask, ignoredDecorationGuidsTask);
+            var ignoredDecorationGuids = await ignoredDecorationGuidsTask;
+            var guidTexts = (await guidTask)
+                .Where(guid => !ignoredDecorationGuids.Contains(guid))
+                .ToArray();
             var xmlTask = Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(guidTexts);
             await Task.WhenAll(logicDefinitionsTask, xmlTask);
 
@@ -202,6 +208,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 var guidText = guidTexts[index];
                 var name = xml.Attribute("Name")?.Value;
                 var type = xml.Attribute("Type")?.Value ?? xml.Name.LocalName;
+                if (FeeSceneObjectReadPolicy.IsIgnoredType(type))
+                    return;
                 var item = FeeObjectFactory.Create(type, name, guidText);
                 if (item is null)
                     return;
@@ -225,6 +233,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         {
             // Create Guid Batch Tasks
             var guidsTask = Services.ApiInstance.Object.GetSceneObjectGuidsAsync();
+            var ignoredDecorationGuidsTask = ReadIgnoredDecorationGuidsAsync();
             var guidsJointsTask = Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(nameof(MotionJoint));
             var guidsSurfacesTask = Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(nameof(Surface));
             var guidsPickPlacesTask = Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(nameof(PickAndPlace));
@@ -232,9 +241,17 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             var logicDefsTask = Services.ApiInstance.Logic.GetAllAvailableLogicDefinitionsAsync();
 
             // Start Tasks
-            await Task.WhenAll(guidsTask, guidsJointsTask, guidsSurfacesTask, guidsPickPlacesTask);
+            await Task.WhenAll(
+                guidsTask,
+                ignoredDecorationGuidsTask,
+                guidsJointsTask,
+                guidsSurfacesTask,
+                guidsPickPlacesTask);
 
-            string[] stringGuids = (await guidsTask).ToArray();
+            var ignoredDecorationGuids = await ignoredDecorationGuidsTask;
+            string[] stringGuids = (await guidsTask)
+                .Where(guid => !ignoredDecorationGuids.Contains(guid))
+                .ToArray();
             Guid[] guids = stringGuids.Select(x => Guid.Parse(x)).ToArray();
 
             string[] stringGuidsJoints = (await guidsJointsTask).ToArray();
@@ -362,6 +379,11 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 var name = xElmt.Attribute("Name")?.Value;
                 var type = xElmt.Attribute("Type")?.Value ?? xElmt.Name.LocalName;
 
+                // Fallback for SDK versions that do not return every
+                // Decoration from GetSceneObjectGuidsOfTypeAsync.
+                if (FeeSceneObjectReadPolicy.IsIgnoredType(type))
+                    return;
+
                 var obj = FeeObjectFactory.Create(type, name, guid);
                 if (obj == null)
                     return;
@@ -380,6 +402,28 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             result.AddRange(interfaces);
             return result;
 
+        }
+
+        private static async Task<HashSet<string>> ReadIgnoredDecorationGuidsAsync()
+        {
+            try
+            {
+                return (await Services.ApiInstance.Object
+                        .GetSceneObjectGuidsOfTypeAsync(FeeSceneObjectReadPolicy.DecorationTypeName) ?? [])
+                    .Where(guid => !string.IsNullOrWhiteSpace(guid))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Exception exception)
+            {
+                // XML-type filtering still guarantees the functional exclusion;
+                // only the early performance optimization is unavailable.
+                ApplicationLogService.Instance.Warning(
+                    "FEE object read",
+                    "Decoration-GUIDs konnten nicht vorab gelesen werden. " +
+                    "Decoration-Objekte werden nach dem XML-Batch gefiltert.",
+                    exception.Message);
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
         }
 
 

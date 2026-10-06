@@ -8,6 +8,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] `VIBN_Tools.ContainerGeneration` und `VIBN_Tools.SharedWpf` erscheinen als eigene Solution-Projekte; das Hauptprojekt kompiliert deren Ordner nicht zusätzlich über Wildcards.
 - [ ] `Tests/CoreSmokeTests` ist erfolgreich.
 - [ ] `Tests/ContainerGenerationSmokeTests` liest alle sieben bereitgestellten Interface-/Container-Paare, bilanziert jedes Signal, hält die verifizierten Zuordnungs-/Slot-Untergrenzen ein und meldet `SixLabors.Fonts 1.0.1.0`.
+- [ ] `Tests/ContainerGenerationSmokeTests` bestätigt die zentrale Decoration-Ausschlussrichtlinie für Model Validation, Container2FEE Visual und FEE2Container; `SurfaceDecoration` und reguläre `Surface`-Objekte bleiben zulässig.
 - [ ] `Tests/UiStartupSmokeTests` ist erfolgreich und meldet keine Binding-Fehler.
 - [ ] `Tests/Test-TiaHardwareTraversal.ps1` bestätigt Gerätegruppen, Local Session und exakt `E62–73/A62–67` sowie `E74–79/A68–79`.
 - [ ] `Tests/TiaLiveRead` liest aus dem geöffneten `Projekt1.ap20` genau eine PLC, drei Teilnehmer und sechs eindeutige adressführende Modulzeilen, ohne das Projekt zu speichern.

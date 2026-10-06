@@ -6,6 +6,8 @@ Die vier Tabellen dieses Prüf- und Rekonstruktionsreiters verwenden Recycling-V
 
 Der Reiter zeigt ausschließlich FEE-`BasicFrame`-Objekte ohne einen `BasicFrame`-Vorfahren als auswählbare Hauptknoten. Das gilt auch dann, wenn zwischen zwei BasicFrames ein anderes Gruppierungsobjekt liegt; untergeordnete Frames gehören zum jeweiligen Teilbaum und erscheinen nicht doppelt. Für einen durch **Container2FEE Visual** erzeugten Root wird weiterhin die gespeicherte Provenienz als exakter Round-Trip verwendet. Fehlt sie, rekonstruiert das Tool ein ContainerFile aus den unterstützten Objekten unterhalb des gewählten Hauptknotens sowie deren aktuellen Variablen- und Slotzuordnungen.
 
+Objekte vom FEE-Typ `Decoration` werden vor der Rekonstruktion vollständig entfernt. Sie werden weder als Container noch in der Liste nicht containerrelevanter Objekte oder als Prüfmeldung ausgegeben. Der gemeinsame FEE-Snapshot filtert sie nach Möglichkeit bereits vor den teuren XML- und Transformationsabfragen.
+
 Beim Generieren legt Container2FEE auf dem neuen `BasicFrame` eine versionierte Provenienz im persistenten `FS.SDK.Components.TagComponent.TagEntries` ab. Der Remote-SDK-Zugriff verwendet dabei `SceneObject.Tags` als ComponentName und `TagEntries` als PropertyName. Die FEE-SDK-Dateien unter `SDK/` werden weder verändert noch ersetzt. Namespaced Tags enthalten:
 
 - Schema- und Formatversion,

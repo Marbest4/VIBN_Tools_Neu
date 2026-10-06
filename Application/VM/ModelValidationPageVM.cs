@@ -208,9 +208,11 @@ namespace VIBN_Tools.Application.VM
 
         private void OnFeeObjectsUpdated(object sender, FeeObjectsUpdatedEventargs e)
         {
-            var allFeeObjects = Services.FeeObjects.AllFeeObjects;
+            var allFeeObjects = Services.FeeObjects.AllFeeObjects?
+                .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item))
+                .ToArray();
 
-            if (allFeeObjects == null || allFeeObjects.Count == 0)
+            if (allFeeObjects == null || allFeeObjects.Length == 0)
                 return;
 
             // Store old tab 
@@ -264,7 +266,7 @@ namespace VIBN_Tools.Application.VM
             }
 
             // Add marks group
-            var groupMarks = new ValidationGroupViewModel(new ObservableCollection<FeeAbstractObject>(allFeeObjects.Where(x => x is FeePickAndPlace || x is FeeDecoration || x is FeeSensor || (x is FeeDetectionFlag flag && flag.IsWorkpiece))))
+            var groupMarks = new ValidationGroupViewModel(new ObservableCollection<FeeAbstractObject>(allFeeObjects.Where(x => x is FeePickAndPlace || x is FeeSensor || (x is FeeDetectionFlag flag && flag.IsWorkpiece))))
             {
                 GroupName = "Marks",
                 IsMarksGroup = true,
@@ -281,7 +283,7 @@ namespace VIBN_Tools.Application.VM
             CalculateColumnWidths();
 
             IsBusyUpdatingFeeData = false;
-            UpdateStatusText = $"{allFeeObjects.Count} FEE-Objekte in {e.ElapsedTime.TotalSeconds:F1} s aktualisiert " +
+            UpdateStatusText = $"{allFeeObjects.Length} FEE-Objekte in {e.ElapsedTime.TotalSeconds:F1} s aktualisiert " +
                                $"(FEE lesen {e.SnapshotReadTime.TotalSeconds:F1} s, prüfen {e.ValidationTime.TotalSeconds:F1} s).";
             ApplicationLogService.Instance.Information("Model Validation", UpdateStatusText);
         }
