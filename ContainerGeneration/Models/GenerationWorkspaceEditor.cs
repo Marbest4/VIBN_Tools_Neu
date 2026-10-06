@@ -7,6 +7,10 @@ public sealed record UnassignEntryResult(
     int RemovedDuplicateOccurrences,
     int RemovedEmptyContainers);
 
+public sealed record MergeContainersResult(
+    int MovedSignals,
+    int RemovedContainers);
+
 /// <summary>
 /// Centralized, identity-based operations for the editable generation
 /// workspace. An imported signal may exist in exactly one location.
@@ -70,6 +74,42 @@ public static class GenerationWorkspaceEditor
         target.DataList.Add(entry);
 
         RemoveEmptyContainers(containers, target);
+    }
+
+    /// <summary>
+    /// Moves all signals from the source containers into one target container.
+    /// Signal identity is preserved and empty source containers are removed.
+    /// </summary>
+    public static MergeContainersResult MergeContainers(
+        IEnumerable<ContainerData> sources,
+        ContainerData target,
+        IList<ContainerData> containers,
+        IList<ContainerEntry> unassigned,
+        IList<ContainerEntry> filtered)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(target);
+
+        var sourceList = sources
+            .Where(source => source is not null && !ReferenceEquals(source, target))
+            .Distinct()
+            .ToList();
+        var beforeCount = containers.Count;
+        var moved = 0;
+
+        foreach (var source in sourceList)
+        {
+            foreach (var entry in source.DataList.ToList())
+            {
+                MoveToContainer(entry, target, containers, unassigned, filtered);
+                moved++;
+            }
+        }
+
+        target.ManuallyChecked = false;
+        target.Validate();
+        target.RefreshReimportStatus();
+        return new MergeContainersResult(moved, Math.Max(0, beforeCount - containers.Count));
     }
 
     private static UnassignEntryResult MoveToOpenList(

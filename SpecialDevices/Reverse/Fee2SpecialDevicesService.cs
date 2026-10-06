@@ -27,6 +27,9 @@ public sealed record Fee2SpecialDeviceRoot(
     public int ConnectedInputSignalCount => SignalCoverage?.ConnectedInputSignalCount ?? 0;
     public int OutputSignalCount => SignalCoverage?.OutputSignalCount ?? 0;
     public int ConnectedOutputSignalCount => SignalCoverage?.ConnectedOutputSignalCount ?? 0;
+    public int CurrentSignalCount => SignalCoverage is null
+        ? UpdatedSignalCount
+        : ConnectedInputSignalCount + ConnectedOutputSignalCount;
     public string MissingPlcSlots => SignalCoverage is null || SignalCoverage.MissingSlots.Count == 0
         ? string.Empty
         : string.Join(", ", SignalCoverage.MissingSlots);
@@ -158,10 +161,10 @@ public sealed class Fee2SpecialDevicesService
                     updated++;
                     return signal with
                     {
-                        Tag = variable.Tag ?? signal.Tag,
-                        Address = variable.Address ?? signal.Address,
+                        Tag = variable.Tag ?? string.Empty,
+                        Address = variable.Address ?? string.Empty,
                         DataType = variable.IOType.ToString(),
-                        Comment = variable.Comment ?? signal.Comment
+                        Comment = variable.Comment ?? string.Empty
                     };
                 }).ToArray();
                 var snapshot = source with { Signals = currentSignals };

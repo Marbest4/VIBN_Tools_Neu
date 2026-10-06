@@ -15,6 +15,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         private string _dataType = string.Empty;
         private string _note = string.Empty;
         private string _signalId = string.Empty;
+        private string _assignmentWarning = string.Empty;
 
         /// <summary>
         /// Stable identity of this signal inside a VIBN Tools workspace.
@@ -63,7 +64,11 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         public string Address
         {
             get => _address;
-            set => SetWorkspaceValue(ref _address, value);
+            set
+            {
+                SetWorkspaceValue(ref _address, value);
+                RefreshAssignmentWarning();
+            }
         }
 
         /// <summary>
@@ -134,6 +139,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
                         value));
                 _slot = value;
                 OnPropertyChanged();
+                RefreshAssignmentWarning();
 
                 // Tell ContainerData that slot has been changed
                 SlotChanged?.Invoke(this, EventArgs.Empty);
@@ -202,6 +208,23 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         [XmlIgnore]
         public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationError);
 
+        /// <summary>
+        /// Non-blocking plausibility warning for an output address assigned to a PLC input slot.
+        /// </summary>
+        [XmlIgnore]
+        public string AssignmentWarning
+        {
+            get => _assignmentWarning;
+            private set
+            {
+                if (SetPropertyChange(ref _assignmentWarning, value ?? string.Empty))
+                    OnPropertyChanged(nameof(HasAssignmentWarning));
+            }
+        }
+
+        [XmlIgnore]
+        public bool HasAssignmentWarning => !string.IsNullOrWhiteSpace(AssignmentWarning);
+
         [XmlIgnore]
         public string ReviewStateText => ReviewState switch
         {
@@ -235,6 +258,19 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
             clone.ValidationError = this.ValidationError;
 
             return clone;
+        }
+
+        private void RefreshAssignmentWarning()
+        {
+            var normalizedAddress = (Address ?? string.Empty).TrimStart().TrimStart('%');
+            var isOutputAddress = normalizedAddress.StartsWith("A", StringComparison.OrdinalIgnoreCase) ||
+                                  normalizedAddress.StartsWith("Q", StringComparison.OrdinalIgnoreCase);
+            var isInputSlot = (Slot ?? string.Empty).StartsWith("PLC_IN", StringComparison.OrdinalIgnoreCase);
+
+            AssignmentWarning = isOutputAddress && isInputSlot
+                ? $"Ausgangsadresse „{Address}“ ist einem Eingangsslot „{Slot}“ zugeordnet. " +
+                  "Bitte die Zuordnung fachlich prüfen."
+                : string.Empty;
         }
 
         /// <summary>

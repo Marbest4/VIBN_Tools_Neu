@@ -56,6 +56,7 @@ internal static class Program
         ValidateGroupingExamplesAgainstProvidedSignals();
         ValidateReimportDecisionStaging();
         ValidateWorkspaceBlockingMarker();
+        ValidateWorkspaceContainerMergeAndAssignmentWarning();
         ValidateSlotMultiplicityPolicy();
         ValidateFeeTagPropertyContract();
         await ValidateContainerToFeeModelContractsAsync();
@@ -377,6 +378,7 @@ internal static class Program
             coverage);
         if (coverageRoot.InputSignalCount != 3 || coverageRoot.ConnectedInputSignalCount != 2 ||
             coverageRoot.OutputSignalCount != 4 || coverageRoot.ConnectedOutputSignalCount != 3 ||
+            coverageRoot.CurrentSignalCount != 5 ||
             !coverageRoot.MissingPlcSlots.Contains("PLC_OUT_Missing", StringComparison.Ordinal))
         {
             throw new InvalidOperationException("FEE2SpecialDevices PLC_IN/PLC_OUT coverage projection is inconsistent.");
@@ -1266,6 +1268,57 @@ internal static class Program
             });
         if (!selected.ToHashSet().SetEquals([top, secondTop]))
             throw new InvalidOperationException("Nested BasicFrames were offered as FEE2Container roots.");
+
+        var rootFrame = new FeeBasicFrame { Name = "Root" };
+        var intermediary = new FeeAbstractObject { Guid = Guid.NewGuid(), Name = "Group", Parent = rootFrame };
+        var deeplyNestedFrame = new FeeBasicFrame { Name = "Nested", Parent = intermediary };
+        if (!Fee2ContainerService.IsTopLevelInSnapshot(rootFrame) ||
+            Fee2ContainerService.IsTopLevelInSnapshot(deeplyNestedFrame))
+        {
+            throw new InvalidOperationException(
+                "FEE2Container must exclude BasicFrames below intermediary non-BasicFrame objects from the root list.");
+        }
+    }
+
+    private static void ValidateWorkspaceContainerMergeAndAssignmentWarning()
+    {
+        var targetEntry = new ContainerEntry
+        {
+            SignalId = "SIG-TARGET",
+            Signal = "Target",
+            Address = "E1.0",
+            Slot = "PLC_IN_Target"
+        };
+        var sourceEntry = new ContainerEntry
+        {
+            SignalId = "SIG-SOURCE",
+            Signal = "OutputOnInput",
+            Address = "A5.0",
+            Slot = "PLC_IN_Command"
+        };
+        var target = new ContainerData { Component = "Target", DataList = new([targetEntry]) };
+        var source = new ContainerData { Component = "Source", DataList = new([sourceEntry]) };
+        var containers = new List<ContainerData> { target, source };
+        var unassigned = new List<ContainerEntry>();
+        var filtered = new List<ContainerEntry>();
+
+        var result = GenerationWorkspaceEditor.MergeContainers(
+            [source], target, containers, unassigned, filtered);
+        if (result.MovedSignals != 1 || result.RemovedContainers != 1 ||
+            containers.Count != 1 || !ReferenceEquals(containers[0], target) ||
+            !target.DataList.Contains(sourceEntry) || !sourceEntry.HasAssignmentWarning)
+        {
+            throw new InvalidOperationException(
+                "Container merge or output-address-to-PLC_IN warning is not deterministic.");
+        }
+
+        var summary = WorkspaceValidationAnalyzer.Analyze(containers, unassigned, filtered);
+        if (!summary.HasWarnings || !summary.Details.Any(detail => detail.Contains("Ausgangsadresse", StringComparison.Ordinal)))
+            throw new InvalidOperationException("The PLC_IN address plausibility warning is missing from validation.");
+
+        sourceEntry.Slot = "PLC_OUT_Command";
+        if (sourceEntry.HasAssignmentWarning)
+            throw new InvalidOperationException("The PLC_IN address warning was not cleared after correcting the slot.");
     }
 
     private static void ValidateWorkspaceBlockingMarker()

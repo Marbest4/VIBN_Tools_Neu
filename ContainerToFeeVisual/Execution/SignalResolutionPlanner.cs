@@ -7,7 +7,8 @@ public sealed record SignalResolutionRequest(
     string ContainerId,
     string ContainerName,
     FeeInterfaceSignal Signal,
-    string? NodeId = null);
+    string? NodeId = null,
+    string? SlotName = null);
 
 public sealed record ExistingSignalBinding(
     SignalResolutionRequest Request,
@@ -125,55 +126,59 @@ public static class SignalResolutionPlanner
 
             if (result.Candidates.Length == 0)
             {
-                var sameTag = string.IsNullOrWhiteSpace(request.Signal.Tag)
-                    ? []
-                    : missing.Where(item => string.Equals(
-                            item.Signal.Tag,
-                            request.Signal.Tag,
-                            StringComparison.OrdinalIgnoreCase))
-                        .ToArray();
-                if (sameTag.Length > 0)
+                var sameSource = missing.Where(item =>
+                        SameLocation(item.Signal, request.Signal))
+                    .ToArray();
+                if (sameSource.Length > 0)
                 {
-                    var exact = sameTag.Where(item =>
-                            SameLocation(item.Signal, request.Signal) &&
+                    var exact = sameSource.Where(item =>
                             item.Signal.IOType == request.Signal.IOType &&
                             item.Signal.Usage == request.Signal.Usage)
                         .ToArray();
                     if (exact.Length == 1)
                     {
+                        AddSharedSourceReviewIfRequired(issues, exact[0], request);
                         missingAliases.Add(new MissingSignalAlias(request, exact[0]));
                         continue;
                     }
 
                     issues.Add(new VisualIssue(
                         VisualIssueSeverity.Error,
-                        "NEW_SIGNAL_IDENTITY_CONFLICT",
-                        $"Das neu benötigte Signal '{SignalIdentity(request.Signal)}' besitzt in mehreren " +
-                        "Containern widersprüchliche Adresse, Typ- oder Nutzungsdaten.",
-                        request.ContainerId));
+                        "NEW_SIGNAL_SOURCE_CONFLICT",
+                        $"Die Quelle '{SignalLocation(request.Signal)}' ist für das Signal " +
+                        $"'{SignalIdentity(request.Signal)}' mit widersprüchlichen Typ- oder Nutzungsdaten belegt.",
+                        request.NodeId ?? request.ContainerId));
                     continue;
                 }
 
-                if (string.IsNullOrWhiteSpace(request.Signal.Tag))
-                {
-                    var sameLocation = missing.Where(item =>
-                            SameLocation(item.Signal, request.Signal) &&
-                            item.Signal.IOType == request.Signal.IOType &&
-                            item.Signal.Usage == request.Signal.Usage)
-                        .ToArray();
-                    if (sameLocation.Length == 1)
-                    {
-                        missingAliases.Add(new MissingSignalAlias(request, sameLocation[0]));
-                        continue;
-                    }
-                }
-
+                // Equal tags are legal when their physical source differs.
+                // They must remain separate variables instead of being folded
+                // into one identity or rejected as contradictory.
                 missing.Add(request);
                 continue;
             }
 
             var match = result.Candidates[0];
             bindings.Add(new ExistingSignalBinding(request, match.Signal, match.Parent));
+        }
+
+        foreach (var group in bindings.GroupBy(
+                     item => item.ExistingSignal.Guid,
+                     EqualityComparer<Guid>.Default))
+        {
+            var containers = group
+                .Select(item => item.Request.ContainerId)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (containers.Length <= 1)
+                continue;
+
+            var first = group.First();
+            issues.Add(new VisualIssue(
+                VisualIssueSeverity.Warning,
+                "SIGNAL_SOURCE_SHARED_ACROSS_CONTAINERS",
+                BuildSharedSourceMessage(group.Select(item => item.Request), first.ExistingSignal),
+                first.Request.NodeId ?? first.Request.ContainerId));
         }
 
         return new SignalResolutionPlan(bindings, missing, missingAliases, issues);
@@ -194,8 +199,19 @@ public static class SignalResolutionPlanner
         if (byTag.Length == 1)
         {
             if (HasLocation(requested) && !SameLocation(byTag[0].Signal, requested))
-                return new MatchResult(byTag, "EXISTING_SIGNAL_IDENTITY_CONFLICT");
+                return new MatchResult([], null);
             return new MatchResult(byTag, null);
+        }
+
+        if (byTag.Length > 1 && HasLocation(requested))
+        {
+            var matchingLocation = byTag
+                .Where(item => SameLocation(item.Signal, requested))
+                .ToArray();
+            if (matchingLocation.Length == 0)
+                return new MatchResult([], null);
+            if (matchingLocation.Length == 1)
+                return new MatchResult(matchingLocation, null);
         }
 
         var candidates = byTag.Length > 0
@@ -235,6 +251,36 @@ public static class SignalResolutionPlanner
                $"erwartet die Quelle '{SignalLocation(request.Signal)}', konnte aber nicht eindeutig und " +
                $"widerspruchsfrei aufgelöst werden. Vorhandene Treffer: {locations}. " +
                "Die bestehende Variable wird nicht automatisch überschrieben oder mit einer abweichenden Quelle verknüpft.";
+    }
+
+    private static void AddSharedSourceReviewIfRequired(
+        ICollection<VisualIssue> issues,
+        SignalResolutionRequest primary,
+        SignalResolutionRequest alias)
+    {
+        if (string.Equals(primary.ContainerId, alias.ContainerId, StringComparison.Ordinal))
+            return;
+
+        issues.Add(new VisualIssue(
+            VisualIssueSeverity.Warning,
+            "SIGNAL_SOURCE_SHARED_ACROSS_CONTAINERS",
+            BuildSharedSourceMessage([primary, alias], alias.Signal),
+            alias.NodeId ?? alias.ContainerId));
+    }
+
+    private static string BuildSharedSourceMessage(
+        IEnumerable<SignalResolutionRequest> requests,
+        FeeInterfaceSignal signal)
+    {
+        var usages = requests
+            .Select(request => $"{request.ContainerName}" +
+                               (string.IsNullOrWhiteSpace(request.SlotName)
+                                   ? string.Empty
+                                   : $" / Slot {request.SlotName}"))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        return $"Die Signalquelle '{SignalLocation(signal)}' wird in mehreren Containern verwendet: " +
+               $"{string.Join("; ", usages)}. Das ist zulässig, wird aber zur Prüfung markiert. " +
+               "Gleiche Namen mit unterschiedlichen Adressen bleiben dagegen eigenständige Signale.";
     }
 
     private static bool HasLocation(FeeInterfaceSignal signal) =>

@@ -1,6 +1,9 @@
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace VIBN_Tools.Application.Behaviors;
 
@@ -19,7 +22,7 @@ public sealed record ContainerToFeeVisualDropRequest(object Source, object Targe
 public static class ContainerToFeeVisualDragDropBehavior
 {
     private const string DataFormat = "VIBN_Tools.ContainerToFeeVisual.Item";
-    private static Point _dragStart;
+    private static readonly ConditionalWeakTable<UIElement, DragSourceState> DragSourceStates = new();
 
     public static readonly DependencyProperty IsDragSourceProperty =
         DependencyProperty.RegisterAttached(
@@ -107,25 +110,51 @@ public static class ContainerToFeeVisualDragDropBehavior
         }
     }
 
-    private static void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs args) =>
-        _dragStart = args.GetPosition(null);
+    private static void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs args)
+    {
+        if (sender is not UIElement element)
+            return;
+
+        var state = DragSourceStates.GetOrCreateValue(element);
+        state.Start = args.GetPosition(null);
+        // Capture the data item at mouse-down time. A synchronized selection
+        // can rebuild or scroll a virtualized list before the drag threshold is
+        // crossed; resolving OriginalSource later could therefore pick a
+        // recycled container and link the wrong FEE object.
+        state.Source = ResolveItem(element, args.OriginalSource as DependencyObject);
+        state.Owner = FindAncestor<ListBox>(element);
+        CaptureScrollOffset(state);
+    }
 
     private static void OnPreviewMouseMove(object sender, MouseEventArgs args)
     {
-        if (args.LeftButton != MouseButtonState.Pressed || sender is not FrameworkElement element)
+        if (args.LeftButton != MouseButtonState.Pressed ||
+            sender is not UIElement element ||
+            !DragSourceStates.TryGetValue(element, out var state))
             return;
 
         Point current = args.GetPosition(null);
-        if (Math.Abs(current.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(current.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+        if (Math.Abs(current.X - state.Start.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(current.Y - state.Start.Y) < SystemParameters.MinimumVerticalDragDistance)
             return;
 
-        object? source = ResolveItem(element, args.OriginalSource as DependencyObject);
+        // Consume the captured payload once. Do not derive it from the current
+        // pointer visual: virtualization may already have reused that visual
+        // for a different row after selection synchronization.
+        object? source = state.Source;
+        state.Source = null;
         if (source is null)
             return;
 
         var data = new DataObject(DataFormat, source);
-        DragDrop.DoDragDrop(element, data, DragDropEffects.Move | DragDropEffects.Link);
+        try
+        {
+            DragDrop.DoDragDrop(element, data, DragDropEffects.Move | DragDropEffects.Link);
+        }
+        finally
+        {
+            RestoreScrollOffset(state);
+        }
     }
 
     private static void OnDragOver(object sender, DragEventArgs args)
@@ -154,15 +183,16 @@ public static class ContainerToFeeVisualDragDropBehavior
         args.Handled = true;
     }
 
-    private static object? ResolveItem(FrameworkElement sourceElement, DependencyObject? originalSource)
+    private static object? ResolveItem(UIElement sourceElement, DependencyObject? originalSource)
     {
         object? item = null;
+        var sourceDataContext = (sourceElement as FrameworkElement)?.DataContext;
         DependencyObject? current = originalSource;
         while (current is not null && current != sourceElement)
         {
             if (current is FrameworkElement frameworkElement &&
                 frameworkElement.DataContext is not null &&
-                frameworkElement.DataContext != sourceElement.DataContext)
+                frameworkElement.DataContext != sourceDataContext)
             {
                 item = frameworkElement.DataContext;
                 break;
@@ -173,7 +203,7 @@ public static class ContainerToFeeVisualDragDropBehavior
 
         item ??= sourceElement is ListBox sourceListBox
             ? sourceListBox.SelectedItem
-            : sourceElement.DataContext;
+            : sourceDataContext;
         if (item is null)
             return null;
 
@@ -196,5 +226,57 @@ public static class ContainerToFeeVisualDragDropBehavior
                 return match;
         }
         return null;
+    }
+
+    private static void CaptureScrollOffset(DragSourceState state)
+    {
+        if (state.Owner is null || FindVisualChild<ScrollViewer>(state.Owner) is not { } viewer)
+            return;
+
+        state.VerticalOffset = viewer.VerticalOffset;
+        state.HorizontalOffset = viewer.HorizontalOffset;
+        state.HasScrollOffset = true;
+    }
+
+    private static void RestoreScrollOffset(DragSourceState state)
+    {
+        if (!state.HasScrollOffset || state.Owner is null)
+            return;
+
+        var owner = state.Owner;
+        var verticalOffset = state.VerticalOffset;
+        var horizontalOffset = state.HorizontalOffset;
+        state.HasScrollOffset = false;
+        _ = owner.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            if (FindVisualChild<ScrollViewer>(owner) is not { } viewer)
+                return;
+            viewer.ScrollToVerticalOffset(verticalOffset);
+            viewer.ScrollToHorizontalOffset(horizontalOffset);
+        }));
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T match)
+                return match;
+            if (FindVisualChild<T>(child) is { } nested)
+                return nested;
+        }
+
+        return null;
+    }
+
+    private sealed class DragSourceState
+    {
+        public Point Start { get; set; }
+        public object? Source { get; set; }
+        public ListBox? Owner { get; set; }
+        public bool HasScrollOffset { get; set; }
+        public double VerticalOffset { get; set; }
+        public double HorizontalOffset { get; set; }
     }
 }

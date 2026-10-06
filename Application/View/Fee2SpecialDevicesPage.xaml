@@ -84,7 +84,7 @@
                 <DataGridTextColumn Header="PLC_OUT vorhanden" Binding="{Binding OutputSignalCount}" Width="125" />
                 <DataGridTextColumn Header="Fehlende PLC-Slots" Binding="{Binding MissingPlcSlots}" Width="2*" />
                 <DataGridTextColumn Header="Signale" Binding="{Binding Snapshot.Signals.Count}" Width="75" />
-                <DataGridTextColumn Header="Aktuell" Binding="{Binding UpdatedSignalCount}" Width="75" />
+                <DataGridTextColumn Header="Aktuell verbunden" Binding="{Binding CurrentSignalCount}" Width="110" />
                 <DataGridTextColumn Header="Fehlend" Binding="{Binding MissingSignalCount}" Width="75" />
             </DataGrid.Columns>
         </DataGrid>

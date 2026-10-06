@@ -104,9 +104,22 @@ Der Link-only-Adapter darf keine Erzeugungsmethode aufrufen. Er verlangt den akt
 3. optional eine konservative TIA-Erkennung in `SpecialDeviceLogicOption.Suggest` hinzufügen;
 4. zuerst nur in die Warteschlange übernehmen, FEE-Erzeugung erst nach Benutzerprüfung starten.
 
+`SpecialDevice.SynchronizeExistingAsync` ist der einzige Updatepfad für ein gleichnamiges, bereits erzeugtes Gerät. Er verlangt genau einen Root mit gültiger SpecialDevices2FEE-Provenienz, löst Variablen über ihre persistierte GUID im frischen Interface-Snapshot auf und aktualisiert nur geänderte Adressen per `UpdateOrCreateVariableAsync`. Objekt, Logik und Interface werden nicht neu erzeugt. Gleichnamige Legacy-Roots ohne Provenienz sowie mehrdeutige Namen bleiben bewusst in der Warteschlange; Namensheuristiken dürfen keine bestehenden Variablen überschreiben.
+
 ### Neue Rolle oder Reiterberechtigung
 
 Rollenlogik liegt allein in `ViCoRolePolicy`. Die Hauptnavigation bindet ausschließlich die von `MainWindowVM` berechneten Level7-/Level8-/Level9-Gates. Die Regel darf nicht als Zeichenvergleich in mehreren XAML-Dateien dupliziert werden.
+
+### Mini-Tools erweitern
+
+Die Positionierfunktion trennt die fachliche Schleife in
+`MiniTools/FeeSelectionPositioningService.cs` von der FEE-SDK-Grenze
+`IFeeSelectionTransformGateway`. Neue kleine FEE-Hilfen sollen demselben Muster
+folgen: Eingaben zuerst vollständig validieren, SDK-Aufrufe im Gateway kapseln,
+zustandsverändernde Aufrufe seriell ausführen und Einzelresultate über Status
+und `ApplicationLogService` melden. `GetAllSelectedObjectsAsync` ist die einzige
+Quelle der aktiven FEE-Auswahl. `Transform.LocalScale` darf die bestehende
+Funktion ausschließlich für nachweisliche `Surface`-GUIDs schreiben.
 
 ## Nebenläufigkeit und UI-Stabilität
 

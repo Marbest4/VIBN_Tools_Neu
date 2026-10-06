@@ -152,6 +152,13 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
+    <!-- The Container2FEE Visual help button opens the maintained local
+         Markdown guide. Keep its verified screenshot next to it so relative
+         image links work in Markdown viewers after build and publish. -->
+    <None Update="docs\CONTAINER2FEE_VISUAL.md;docs\screenshots\container2fee-visual.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
   <Target Name="BuildAndCopyTiaBridge" AfterTargets="Build">

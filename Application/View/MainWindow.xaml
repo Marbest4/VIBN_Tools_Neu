@@ -229,6 +229,15 @@ ToolTipService.ShowOnDisabled="True">
 						<local:LazyPageHost PageType="{x:Type p:ProjectQualityPage}" />
 					</TabItem>
 
+					<TabItem Header="Mini-Tools"
+                             ux:Icon.Kind="Settings"
+                             Visibility="{Binding CanUseLevel7Features, Converter={StaticResource BooleanToVisibilityConverter}}"
+							 IsEnabled="{Binding Connection.CanUseFeeFeatures}"
+							 ToolTip="{Binding Connection.UnavailableReason}"
+							 ToolTipService.ShowOnDisabled="True">
+						<local:LazyPageHost PageType="{x:Type p:MiniToolsPage}" />
+					</TabItem>
+
 					<TabItem Header="Administration"
                              ux:Icon.Kind="Settings"
                              Visibility="{Binding CanUseLevel9Features, Converter={StaticResource BooleanToVisibilityConverter}}">

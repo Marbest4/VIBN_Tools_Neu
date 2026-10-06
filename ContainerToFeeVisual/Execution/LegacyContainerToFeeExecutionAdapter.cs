@@ -122,11 +122,11 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
             var usedSignalNodeIds = new HashSet<string>(StringComparer.Ordinal);
             var signalRequests = selectedBindings
                 .SelectMany(binding => binding.RuntimeContainer.EnumerateAssignedSignals().Select(signal =>
-                    new SignalResolutionRequest(
-                        binding.PlanNode.Id,
-                        binding.PlanNode.Name,
+                    CreateSignalResolutionRequest(
+                        plan,
+                        binding.PlanNode,
                         signal,
-                        FindSignalNodeId(plan, binding.PlanNode.Id, signal, usedSignalNodeIds))))
+                        usedSignalNodeIds)))
                 .Concat(binding.UnknownSignals.Select(signal =>
                     new SignalResolutionRequest(
                         "unknown-signals",
@@ -419,6 +419,22 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
         if (candidate is not null)
             usedNodeIds.Add(candidate.Id);
         return candidate?.Id;
+    }
+
+    private static SignalResolutionRequest CreateSignalResolutionRequest(
+        VisualPlan plan,
+        VisualNode container,
+        FeeInterfaceSignal signal,
+        ISet<string> usedNodeIds)
+    {
+        var nodeId = FindSignalNodeId(plan, container.Id, signal, usedNodeIds);
+        var node = string.IsNullOrWhiteSpace(nodeId) ? null : plan.FindNode(nodeId);
+        return new SignalResolutionRequest(
+            container.Id,
+            container.Name,
+            signal,
+            nodeId,
+            node is null ? null : plan.GetEffectiveSlot(node));
     }
 
     private static HashSet<string> ResolveAffectedContainers(

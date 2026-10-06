@@ -21,7 +21,9 @@ Die erste Stufe ist absichtlich deterministisch und nicht generativ. Regel- und 
 
 `unterstützende unterschiedliche Fälle / alle unterschiedlichen relevanten Fälle`
 
-Damit führt ein mehrfaches Klicken im selben Fall nicht künstlich zu hoher Sicherheit. Gegensätzliche Zielslots senken die Konfidenz sichtbar. Die exakte Signalregel ist konservativ; Regex-Verallgemeinerungen werden erst dann sinnvoll, wenn genügend fachlich freigegebene Fälle und eine messbare Evaluierung vorliegen.
+Damit führt ein mehrfaches Klicken im selben Fall nicht künstlich zu hoher Sicherheit. Gegensätzliche Zielslots senken die Konfidenz sichtbar. Die exakte Signalregel ist konservativ. Allgemeingültigere Vorschläge sind prinzipiell möglich, aber das aktuelle `Key`-Schema unterstützt produktiv nur `match="literal"` und `match="exact"`, keine regulären Ausdrücke. Deshalb erzeugt das Tool aus einzelnen Korrekturen keine vermeintlich allgemeine XML-Regel. Eine spätere Verallgemeinerung muss mehrere unterschiedliche, widerspruchsfreie und fachlich freigegebene Fälle sowie eine messbare Gegenbeispiel-Evaluierung verlangen. Die Container-Muster sind bereits die allgemeinere, aber nicht schreibende Aggregationsstufe.
+
+Manuell ausgewählt werden nur die exportierte ContainerGeneration-XML für **Train** beziehungsweise **Check** und später die Requirements-/AutoCreate-XML für eine explizite Patch-Vorschau. Interface-Excel und Requirements.xml sind keine Trainingsdateien. ActionLogs werden von ContainerGeneration automatisch unter `vibn_ai_data/actions` geschrieben und bei **Train**, **Vorschläge aktualisieren** sowie **Container-Muster aktualisieren** automatisch aus diesem Ordner gelesen. **Container-Muster aktualisieren** trainiert kein Modell: Der Button aggregiert die vorhandenen Add-/Move-/ContainerAndSlot-Ereignisse erneut und lädt die gespeicherten Annahme-/Ablehnungsstatus dazu.
 
 ## Prüfung
 

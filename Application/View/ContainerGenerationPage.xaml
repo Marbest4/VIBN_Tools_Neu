@@ -90,6 +90,39 @@
                 </Style.Triggers>
             </Style>
 
+            <Style x:Key="AddressEntryTextBoxStyle"
+                   TargetType="TextBox"
+                   BasedOn="{StaticResource ReviewEntryTextBoxStyle}">
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding HasAssignmentWarning}" Value="True">
+                        <Setter Property="Background" Value="#FFFFE0B2"/>
+                        <Setter Property="BorderBrush" Value="#FFF57C00"/>
+                        <Setter Property="BorderThickness" Value="2"/>
+                        <Setter Property="ToolTip" Value="{Binding AssignmentWarning}"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
+            <Style x:Key="SlotEntryComboBoxStyle" TargetType="ComboBox">
+                <Setter Property="Background" Value="White"/>
+                <Setter Property="MinWidth" Value="100"/>
+                <Setter Property="MaxHeight" Value="21"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding HasAssignmentWarning}" Value="True">
+                        <Setter Property="Background" Value="#FFFFE0B2"/>
+                        <Setter Property="BorderBrush" Value="#FFF57C00"/>
+                        <Setter Property="BorderThickness" Value="2"/>
+                        <Setter Property="ToolTip" Value="{Binding AssignmentWarning}"/>
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding HasValidationError}" Value="True">
+                        <Setter Property="Background" Value="#FFFFCDD2"/>
+                        <Setter Property="BorderBrush" Value="#FFC62828"/>
+                        <Setter Property="BorderThickness" Value="2"/>
+                        <Setter Property="ToolTip" Value="{Binding ValidationError}"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+
 
             <converter:EqualityConverter x:Key="EqualityConverter"/>
         </ResourceDictionary>
@@ -112,7 +145,8 @@
         <ux:TextBox Margin="5" Grid.Row="0" Grid.Column="1" IsReadOnly="True" MinWidth="160"  VerticalContentAlignment="Center" Text="{Binding Settings.PathZuli}" Watermark="Path to Interface-File (.xlsx)"/>
 
         <!-- row 2 - Input Requirements XML -->
-        <ux:Button Margin="5" Grid.Row="1" Grid.Column="0" Content="Open Req. XML" DebounceInterval="150" Command="{Binding OpenRequirementsXml}"/>
+        <ux:Button Margin="5" Grid.Row="1" Grid.Column="0" Content="Open Req. XML" DebounceInterval="150" Command="{Binding OpenRequirementsXml}"
+                   ToolTip="Key match='exact' verlangt einen vollständig identischen Signaltext. match='literal' (Standard) sucht den Key als abgegrenzten Textbestandteil. Weitere match-Werte sind im aktuellen Schema nicht zugelassen."/>
         <ux:TextBox Margin="5" Grid.Row="1" Grid.Column="1" IsReadOnly="True" MinWidth="160" VerticalContentAlignment="Center" Text="{Binding Settings.PathRequirementsXml}" Watermark="Path to Requirements-File (.xml)"/>
 
 
@@ -462,7 +496,7 @@
             <!-- Row 3 - Container data -->
             <DataGrid x:Name="ContainerListDataGrid" Grid.Row="3" Margin="5" AutoGenerateColumns="False" CanUserAddRows="True" Height="Auto" MinColumnWidth="100" MinRowHeight="25" ItemsSource="{Binding ContainerList}"
                       VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" EnableRowVirtualization="True" EnableColumnVirtualization="True" ScrollViewer.CanContentScroll="True"
-                      AllowDrop="True">
+                      SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True">
                 <i:Interaction.Triggers>
                     <i:EventTrigger EventName="SelectionChanged">
                         <i:InvokeCommandAction Command="{Binding SelectionChangedExecuted}" CommandParameter="{Binding SelectedItems, ElementName=ContainerListDataGrid}" />
@@ -475,6 +509,9 @@
                     </i:EventTrigger>
                     <i:EventTrigger EventName="Drop">
                         <i:InvokeCommandAction Command="{Binding DataGridDrop}" PassEventArgsToCommand="True" />
+                    </i:EventTrigger>
+                    <i:EventTrigger EventName="MouseMove">
+                        <i:InvokeCommandAction Command="{Binding DataGridMouseMove}" PassEventArgsToCommand="True" />
                     </i:EventTrigger>
                 </i:Interaction.Triggers>
 
@@ -548,22 +585,44 @@
                     <DataGridTemplateColumn Header="Signal-ID" IsReadOnly="True" Width="165">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
-                                    <ItemsControl.Template>
-                                        <ControlTemplate TargetType="ItemsControl">
+                                <ListBox ItemsSource="{Binding DataList}"
+                                         Tag="SignalIdDragSource"
+                                         SelectionMode="Single"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         ToolTip="Signal-ID einzeln auswählen, verschieben oder mit X entfernen.">
+                                    <ListBox.Template>
+                                        <ControlTemplate TargetType="ListBox">
                                             <ItemsPresenter />
                                         </ControlTemplate>
-                                    </ItemsControl.Template>
-                                    <ItemsControl.ItemTemplate>
+                                    </ListBox.Template>
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <TextBlock Text="{Binding SignalId}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       ToolTip="{Binding SignalId}"
-                                                       MinHeight="21"
-                                                       VerticalAlignment="Center"/>
+                                            <Grid MinHeight="21">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding SignalId}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding SignalId}"
+                                                           VerticalAlignment="Center"/>
+                                                <Button Grid.Column="1"
+                                                        Margin="4,0,0,0"
+                                                        Style="{StaticResource RedXButtonStyle}"
+                                                        Command="{Binding DataContext.DeleteItem, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="Dieses Signal aus dem Arbeitsstand entfernen."/>
+                                            </Grid>
                                         </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -592,7 +651,7 @@
                                     <!-- ItemTemplate -->
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <TextBox Text="{Binding Address}" Style="{StaticResource ReviewEntryTextBoxStyle}"/>
+                                            <TextBox Text="{Binding Address}" Style="{StaticResource AddressEntryTextBoxStyle}"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
 
@@ -726,9 +785,7 @@
 
                                                 <ComboBox ItemsSource="{Binding DataContext.Slots, RelativeSource={RelativeSource AncestorType=DataGridRow}}"
                                                           SelectedItem="{Binding Slot, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                          MinWidth="100"
-                                                          MaxHeight="21"
-                                                          Background="White"
+                                                          Style="{StaticResource SlotEntryComboBoxStyle}"
                                                           Loaded="ComboBox_Loaded"/>
 
                                                 <Button Grid.Column="1"

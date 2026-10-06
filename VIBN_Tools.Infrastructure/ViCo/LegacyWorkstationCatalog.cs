@@ -8,6 +8,16 @@ namespace VIBN_Tools.Infrastructure.ViCo;
 /// <summary>Parses the compatible Kanbanize cache files into neutral workstation models.</summary>
 public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
 {
+    private static readonly string[] CacheFileNames =
+    [
+        "AllPCLaneInfosWithChilds.txt",
+        "AllCardsOfPCsV2.txt",
+        "AllRobyCards.txt",
+        "AllRobyCardsRobyName.txt",
+        "AllRobyColumns.txt",
+        "WorkstationBoardCache.json"
+    ];
+
     private readonly string _cacheRoot;
 
     public LegacyWorkstationCatalog(string cacheRoot)
@@ -39,6 +49,7 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
         var robotColumns = await robotColumnsTask;
         var boardData = await boardDataTask;
         var combined = CombineLegacyCards(lanes, cards);
+        var sourceUpdatedAt = GetSourceUpdatedAt(warnings);
         return new ViCoWorkstationSnapshot(
             ParseWorkstations(
                 combined,
@@ -49,7 +60,31 @@ public sealed class LegacyWorkstationCatalog : IViCoWorkstationCatalog
                 boardData.ConfigurationColumns,
                 boardData.ProjectCards,
                 boardData.CompletedProjectsByMachineKey),
-            warnings.ToArray());
+            warnings.ToArray(),
+            sourceUpdatedAt);
+    }
+
+    private DateTimeOffset? GetSourceUpdatedAt(ConcurrentQueue<string> warnings)
+    {
+        DateTimeOffset? latest = null;
+        foreach (var fileName in CacheFileNames)
+        {
+            var path = Path.Combine(_cacheRoot, fileName);
+            try
+            {
+                if (!File.Exists(path))
+                    continue;
+                var updatedAt = new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero);
+                if (latest is null || updatedAt > latest)
+                    latest = updatedAt;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                warnings.Enqueue($"{path}: Aktualisierungszeit konnte nicht gelesen werden: {exception.Message}");
+            }
+        }
+
+        return latest;
     }
 
     private async Task<IReadOnlyList<string>> ReadLinesAsync(

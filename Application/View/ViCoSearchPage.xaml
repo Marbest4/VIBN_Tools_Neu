@@ -76,6 +76,7 @@
 			<Grid.RowDefinitions>
 				<RowDefinition Height="Auto" />
 				<RowDefinition Height="Auto" />
+				<RowDefinition Height="Auto" />
 			</Grid.RowDefinitions>
 			<TextBox Grid.Column="0"
                      MinHeight="36"
@@ -125,6 +126,14 @@
                           IsChecked="{Binding SearchVisibleColumnsOnly, Mode=TwoWay}"
                           ToolTip="Aus: Alle fachlichen Daten einschließlich ausgeblendeter Spalten und Kanbanize-Details werden durchsucht. Ein: Nur aktuell eingeblendete Tabellenspalten werden berücksichtigt." />
 			</WrapPanel>
+			<Border Grid.Row="2" Grid.ColumnSpan="2"
+			        Margin="0,8,0,0" Padding="10,7"
+			        Background="#FFFFE5B4" BorderBrush="#FFB25B00" BorderThickness="1"
+			        CornerRadius="3"
+			        Visibility="{Binding IsDisplayedDataStale, Converter={StaticResource BooleanToVisibilityConverter}}">
+				<TextBlock FontWeight="SemiBold" Foreground="#FF6E3600"
+				           Text="{Binding DisplayedDataAgeNotice}" TextWrapping="Wrap" />
+			</Border>
 		</Grid>
 
 		<Grid Grid.Row="1">

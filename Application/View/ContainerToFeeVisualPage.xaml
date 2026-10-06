@@ -181,6 +181,9 @@
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Container.xml speichern"
                             Command="{Binding SaveContainerXmlCommand}"
                             ToolTip="Speichert den für die Generierung wirksamen Stand mit Slotkorrekturen, ergänzten Signalen und aktuell ausgewählten Containern." />
+                    <Button Style="{StaticResource VisualToolbarButton}" Content="Hilfe / Anleitung"
+                            Command="{Binding OpenDocumentationCommand}"
+                            ToolTip="Öffnet die mit der Anwendung ausgelieferte Container2FEE-Visual-Anleitung einschließlich Bedienablauf, Statusfarben, Drag-and-drop-Regeln und technischen Grenzen." />
                 </StackPanel>
 
                 <WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">

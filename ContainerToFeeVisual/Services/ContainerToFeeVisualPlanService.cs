@@ -1596,6 +1596,9 @@ public sealed class ContainerToFeeVisualPlanService
             {
                 var sample = duplicateGroup.First();
                 var isConfirmed = _confirmedDuplicateIdentities.Contains(CreateDuplicateIdentity(sample));
+                var isMotionJoint = string.Equals(sample.FeeType, "MotionJoint", StringComparison.OrdinalIgnoreCase) ||
+                                    string.Equals(sample.TypeName, "MotionJoint", StringComparison.OrdinalIgnoreCase) ||
+                                    sample.TypeName.EndsWith("FeeJoint", StringComparison.OrdinalIgnoreCase);
                 var matchingTargets = plan.Targets.Where(target =>
                         target.CanAssign(sample) &&
                         string.Equals(
@@ -1609,12 +1612,16 @@ public sealed class ContainerToFeeVisualPlanService
                 foreach (var nodeId in nodeIds)
                 {
                     issues.Add(new VisualIssue(
-                        isConfirmed ? VisualIssueSeverity.Warning : VisualIssueSeverity.Error,
+                        isConfirmed || isMotionJoint
+                            ? VisualIssueSeverity.Warning
+                            : VisualIssueSeverity.Error,
                         "DUPLICATE_FEE_SIMOBJECT_IDENTITY",
                         $"{duplicateGroup.Count()} identische FEE-SimObjects '{sample.Name}' vom Typ " +
                         $"'{sample.FeeType}' wurden unter demselben Parent '{sample.ParentName}' gefunden. " +
                         (isConfirmed
                             ? "Der Mehrfachfund wurde für diese Sitzung ausdrücklich bestätigt."
+                            : isMotionJoint
+                                ? "Mehrere MotionJoints können durch die CAD-Struktur beabsichtigt sein; der Mehrfachfund bleibt deshalb als Warnung zur Sichtprüfung erhalten."
                             : "Die GUIDs sind unterschiedlich; im Strukturbaum einen konkreten Treffer bestätigen oder die Duplikate im FEE-Projekt bereinigen."),
                         nodeId));
                 }

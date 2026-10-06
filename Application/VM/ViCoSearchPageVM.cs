@@ -44,6 +44,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private IReadOnlyList<ViCoWorkstationRowVM> _selectedWorkstations = Array.Empty<ViCoWorkstationRowVM>();
     private bool _columnPreferencesLoaded;
     private bool _searchVisibleColumnsOnly;
+    private DateTimeOffset? _displayedDataUpdatedAt;
 
     public const string KanbanizeBoardUrl = "https://grobgroup.kanbanize.com/ctrl_board/1541";
 
@@ -429,12 +430,41 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
+    private bool _isDisplayedDataStale;
+    public bool IsDisplayedDataStale
+    {
+        get => _isDisplayedDataStale;
+        private set
+        {
+            if (_isDisplayedDataStale == value)
+                return;
+            _isDisplayedDataStale = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private string _displayedDataAgeNotice = string.Empty;
+    public string DisplayedDataAgeNotice
+    {
+        get => _displayedDataAgeNotice;
+        private set
+        {
+            if (string.Equals(_displayedDataAgeNotice, value, StringComparison.Ordinal))
+                return;
+            _displayedDataAgeNotice = value;
+            OnPropertyChanged();
+        }
+    }
+
     public async Task InitializeAsync()
     {
         if (_initialized)
             return;
         _initialized = true;
         await LoadAutoRefreshSettingsAsync();
+        await ShowLastActiveSnapshotAsync(
+            "Gespeicherter Kanbanize-Stand wird bis zum Abschluss der Aktualisierung angezeigt",
+            logAsWarning: false);
         // The compact legacy cache does not always contain the current card
         // deadline.  Perform the same online refresh used by the toolbar once
         // during startup so dates are complete before the first view is shown.
@@ -471,6 +501,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         IsBusy = true;
         StatusText = "Kanbanize-Daten werden aktualisiert …";
         var onlineUpdateSucceeded = false;
+        DateTimeOffset? onlineUpdatedAt = null;
         string? onlineFailure = null;
         try
         {
@@ -480,6 +511,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 await ShowLastActiveSnapshotAsync("Die Kanbanize-Aktualisierung dauert länger als 10 Sekunden");
             await refreshTask;
             onlineUpdateSucceeded = true;
+            onlineUpdatedAt = DateTimeOffset.Now;
             _log.Information("Kanbanize", "PC-, Projekt- und Robotikdaten wurden aktualisiert.");
         }
         catch (Exception exception)
@@ -494,12 +526,15 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
         await RefreshCachedDataAsync(onlineUpdateSucceeded
             ? null
-            : "Online-Aktualisierung verworfen; vorhandener Cache wurde geladen. " + onlineFailure);
+            : "Online-Aktualisierung verworfen; vorhandener Cache wurde geladen. " + onlineFailure,
+            onlineUpdatedAt);
         ScheduleNextAutoRefresh();
     }
 
     /// <summary>Reads the existing cache and rebuilds search/path state without a network write.</summary>
-    private async Task RefreshCachedDataAsync(string? completionMessage = null)
+    private async Task RefreshCachedDataAsync(
+        string? completionMessage = null,
+        DateTimeOffset? confirmedUpdatedAt = null)
     {
         if (IsBusy)
             return;
@@ -521,6 +556,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 if (previous is { Workstations.Count: > 0 })
                 {
                     ApplyWorkstations(previous.Workstations);
+                    SetDisplayedDataUpdatedAt(previous.UpdatedAt);
                     StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf dauert länger als 10 Sekunden");
                     _log.Warning("Rechnerübersicht", StatusText);
                 }
@@ -536,6 +572,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 if (previous is { Workstations.Count: > 0 })
                 {
                     ApplyWorkstations(previous.Workstations);
+                    SetDisplayedDataUpdatedAt(previous.UpdatedAt);
                     StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf lieferte 0 Arbeitsstationen");
                     _log.Warning("Rechnerübersicht", StatusText);
                     foreach (var warning in snapshot.Warnings)
@@ -544,12 +581,32 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 }
             }
 
-            ApplyWorkstations(snapshot.Workstations);
             if (snapshot.Workstations.Count > 0)
             {
+                var updatedAt = confirmedUpdatedAt ?? snapshot.SourceUpdatedAt ?? DateTimeOffset.Now;
+                var previous = await _lastActiveSnapshotStore.LoadAsync(cancellationToken);
+                if (confirmedUpdatedAt is null &&
+                    previous is { Workstations.Count: > 0 } &&
+                    previous.UpdatedAt > updatedAt)
+                {
+                    ApplyWorkstations(previous.Workstations);
+                    SetDisplayedDataUpdatedAt(previous.UpdatedAt);
+                    StatusText = BuildFallbackStatus(
+                        previous,
+                        "Der gelesene Kanbanize-Cache ist älter als die gespeicherte Rechnerübersicht");
+                    _log.Warning("Rechnerübersicht", StatusText);
+                    return;
+                }
+
+                ApplyWorkstations(snapshot.Workstations);
                 await _lastActiveSnapshotStore.SaveAsync(new ViCoLastActiveSnapshot(
-                    DateTimeOffset.Now,
+                    updatedAt,
                     snapshot.Workstations), cancellationToken);
+                SetDisplayedDataUpdatedAt(updatedAt);
+            }
+            else
+            {
+                ApplyWorkstations(snapshot.Workstations);
             }
             StatusText = completionMessage ?? BuildWorkstationLoadStatus(snapshot);
             if (stopwatch.Elapsed > TimeSpan.FromSeconds(10))
@@ -592,15 +649,42 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         $"{reason}. Letzte aktive Übersicht mit {snapshot.Workstations.Count} Arbeitsstation(en) wird angezeigt; " +
         $"Daten zuletzt am {snapshot.UpdatedAt.LocalDateTime:dd.MM.yyyy, HH:mm:ss} aktualisiert.";
 
-    private async Task<bool> ShowLastActiveSnapshotAsync(string reason)
+    private async Task<bool> ShowLastActiveSnapshotAsync(string reason, bool logAsWarning = true)
     {
         var previous = await _lastActiveSnapshotStore.LoadAsync();
         if (previous is not { Workstations.Count: > 0 })
             return false;
         ApplyWorkstations(previous.Workstations);
+        SetDisplayedDataUpdatedAt(previous.UpdatedAt);
         StatusText = BuildFallbackStatus(previous, reason);
-        _log.Warning("Rechnerübersicht", StatusText);
+        if (logAsWarning || IsDisplayedDataStale)
+            _log.Warning("Rechnerübersicht", StatusText);
+        else
+            _log.Information("Rechnerübersicht", StatusText);
         return true;
+    }
+
+    private void SetDisplayedDataUpdatedAt(DateTimeOffset? updatedAt)
+    {
+        _displayedDataUpdatedAt = updatedAt;
+        UpdateDisplayedDataAgeNotice();
+    }
+
+    private void UpdateDisplayedDataAgeNotice()
+    {
+        if (_displayedDataUpdatedAt is not { } updatedAt)
+        {
+            IsDisplayedDataStale = false;
+            DisplayedDataAgeNotice = string.Empty;
+            return;
+        }
+
+        var isStale = ViCoLastActiveSnapshotPolicy.IsStale(updatedAt, DateTimeOffset.Now);
+        IsDisplayedDataStale = isStale;
+        DisplayedDataAgeNotice = isStale
+            ? $"Achtung: Die Rechnerübersicht zeigt den Stand vom {updatedAt.LocalDateTime:dd.MM.yyyy, HH:mm:ss}. " +
+              "Die Daten sind älter als 30 Minuten. Bitte „Daten aktualisieren“ verwenden."
+            : string.Empty;
     }
 
     private async Task RunPeriodicRefreshAsync(CancellationToken cancellationToken)
@@ -610,6 +694,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                UpdateDisplayedDataAgeNotice();
                 var isOnlineConfigured = _onlineRefresh.IsConfigured;
                 if (_lastObservedOnlineConfiguration != isOnlineConfigured)
                 {
@@ -917,6 +1002,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             foreach (var field in ConfigurationFields)
                 field.AcceptSavedValue();
             OnPropertyChanged(nameof(SelectedRemoteUser));
+            await PersistCurrentWorkstationsAsync(DateTimeOffset.Now);
             StatusText = $"{changedFields.Length} KONFIGURATION-Wert(e) wurden in Kanbanize gespeichert.";
             _log.Information("Kanbanize", StatusText);
         }
@@ -932,6 +1018,28 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         finally
         {
             _isSavingConfiguration = false;
+        }
+    }
+
+    private async Task PersistCurrentWorkstationsAsync(DateTimeOffset updatedAt)
+    {
+        try
+        {
+            await _lastActiveSnapshotStore.SaveAsync(
+                new ViCoLastActiveSnapshot(updatedAt, _allWorkstations),
+                _lifetimeCancellation.Token);
+            SetDisplayedDataUpdatedAt(updatedAt);
+        }
+        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+        {
+            // The previous durable snapshot remains intact during shutdown.
+        }
+        catch (Exception exception)
+        {
+            _log.Warning(
+                "Rechnerübersicht",
+                "Der aktuelle Rechnerstand konnte lokal nicht als Startansicht gesichert werden.",
+                exception.Message);
         }
     }
 
@@ -1030,7 +1138,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 _lifetimeCancellation.Token);
             await _onlineRefresh.RefreshAsync(_lifetimeCancellation.Token);
             IsBusy = false;
-            await RefreshCachedDataAsync($"KONFIGURATION-Karte {cardId} wurde angelegt und neu geladen.");
+            await RefreshCachedDataAsync(
+                $"KONFIGURATION-Karte {cardId} wurde angelegt und neu geladen.",
+                DateTimeOffset.Now);
             SelectedWorkstation = Results.FirstOrDefault(row =>
                 string.Equals(row.PcName, pcName, StringComparison.OrdinalIgnoreCase));
             _log.Information("Kanbanize", $"KONFIGURATION-Karte {cardId} für {pcName} wurde angelegt.");

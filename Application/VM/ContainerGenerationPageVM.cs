@@ -2737,33 +2737,69 @@ namespace VIBN_Tools.Application.VM
             if (parameter is not MouseEventArgs e)
                 return;
 
-            if (e.LeftButton == MouseButtonState.Pressed)
+            if (e.LeftButton != MouseButtonState.Pressed || e.OriginalSource is not DependencyObject source)
+                return;
+
+            var dataGrid = FindAncestor<DataGrid>(source);
+            if (dataGrid is null)
+                return;
+
+            // Inside a container only the dedicated Signal-ID list is a drag source.
+            var signalIdList = FindAncestor<ListBox>(source);
+            if (signalIdList?.Tag as string == "SignalIdDragSource" &&
+                FindDataContext<ContainerEntry>(source) is { } selectedEntry)
             {
-                if (e.Source is not DataGrid dataGrid)
-                    return;
-
-                var dataGridRow = FindAncestor<DataGridRow>((DependencyObject)e.OriginalSource);
-                if (dataGridRow == null)
-                    return;
-
-                var data = (ContainerEntry)dataGrid.ItemContainerGenerator.ItemFromContainer(dataGridRow);
-                if (data == null)
-                    return;
-
-                if (!dataGrid.SelectedItems.Contains(data))
-                    return;
-
-                var selectedEntries = dataGrid.SelectedItems
-                    .OfType<ContainerEntry>()
-                    .ToArray();
-                if (!selectedEntries.Contains(data))
-                    selectedEntries = [data];
-
-                var dataObj = new DataObject(data);
-                dataObj.SetData(typeof(ContainerEntry[]), selectedEntries);
-                dataObj.SetData("DragSource", dataGrid);
-                DragDrop.DoDragDrop(dataGrid, dataObj, DragDropEffects.Move);
+                var dataObject = new DataObject(selectedEntry);
+                dataObject.SetData(typeof(ContainerEntry[]), new[] { selectedEntry });
+                dataObject.SetData("DragSource", dataGrid);
+                DragDrop.DoDragDrop(dataGrid, dataObject, DragDropEffects.Move);
+                return;
             }
+
+            var dataGridRow = FindAncestor<DataGridRow>(source);
+            if (dataGridRow?.Item is ContainerEntry entry)
+            {
+                if (!dataGrid.SelectedItems.Contains(entry))
+                    return;
+
+                var selectedEntries = dataGrid.SelectedItems.OfType<ContainerEntry>().ToArray();
+                if (!selectedEntries.Contains(entry))
+                    selectedEntries = [entry];
+
+                var dataObject = new DataObject(entry);
+                dataObject.SetData(typeof(ContainerEntry[]), selectedEntries);
+                dataObject.SetData("DragSource", dataGrid);
+                DragDrop.DoDragDrop(dataGrid, dataObject, DragDropEffects.Move);
+                return;
+            }
+
+            if (dataGridRow?.Item is not ContainerData container ||
+                FindAncestor<TextBox>(source) is not null ||
+                FindAncestor<ComboBox>(source) is not null ||
+                FindAncestor<Button>(source) is not null)
+            {
+                return;
+            }
+
+            var selectedContainers = dataGrid.SelectedItems.OfType<ContainerData>().ToArray();
+            if (!selectedContainers.Contains(container))
+                selectedContainers = [container];
+
+            var containerPayload = new DataObject(container);
+            containerPayload.SetData(typeof(ContainerData[]), selectedContainers);
+            containerPayload.SetData("DragSource", dataGrid);
+            DragDrop.DoDragDrop(dataGrid, containerPayload, DragDropEffects.Move);
+        }
+
+        private static T? FindDataContext<T>(DependencyObject source) where T : class
+        {
+            for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+            {
+                if (current is FrameworkElement { DataContext: T value })
+                    return value;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -2791,10 +2827,34 @@ namespace VIBN_Tools.Application.VM
         {
             if (parameter is not DragEventArgs e)
                 return;
-            if (e.Source is not DataGrid DropDataGrid)
+            if (e.OriginalSource is not DependencyObject source)
+                return;
+            var DropDataGrid = FindAncestor<DataGrid>(source);
+            if (DropDataGrid is null)
                 return;
             if (e.Data.GetData("DragSource") is not DataGrid)
                 return;
+
+            var targetRow = FindAncestor<DataGridRow>(source);
+            if (e.Data.GetData(typeof(ContainerData[])) is ContainerData[] draggedContainers)
+            {
+                if (targetRow?.Item is not ContainerData targetContainer)
+                    return;
+
+                var sources = draggedContainers
+                    .Where(container => !ReferenceEquals(container, targetContainer))
+                    .Distinct()
+                    .ToArray();
+                if (sources.Length == 0)
+                    return;
+
+                RunWorkspaceAction(
+                    sources.Length == 1 ? "Container zusammenlegen" : "Container zusammenlegen",
+                    () => MergeContainers(sources, targetContainer),
+                    $"{sources.Length} Container → „{targetContainer.Component}“");
+                e.Handled = true;
+                return;
+            }
 
             var dataItems = e.Data.GetData(typeof(ContainerEntry[])) is ContainerEntry[] selectedItems
                 ? selectedItems.Distinct().ToArray()
@@ -2844,7 +2904,6 @@ namespace VIBN_Tools.Application.VM
             }
             else
             {
-                var targetRow = FindAncestor<DataGridRow>((DependencyObject)e.OriginalSource);
                 var targetDescription = targetRow?.Item is ContainerData target
                     ? $"Container „{target.Component}“ ({target.Type})"
                     : "neuer Container";
@@ -2853,6 +2912,41 @@ namespace VIBN_Tools.Application.VM
                     () => MoveDataBatch(targetRow, dataItems),
                     $"{DescribeDraggedSignals(dataItems)} → {targetDescription}");
             }
+
+            e.Handled = true;
+        }
+
+        private void MergeContainers(IReadOnlyCollection<ContainerData> sources, ContainerData target)
+        {
+            var movedEntries = sources.SelectMany(source => source.DataList).Distinct().ToArray();
+            foreach (var source in sources)
+            foreach (var entry in source.DataList)
+                _actionLogger.LogRemoved(source.Component, source.Type, entry, GetActionLogSourceKey());
+
+            GenerationWorkspaceEditor.MergeContainers(
+                sources,
+                target,
+                ContainerList,
+                UnassignedEntries,
+                FilteredEntries);
+
+            foreach (var entry in movedEntries)
+            {
+                AttachSlotChangedHandler(target, entry);
+                MarkAsManual(entry, "Durch Zusammenlegen in einen anderen Container verschoben.");
+                _actionLogger.LogAdded(
+                    target.Component,
+                    target.Type,
+                    entry,
+                    entry.Slot,
+                    null,
+                    null,
+                    GetActionLogSourceKey());
+            }
+
+            target.ManuallyChecked = false;
+            StatusText = $"{sources.Count} Container wurden mit „{target.Component}“ zusammengelegt; " +
+                         $"{movedEntries.Length} Signal(e) wurden verschoben.";
         }
 
         private static string DescribeDraggedSignals(IReadOnlyCollection<ContainerEntry> entries) =>

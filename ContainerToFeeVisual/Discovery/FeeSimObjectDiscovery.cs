@@ -81,7 +81,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
             .ToArray();
 
         var topLevelBasicFrames = allObjects.OfType<FeeBasicFrame>()
-            .Where(frame => frame.Parent is not FeeBasicFrame)
+            .Where(Fee2ContainerService.IsTopLevelInSnapshot)
             .GroupBy(frame => frame.Guid)
             .ToDictionary(group => group.Key, group => group.First().Name ?? string.Empty);
 

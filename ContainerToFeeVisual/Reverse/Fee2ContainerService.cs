@@ -456,7 +456,7 @@ public sealed class Fee2ContainerService
         var allObjects = Services.FeeObjects.AllFeeObjects?.ToArray() ?? [];
         var roots = allObjects
             .OfType<FeeBasicFrame>()
-            .Where(frame => frame.Parent is not FeeBasicFrame)
+            .Where(IsTopLevelInSnapshot)
             .OrderBy(frame => frame.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(frame => frame.Guid)
             .ToArray();
@@ -589,6 +589,26 @@ public sealed class Fee2ContainerService
 
         progress?.Report(new Fee2ContainerProgress(100, "FEE-Roots und Container wurden vollständig ausgewertet."));
         return new Fee2ContainerDiscoveryResult(resultRoots, withoutProvenance, resultIssues);
+    }
+
+    /// <summary>
+    /// A selectable reverse-export root must not have a BasicFrame anywhere
+    /// above it. Looking only at the immediate parent incorrectly exposed
+    /// deeper frames below intermediary scene objects as additional roots.
+    /// </summary>
+    public static bool IsTopLevelInSnapshot(FeeBasicFrame frame)
+    {
+        ArgumentNullException.ThrowIfNull(frame);
+        var visited = new HashSet<Guid> { frame.Guid };
+        for (var parent = frame.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (!visited.Add(parent.Guid))
+                return false;
+            if (parent is FeeBasicFrame)
+                return false;
+        }
+
+        return true;
     }
 
     private static bool IsWithinRoot(FeeAbstractObject item, FeeBasicFrame root)

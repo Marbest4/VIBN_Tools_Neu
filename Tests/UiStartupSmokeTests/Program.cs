@@ -171,6 +171,17 @@ internal static class Program
             rockwellViewModel.SelectedStandard = rockwellViewModel.Standards.Single(item => item.Id == "GCCS");
             ExerciseDeferredTemplates(rockwellPage);
 
+            var miniToolsPage = new MiniToolsPage();
+            if (miniToolsPage.DataContext is not MiniToolsPageVM miniToolsViewModel ||
+                miniToolsViewModel.BandHeights.Count != 3 ||
+                miniToolsViewModel.SelectedBandHeight.Value !=
+                VIBN_Tools.MiniTools.MiniToolsBandHeight.BandHeight1)
+            {
+                throw new InvalidOperationException(
+                    "The Mini-Tools page does not expose all three selectable band heights.");
+            }
+            ExerciseDeferredTemplates(miniToolsPage);
+
             var specialDevicePage = new SpecialDevicePage();
             var specialDeviceViewModel = (SpecialDevicePageVM)specialDevicePage.DataContext;
             specialDeviceViewModel.SelectedManufacturer = DeviceCatalog.DeviceManufacturer.Keyence;
@@ -220,6 +231,16 @@ internal static class Program
 
             var visualPlanService = VerifyContainerToFeeVisualPlan();
             var visualContainerViewModel = new ContainerToFeeVisualPageVM(visualPlanService);
+            if (string.IsNullOrWhiteSpace(visualContainerViewModel.DocumentationPath) ||
+                !File.Exists(visualContainerViewModel.DocumentationPath) ||
+                !File.Exists(Path.Combine(
+                    Path.GetDirectoryName(visualContainerViewModel.DocumentationPath)!,
+                    "screenshots",
+                    "container2fee-visual.png")))
+            {
+                throw new InvalidOperationException(
+                    "The local Container2FEE Visual guide or its referenced screenshot is not deployable.");
+            }
             if (visualContainerViewModel.TreeStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
                 visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Verified) ||
                 visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
@@ -673,7 +694,8 @@ internal static class Program
             ],
             [generationInterface, existingInterface]);
         if (!plan.IsValid || plan.ExistingBindings.Count != 1 ||
-            plan.MissingSignals.Count != 1 || plan.MissingAliases.Count != 1)
+            plan.MissingSignals.Count != 1 || plan.MissingAliases.Count != 1 ||
+            plan.Issues.All(issue => issue.Code != "SIGNAL_SOURCE_SHARED_ACROSS_CONTAINERS"))
             throw new InvalidOperationException("Resolve-or-create signal planning is not deterministic.");
 
         plan.ApplyExistingBindings();
@@ -683,14 +705,18 @@ internal static class Program
             throw new InvalidOperationException("Resolved signal identity or provenance was not retained.");
         }
 
-        var conflict = SignalResolutionPlanner.Build(
+        var sameNameDifferentSource = SignalResolutionPlanner.Build(
             [new SignalResolutionRequest(
                 "container-3",
                 "Sensor 3",
                 new FeeInterfaceSignal { Tag = "Ready", Address = "%I9.9" })],
             [existingInterface]);
-        if (conflict.IsValid || conflict.Issues.Single().Code != "EXISTING_SIGNAL_IDENTITY_CONFLICT")
-            throw new InvalidOperationException("Conflicting tag/address identity must block before FEE writes.");
+        if (!sameNameDifferentSource.IsValid || sameNameDifferentSource.MissingSignals.Count != 1 ||
+            sameNameDifferentSource.Issues.Count != 0)
+        {
+            throw new InvalidOperationException(
+                "Equal signal names with different physical sources must remain separate variables.");
+        }
 
         var explicitlyMapped = new FeeInterfaceSignal { Tag = "Ready", Address = "%I9.9" };
         var manualPlan = SignalResolutionPlanner.Build(
@@ -1087,6 +1113,29 @@ internal static class Program
             {
                 throw new InvalidOperationException(
                     "The active FEE signal list selection was not preserved while duplicate matches synchronized to the tree.");
+            }
+            var objectIssue = new VisualIssue(
+                VisualIssueSeverity.Error,
+                "TEST_OBJECT_SELECTION",
+                "Synthetic object diagnostic",
+                availableObject.Id);
+            viewModel.Issues.Add(objectIssue);
+            viewModel.SelectedIssue = objectIssue;
+            if (!ReferenceEquals(viewModel.SelectedIssue, objectIssue) ||
+                !ReferenceEquals(viewModel.SelectedTreeNode, simObject) ||
+                !availableObject.IsSynchronizationMatch ||
+                viewModel.AvailableFeeSignals.Any(item => item.IsSynchronizationMatch))
+            {
+                throw new InvalidOperationException(
+                    "Selecting a validation entry did not replace the previous synchronization scope with its affected FEE object.");
+            }
+            viewModel.SelectedFeeSignal = activeSignal;
+            if (!ReferenceEquals(viewModel.SelectedFeeSignal, activeSignal) ||
+                viewModel.SelectedIssue is not null ||
+                !ReferenceEquals(viewModel.SelectedTreeNode, nodes.Single(item => item.Kind == VisualNodeKind.Signal)))
+            {
+                throw new InvalidOperationException(
+                    "The newest active list selection did not replace a stale validation/tree selection.");
             }
             if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||

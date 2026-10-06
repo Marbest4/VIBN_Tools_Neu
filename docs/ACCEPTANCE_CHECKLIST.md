@@ -43,6 +43,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Lokale Automatisierungsinstallationen stehen am Seitenende; gleiche Produkt-/Versionsfunde werden unabhängig von Registryquelle und leerem Pfad nur einmal angezeigt.
 - [ ] Im normalen interaktiven Windows-Profil erscheinen die Ziele `GROB/VIBN_Tools/FeeUsername`, `GROB/VIBN_Tools/FeePassword`, `GROB/VIBN_Tools/KanbanizeApiKey` und `GROB/VIBN_Tools/RemoteDesktopPassword` im Credential Manager; App-Neustart liest sie, Löschen entfernt sie. Der Codex-Dienstkontext konnte diesen Live-Test wegen Windows-Fehler 1312 (keine Anmeldesitzung) nicht ausführen.
 - [ ] ViCo-Countdown startet mit dem gespeicherten Intervall neu, pausiert ohne API-Key und führt bei Ablauf genau einen Kanbanize-Abruf aus.
+- [ ] Rechnerübersicht zeigt beim Start vor dem Online-Abruf den zuletzt gespeicherten nicht leeren Stand; ein Stand älter als 30 Minuten erhält den orangefarbenen Hinweis mit unverändertem ursprünglichem Aktualisierungszeitpunkt.
 - [ ] Hauptfenster bleibt auf 1366 × 768 bedienbar; Project Settings und ViCo zeigen bei Bedarf Scrollleisten ohne die DataGrid-Virtualisierung zu verlieren.
 - [ ] Maximieren nutzt auf jedem Monitor nur dessen Arbeitsfläche; Taskleiste und rechter Fensterrand bleiben sichtbar. Manuelles Vergrößern kann die aktuelle Monitorarbeitsfläche nicht überschreiten.
 - [ ] IBN startet kompakt mit ausschließlich PC/Online/Projekte; Details, RDP und Zugangsdaten bleiben über die Expander auf 480 × 340 erreichbar.
