@@ -837,7 +837,8 @@ public sealed record VisualValidationResult(
 public sealed record VisualExecutionResult(
     bool Success,
     string Message,
-    IReadOnlyList<VisualIssue> Issues);
+    IReadOnlyList<VisualIssue> Issues,
+    bool RequiresOverrideConfirmation = false);
 
 public sealed record VisualSignalAssignmentResult(
     bool Success,

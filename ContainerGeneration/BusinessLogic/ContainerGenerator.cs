@@ -1,5 +1,6 @@
 ﻿using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using System.Xml;
 using System.Diagnostics;
 using System.Collections.Concurrent;
 using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
@@ -133,18 +134,26 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                 cancellationToken.ThrowIfCancellationRequested();
 
                 // var signalParts = entry.Signal.Split(" ", StringSplitOptions.TrimEntries);
+                var exclusionDiagnostics = new List<string>();
                 var matchingComponents = GetMatchingComponents(
                     request.Requirements,
                     entry,
-                    request.IgnoreCase);
+                    request.IgnoreCase,
+                    exclusionDiagnostics);
 
                 if (matchingComponents.Count == 0)
                 {
                     notMatchingSignals.Add(entry);
                     if (entry.Note == "")
                     {
-                        entry.Note = "No matching components.";
+                        entry.Note = exclusionDiagnostics.Count > 0
+                            ? "Excluded"
+                            : "No matching components.";
                     }
+                    entry.ReviewMessage = exclusionDiagnostics.Count > 0
+                        ? "Requirements.xml: ausgeschlossen durch " +
+                          string.Join(" | ", exclusionDiagnostics.Distinct(StringComparer.Ordinal))
+                        : DescribeSearchScope(request.Requirements);
                 }
                 else if (matchingComponents.Count > 1)
                 {
@@ -155,6 +164,11 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                         slotNames,
                         entry.Signal);
                     entry.Note = "Multiple slots " + slotNames + " found for signal: " + entry.Signal + "'";
+                    entry.ReviewMessage = "Requirements.xml: Mehrfachtreffer in " +
+                        string.Join(" | ", matchingComponents
+                            .Select(match => match.RequirementLocation)
+                            .Where(location => !string.IsNullOrWhiteSpace(location))
+                            .Distinct(StringComparer.Ordinal));
                     notMatchingSignals.Add(entry);
                 }
                 else
@@ -241,12 +255,23 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
         private List<ContainerEntry> FilterEntriesBySignal(XDocument doc, List<ContainerEntry> signalList, bool ignoreCase)
         {
             var filterKeys = doc.Descendants("FilterList").Descendants("Key").ToList();
-            var filteredList = signalList.Where(signal =>
+            var result = new List<ContainerEntry>(signalList.Count);
+            foreach (var signal in signalList)
             {
-                return !filterKeys.Any(key => MatchKeyPattern(signal.Signal, key, ignoreCase));
-            });
+                var matchingKey = filterKeys.FirstOrDefault(key =>
+                    MatchKeyPattern(signal.Signal, key, ignoreCase));
+                if (matchingKey is null)
+                {
+                    result.Add(signal);
+                    continue;
+                }
 
-            return filteredList.ToList();
+                signal.Note = "Excluded by FilterList";
+                signal.ReviewMessage =
+                    $"Requirements.xml: FilterList > Key „{matchingKey.Value.Trim()}“{DescribeLine(matchingKey)}.";
+            }
+
+            return result;
         }
 
         /// <summary>
@@ -465,7 +490,11 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
         /// The method constructs a dictionary of key data from the matched keysets and uses it to filter the container entry signal.
         /// It then creates a new <see cref="MatchingData"/> object for each valid match and adds it to the result list.
         /// </remarks>
-        private List<MatchingData> GetMatchingComponents(XDocument doc, ContainerEntry cEntry, bool ignoreCase)
+        private List<MatchingData> GetMatchingComponents(
+            XDocument doc,
+            ContainerEntry cEntry,
+            bool ignoreCase,
+            ICollection<string> exclusionDiagnostics)
         {
             List<MatchingData> matchingDataList = [];
 
@@ -526,10 +555,22 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                     var mergedKeygroups = componentKeygroups.Concat(slotKeygroups).ToList();
 
                     // no match if keyword in exclude group found
-                    bool excludeMatch = mergedKeygroups.Any(keyGroup => keyGroup.Attribute("type")?.Value == "exclude" && keyGroup.Descendants("Key").Any(k => MatchKeyPattern(cEntry.Signal, k, ignoreCase)));
-                    if (excludeMatch)
+                    var matchingExcludeKeys = mergedKeygroups
+                        .Where(keyGroup => string.Equals(
+                            keyGroup.Attribute("type")?.Value,
+                            "exclude",
+                            StringComparison.OrdinalIgnoreCase))
+                        .SelectMany(keyGroup => keyGroup.Descendants("Key"))
+                        .Where(key => MatchKeyPattern(cEntry.Signal, key, ignoreCase))
+                        .ToArray();
+                    if (matchingExcludeKeys.Length > 0)
                     {
-                        cEntry.Note = "Excluded";
+                        foreach (var key in matchingExcludeKeys)
+                        {
+                            exclusionDiagnostics.Add(
+                                $"{DescribeRequirementLocation(component, slot)} > " +
+                                $"Exclude-Key „{key.Value.Trim()}“{DescribeLine(key)}");
+                        }
                         continue;
                     }
                     // get all keygroups with the required attribute
@@ -605,11 +646,46 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                         ContainerEntry entry = cEntry.Clone();
                         string containerName = FilterTextByKeyData(entry.Signal.Trim(), keyData);
                         entry.Slot = slotName;
-                        matchingDataList.Add(new MatchingData(componentName, componentType, containerName, minSignals, maxSignals, entry, keyData));
+                        matchingDataList.Add(new MatchingData(
+                            componentName,
+                            componentType,
+                            containerName,
+                            minSignals,
+                            maxSignals,
+                            entry,
+                            keyData,
+                            DescribeRequirementLocation(component, slot)));
                     }
                 }
             }
             return matchingDataList;
+        }
+
+        private static string DescribeRequirementLocation(XElement component, XElement slot)
+        {
+            var componentName = component.Attribute("name")?.Value?.Trim() ?? "<ohne Name>";
+            var componentType = component.Attribute("type")?.Value?.Trim() ?? "<ohne Typ>";
+            var slotName = slot.Attribute("name")?.Value?.Trim() ?? "<ohne Namen>";
+            return $"Komponente „{componentName}“ ({componentType}) > Slot „{slotName}“{DescribeLine(slot)}";
+        }
+
+        private static string DescribeSearchScope(XDocument document)
+        {
+            var components = document.Descendants("Component").ToArray();
+            var slots = components.SelectMany(component => component.Descendants("Slot")).ToArray();
+            var first = components.FirstOrDefault();
+            var last = components.LastOrDefault();
+            var range = first is null
+                ? string.Empty
+                : $"; Komponentenbereich{DescribeLine(first)} bis{DescribeLine(last ?? first)}";
+            return $"Requirements.xml: kein passender Slot; {components.Length} Komponente(n) und {slots.Length} Slot(s) geprüft{range}.";
+        }
+
+        private static string DescribeLine(XObject source)
+        {
+            if (source is IXmlLineInfo lineInfo && lineInfo.HasLineInfo())
+                return $" (Zeile {lineInfo.LineNumber}, Spalte {lineInfo.LinePosition})";
+            return " (Position nicht verfügbar)";
         }
 
         /// <summary>

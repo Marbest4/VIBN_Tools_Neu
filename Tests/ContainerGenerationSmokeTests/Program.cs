@@ -55,10 +55,12 @@ internal static class Program
         ValidateGroupingPreview();
         ValidateGroupingExamplesAgainstProvidedSignals();
         ValidateReimportDecisionStaging();
+        ValidateRequirementsDiagnosticsAndDataTypeCase();
         ValidateWorkspaceBlockingMarker();
         ValidateWorkspaceContainerMergeAndAssignmentWarning();
         ValidateDecorationExclusionPolicy();
         ValidateSlotMultiplicityPolicy();
+        ValidateBestEffortSignalConflictPlanning();
         ValidateFeeTagPropertyContract();
         await ValidateContainerToFeeModelContractsAsync();
         await ValidateVisualMotionJointReuseAsync();
@@ -456,6 +458,8 @@ internal static class Program
         var returnSignal = Guid.NewGuid();
         var switchGuid = Guid.NewGuid();
         var fuseGuid = Guid.NewGuid();
+        var gripperGuid = Guid.NewGuid();
+        var pickAndPlaceGuid = Guid.NewGuid();
         var switchSignal = Guid.NewGuid();
         var fuseSignal = Guid.NewGuid();
         var result = FeeContainerLiveReconstructor.Reconstruct(
@@ -470,6 +474,8 @@ internal static class Program
                     CabinetDefinition: @"Definitions\Grob_2PositionSwitch.xml", Label: "Selector_1"),
                 new FeeContainerLiveObject(fuseGuid, "FuseRaw;%I14.0", "CabinetElement",
                     CabinetDefinition: @"definitions/Grob_Fuse.XML", Label: "Fuse_1"),
+                new FeeContainerLiveObject(gripperGuid, "Gripper_1", "LogicObject", "Grob_GripperBasic"),
+                new FeeContainerLiveObject(pickAndPlaceGuid, "Gripper_1", "PickAndPlace"),
                 new FeeContainerLiveObject(ignoredGuid, "Unrelated", "Decoration"),
             ],
             [
@@ -490,8 +496,8 @@ internal static class Program
             ]);
 
         var containers = result.Snapshot.ContainerDocument.Descendants("Container").ToArray();
-        if (result.Snapshot.ContainerCount != 6 || result.Snapshot.SignalCount != 6 ||
-            result.IgnoredObjectCount != 1 || result.Issues.Count != 2 ||
+        if (result.Snapshot.ContainerCount != 7 || result.Snapshot.SignalCount != 6 ||
+            result.IgnoredObjectCount != 1 || result.Issues.Count != 3 ||
             result.UnmappedObjects.Count != 1 ||
             result.UnmappedObjects.Single().Guid != ignoredGuid ||
             result.UnmappedObjects.Single().Name != "Unrelated" ||
@@ -508,7 +514,8 @@ internal static class Program
             containers.Single(item => item.Element("Type")?.Value == "CabinetSwitch")
                 .Descendants("Slot").Single().Value != "PLC_IN_NO1" ||
             containers.Single(item => item.Element("Type")?.Value == "CabinetFuse")
-                .Descendants("Slot").Single().Value != "PLC_IN_NC")
+                .Descendants("Slot").Single().Value != "PLC_IN_NC" ||
+            result.ObjectAssociations.SingleOrDefault(item => item.ObjectGuid == pickAndPlaceGuid)?.ContainerObjectGuid != gripperGuid)
         {
             throw new InvalidOperationException(
                 "Existing FEE BasicFrame reconstruction lost a supported container, fan-in, or slot mapping.");
@@ -541,8 +548,19 @@ internal static class Program
         unmapped.TargetComponent = "ManuallyReviewed";
         unmapped.TargetContainerType = "Sensor";
         var manualContainer = editor.AddObjectAsContainer(unmapped);
+        var manuallyAssignedGuid = Guid.NewGuid();
+        var manuallyAssigned = new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(
+            manuallyAssignedGuid,
+            "PickAndPlace_Manual",
+            "PickAndPlace",
+            "Synthetischer manueller Zuordnungstest"));
+        var gripperContainer = editor.Containers.Single(item => item.Component == "Gripper_1");
+        editor.AssignObjectToContainer(manuallyAssigned, gripperContainer);
         var editedSnapshot = editor.CreateSnapshot();
         if (!manualContainer.Id.StartsWith("manual:", StringComparison.Ordinal) ||
+            editor.CreateObjectAssociations().SingleOrDefault(item => item.ObjectGuid == ignoredGuid)?.ContainerId != manualContainer.Id ||
+            editor.CreateObjectAssociations().SingleOrDefault(item => item.ObjectGuid == manuallyAssignedGuid)?.ContainerId != gripperContainer.Id ||
+            !gripperContainer.AssociatedObjects.Contains("PickAndPlace_Manual", StringComparison.Ordinal) ||
             editedSnapshot.ContainerCount != result.Snapshot.ContainerCount ||
             !editedSnapshot.ContainerDocument.Descendants("Component")
                 .Any(item => item.Value == "ManuallyReviewed") ||
@@ -1337,6 +1355,39 @@ internal static class Program
         }
     }
 
+    private static void ValidateBestEffortSignalConflictPlanning()
+    {
+        static FeeInterface CreateInterface(string name)
+        {
+            var parent = new FeeInterface { Name = name, Signals = [] };
+            parent.Signals.Add(new FeeInterfaceSignal("Shared", "%I1.0", "Read", "Bool")
+            {
+                ParentInterface = parent,
+            });
+            return parent;
+        }
+
+        var requestedSignal = new FeeInterfaceSignal("Shared", "%I1.0", "Read", "Bool");
+        var request = new SignalResolutionRequest("container", "Container", requestedSignal, "node", "PLC_IN_Test");
+        var strict = SignalResolutionPlanner.Build([request], [CreateInterface("A"), CreateInterface("B")]);
+        if (strict.IsValid || strict.MissingSignals.Count != 0)
+            throw new InvalidOperationException("Ambiguous existing signals were not blocked in the normal run.");
+
+        var forced = SignalResolutionPlanner.Build(
+            [request],
+            [CreateInterface("A"), CreateInterface("B")],
+            treatConflictsAsMissing: true);
+        var generatedInterface = new FeeInterface { Name = "AutoGenerated", Signals = [] };
+        forced.ApplyExistingBindings(allowInvalid: true);
+        forced.ApplyCreatedBindings(generatedInterface, allowInvalid: true);
+        if (forced.IsValid || forced.MissingSignals.Count != 1 ||
+            !ReferenceEquals(requestedSignal.ParentInterface, generatedInterface))
+        {
+            throw new InvalidOperationException(
+                "Confirmed best-effort generation did not isolate an ambiguous signal in AutoGenerated.");
+        }
+    }
+
     private static void ValidateWorkspaceBlockingMarker()
     {
         var permittedFanIn = CreateContainerWithDuplicateSlot("PLC_IN_StatusWord");
@@ -1685,6 +1736,80 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 "Rejecting one reimport change removed or changed another comparison row.");
+        }
+    }
+
+    private static void ValidateRequirementsDiagnosticsAndDataTypeCase()
+    {
+        var requirements = XDocument.Parse("""
+            <AutoCreate>
+              <Components>
+                <Component name="First" type="Sensor"><Slots><Slot name="PLC_IN_A">
+                  <Keygroup type="required"><KeySet><Key keep="true">Motor</Key><Key keep="true">Legacy</Key></KeySet></Keygroup>
+                  <Keygroup type="exclude"><KeySet><Key keep="true">Legacy</Key></KeySet></Keygroup>
+                </Slot></Slots></Component>
+                <Component name="Second" type="Sensor"><Slots><Slot name="PLC_IN_B">
+                  <Keygroup type="required"><KeySet><Key keep="true">Motor</Key></KeySet></Keygroup>
+                </Slot></Slots></Component>
+              </Components>
+              <FilterList><Key>IgnoreMe</Key></FilterList>
+            </AutoCreate>
+            """, LoadOptions.SetLineInfo);
+        var generator = new ContainerGenerator();
+        var result = generator.Generate(new ContainerGenerationRequest(
+            [
+                new ContainerEntry { Signal = "IgnoreMe signal" },
+                new ContainerEntry { Signal = "Legacy" },
+                new ContainerEntry { Signal = "Motor" },
+            ],
+            requirements,
+            [],
+            null,
+            IgnoreCase: true,
+            UseFilterList: true));
+
+        var filtered = result.FilteredSignals.Single();
+        var excluded = result.UnassignedSignals.Single(item => item.Signal == "Legacy");
+        var duplicate = result.UnassignedSignals.Single(item => item.Signal == "Motor");
+        if (!filtered.ReviewMessage.Contains("FilterList", StringComparison.Ordinal) ||
+            !filtered.ReviewMessage.Contains("Zeile", StringComparison.Ordinal) ||
+            !excluded.ReviewMessage.Contains("Exclude-Key", StringComparison.Ordinal) ||
+            !excluded.ReviewMessage.Contains("Zeile", StringComparison.Ordinal) ||
+            !duplicate.ReviewMessage.Contains("First", StringComparison.Ordinal) ||
+            !duplicate.ReviewMessage.Contains("Second", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Unassigned/filtered diagnostics do not identify their Requirements.xml source.");
+        }
+
+        static ContainerData CreateContainer(string dataType) => new()
+        {
+            Id = "container-1",
+            Component = "Sensor_1",
+            Type = "Sensor",
+            DataList = new([
+                new ContainerEntry
+                {
+                    ID = "A",
+                    Address = "%I0.0",
+                    Signal = "Detected",
+                    DataType = dataType,
+                    Slot = "PLC_IN_Old",
+                }
+            ])
+        };
+        var previous = CreateContainer("Bool");
+        var current = CreateContainer("BOOL");
+        var comparison = GenerationWorkspaceReconciler.Reconcile(
+            GenerationWorkspaceReconciler.Capture([previous], [], []),
+            [current],
+            [],
+            [],
+            new ComparisonRequirements());
+        if (comparison.Differences.Any(item => item.Kind == ReimportChangeKind.SourceChanged))
+        {
+            throw new InvalidOperationException(
+                "A data-type casing-only change was incorrectly reported as a source change.");
         }
     }
 

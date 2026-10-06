@@ -1736,8 +1736,9 @@ public sealed class ContainerToFeeVisualPlanService
         // The confirmation belongs to this complete start operation. Refreshing
         // FEE immediately before the write may refine the same validation
         // findings; forcing a second click would neither add information nor
-        // improve safety. Runtime identity conflicts remain hard failures in
-        // the executor and are never suppressed here.
+        // improve safety. A runtime-only preflight conflict is returned with
+        // RequiresOverrideConfirmation; the UI can confirm it and retry this
+        // still read-only stage in the same start operation.
         var effectiveAcceptedErrors = currentErrors.Length > 0
             ? currentErrors
             : acceptedValidationErrors?

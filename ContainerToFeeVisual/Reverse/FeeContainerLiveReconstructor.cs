@@ -119,7 +119,9 @@ public static class FeeContainerLiveReconstructor
             .ToArray();
         candidates = versioned.Concat(unversioned).ToList();
 
-        var objectAssociations = ResolveMotionJointAssociations(sourceObjects, candidates, issues);
+        var objectAssociations = ResolveMotionJointAssociations(sourceObjects, candidates, issues)
+            .Concat(ResolvePickAndPlaceAssociations(sourceObjects, candidates, issues))
+            .ToArray();
         relevantObjectGuids.UnionWith(objectAssociations.Select(item => item.ObjectGuid));
 
         var containerElements = new List<XElement>();
@@ -256,9 +258,7 @@ public static class FeeContainerLiveReconstructor
                     joint.Name,
                     joint.FeeType,
                     container.Object.Guid,
-                    string.IsNullOrWhiteSpace(container.Object.ProvenanceContainerId)
-                        ? $"fee:{container.Object.Guid:D}"
-                        : container.Object.ProvenanceContainerId!,
+                    $"fee:{container.Object.Guid:D}",
                     !string.IsNullOrWhiteSpace(joint.ProvenanceContainerId)
                         ? "Über Container-Provenienz zugeordnet"
                         : "Über eindeutigen Komponentenname und kompatiblen MotionJoint-Zieltyp zugeordnet"));
@@ -268,6 +268,52 @@ public static class FeeContainerLiveReconstructor
                 issues.Add(new FeeContainerReconstructionIssue(
                     joint.Guid,
                     $"MotionJoint '{joint.Name}' passt zu mehreren Containern und bleibt zur Prüfung unzugeordnet."));
+            }
+        }
+        return result;
+    }
+
+    private static IReadOnlyList<FeeContainerObjectAssociation> ResolvePickAndPlaceAssociations(
+        IReadOnlyList<FeeContainerLiveObject> objects,
+        IReadOnlyList<ContainerCandidate> candidates,
+        ICollection<FeeContainerReconstructionIssue> issues)
+    {
+        var result = new List<FeeContainerObjectAssociation>();
+        foreach (var pickAndPlace in objects.Where(item => EndsWithType(item.FeeType, "PickAndPlace")))
+        {
+            var compatible = candidates.Where(candidate =>
+                    candidate.Descriptor.Targets.Any(target =>
+                        string.Equals(target.AllowedType.Name, "FeePickAndPlace", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(target.AllowedType.Name, "PickAndPlace", StringComparison.OrdinalIgnoreCase)) &&
+                    ((!string.IsNullOrWhiteSpace(pickAndPlace.ProvenanceContainerId) &&
+                      string.Equals(
+                          pickAndPlace.ProvenanceContainerId,
+                          candidate.Object.ProvenanceContainerId,
+                          StringComparison.Ordinal)) ||
+                     string.Equals(
+                         pickAndPlace.Name,
+                         candidate.ComponentName,
+                         StringComparison.OrdinalIgnoreCase)))
+                .DistinctBy(candidate => candidate.Object.Guid)
+                .ToArray();
+            if (compatible.Length == 1)
+            {
+                var container = compatible[0];
+                result.Add(new FeeContainerObjectAssociation(
+                    pickAndPlace.Guid,
+                    pickAndPlace.Name,
+                    pickAndPlace.FeeType,
+                    container.Object.Guid,
+                    $"fee:{container.Object.Guid:D}",
+                    !string.IsNullOrWhiteSpace(pickAndPlace.ProvenanceContainerId)
+                        ? "Über Container-Provenienz zugeordnet"
+                        : "Über eindeutigen Komponentenname und kompatibles PickAndPlace-Ziel zugeordnet"));
+            }
+            else if (compatible.Length > 1)
+            {
+                issues.Add(new FeeContainerReconstructionIssue(
+                    pickAndPlace.Guid,
+                    $"PickAndPlace '{pickAndPlace.Name}' passt zu mehreren Gripper-Containern und bleibt zur Prüfung unzugeordnet."));
             }
         }
         return result;

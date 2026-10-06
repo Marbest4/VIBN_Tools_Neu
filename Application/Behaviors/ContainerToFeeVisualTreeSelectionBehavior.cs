@@ -11,6 +11,12 @@ namespace VIBN_Tools.Application.Behaviors;
 /// <summary>Provides a bindable TreeView.SelectedItem for the visual plan.</summary>
 public static class ContainerToFeeVisualTreeSelectionBehavior
 {
+    private static readonly DependencyProperty SelectionRevealRevisionProperty = DependencyProperty.RegisterAttached(
+        "SelectionRevealRevision",
+        typeof(long),
+        typeof(ContainerToFeeVisualTreeSelectionBehavior),
+        new PropertyMetadata(0L));
+
     private static readonly ConditionalWeakTable<TreeView, ScrollState> ScrollStates = new();
     public static readonly DependencyProperty SelectedItemProperty =
         DependencyProperty.RegisterAttached(
@@ -154,11 +160,25 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         DependencyObject dependencyObject,
         DependencyPropertyChangedEventArgs args)
     {
-        if (dependencyObject is not TreeView treeView || args.NewValue is null)
+        if (dependencyObject is not TreeView treeView)
+            return;
+
+        var revision = (long)treeView.GetValue(SelectionRevealRevisionProperty) + 1;
+        treeView.SetValue(SelectionRevealRevisionProperty, revision);
+        if (args.NewValue is null)
+            return;
+
+        // Keep the viewport stable when the user clicked the tree itself.
+        // Selections originating in one of the related lists still center the
+        // requested tree item because the keyboard focus then belongs to that
+        // source list.
+        if (treeView.IsKeyboardFocusWithin && ReferenceEquals(treeView.SelectedItem, args.NewValue))
             return;
 
         treeView.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
+            if ((long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
+                return;
             var container = FindContainer(treeView, args.NewValue);
             if (container is null)
                 return;

@@ -1098,6 +1098,13 @@ internal static class Program
                     "Selecting a visual tree target did not synchronize the related lists.");
             }
             viewModel.SelectedTreeNode = container;
+            if (viewModel.SignalSlots.Count != 6 ||
+                viewModel.SignalSlots.SingleOrDefault(slot =>
+                    slot.Slot == "PLC_OUT_ToHomePos") is not { Assignments.Count: 0 })
+            {
+                throw new InvalidOperationException(
+                    "The selected Cylinder did not expose all declared signal slots including empty slots.");
+            }
             if (!availableObject.IsSynchronizationMatch ||
                 nodes.Where(item => item.ContainerId == container.Id).Any(item => !item.IsSynchronizationMatch) ||
                 viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 2)

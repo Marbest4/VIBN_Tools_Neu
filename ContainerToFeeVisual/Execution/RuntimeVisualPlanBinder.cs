@@ -23,7 +23,8 @@ internal static class RuntimeVisualPlanBinder
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlySet<string>? excludedContainerIds = null,
-        bool omitInvalidSlotEntries = false)
+        bool omitInvalidSlotEntries = false,
+        bool omitInvalidObjectAssignments = false)
     {
         var effectiveDocument = CreateEffectiveDocument(plan, omitInvalidSlotEntries);
         var (containers, unknownSignals) =
@@ -84,6 +85,8 @@ internal static class RuntimeVisualPlanBinder
                 {
                     if (!runtimeObjects.TryGetValue(assignment.FeeObjectId, out var runtimeObject))
                     {
+                        if (omitInvalidObjectAssignments)
+                            continue;
                         return Failure(
                             $"FEE-Objekt '{assignment.FeeObjectName}' ist nicht mehr vorhanden.",
                             "ASSIGNED_FEE_OBJECT_MISSING",
@@ -92,6 +95,8 @@ internal static class RuntimeVisualPlanBinder
                     }
                     if (!runtimeTarget.AllowedType.IsInstanceOfType(runtimeObject))
                     {
+                        if (omitInvalidObjectAssignments)
+                            continue;
                         return Failure(
                             $"FEE-Objekt '{assignment.FeeObjectName}' ist für " +
                             $"'{visualTarget.DisplayName}' nicht kompatibel.",

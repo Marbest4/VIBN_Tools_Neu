@@ -8,6 +8,12 @@ namespace VIBN_Tools.Application.Behaviors;
 /// <summary>Reveals a programmatically selected item in a virtualized ListBox.</summary>
 public static class ListBoxRevealBehavior
 {
+    private static readonly DependencyProperty RevealRevisionProperty = DependencyProperty.RegisterAttached(
+        "RevealRevision",
+        typeof(long),
+        typeof(ListBoxRevealBehavior),
+        new PropertyMetadata(0L));
+
     public static readonly DependencyProperty RevealItemProperty = DependencyProperty.RegisterAttached(
         "RevealItem",
         typeof(object),
@@ -19,11 +25,26 @@ public static class ListBoxRevealBehavior
 
     private static void OnRevealItemChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
     {
-        if (dependencyObject is not ListBox listBox || args.NewValue is null)
+        if (dependencyObject is not ListBox listBox)
             return;
+
+        var revision = (long)listBox.GetValue(RevealRevisionProperty) + 1;
+        listBox.SetValue(RevealRevisionProperty, revision);
+        if (args.NewValue is null)
+            return;
+
+        // A direct mouse/keyboard selection is already visible by definition.
+        // Revealing it again makes virtualized lists jump (usually to the top)
+        // before the cross-list synchronization has finished. Only lists that
+        // are not the active input source are programmatically centered.
+        if (listBox.IsKeyboardFocusWithin && ReferenceEquals(listBox.SelectedItem, args.NewValue))
+            return;
+
         var item = args.NewValue;
         _ = listBox.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
+            if ((long)listBox.GetValue(RevealRevisionProperty) != revision)
+                return;
             if (!listBox.Items.Contains(item))
                 return;
             listBox.ScrollIntoView(item);

@@ -933,27 +933,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             var errors = currentIssues
                 .Where(issue => issue.Severity == VisualIssueSeverity.Error)
                 .ToArray();
-            var details = string.Join(
-                Environment.NewLine,
-                errors.Take(12).Select(issue => $"• [{issue.Code}] {issue.Message}"));
-            if (errors.Length > 12)
-                details += $"{Environment.NewLine}• … und {errors.Length - 12} weitere Fehler";
-            var answer = MessageBox.Show(
-                "ACHTUNG: Der Plan ist ungültig. Eine reguläre Generierung ist gesperrt." +
-                Environment.NewLine + Environment.NewLine + details +
-                Environment.NewLine + Environment.NewLine +
-                "Wenn Sie trotzdem fortfahren, wird eine ausdrücklich bestätigte Best-Effort-Generierung " +
-                "auch für auffällige Container versucht. Der erzeugte erste BasicFrame erhält den Zusatz " +
-                "„Trotz Validierungsfehlern erstellt“. Zusätzlich wird pro bestätigtem Fehler ein eigener " +
-                "BasicFrame als Kind mit Fehlercode und Meldung angelegt. Nicht deterministisch auflösbare " +
-                "Laufzeitkonflikte (zum Beispiel widersprüchliche Signale) brechen weiterhin sicher ab." +
-                Environment.NewLine + Environment.NewLine +
-                "Fehlerhafte Teilgenerierung ausdrücklich starten?",
-                "UNGÜLTIGE GENERIERUNG ERZWINGEN",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Error,
-                MessageBoxResult.No);
-            if (answer != MessageBoxResult.Yes)
+            if (!ConfirmBestEffortGeneration(
+                    errors,
+                    "Der Plan ist ungültig. Eine reguläre Generierung ist gesperrt."))
             {
                 StatusText = "Generierung abgebrochen: Der ungültige Plan wurde nicht bestätigt.";
                 _log.Warning(LogArea, StatusText);
@@ -981,6 +963,27 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                     acceptedErrors,
                     progress,
                     cancellationToken);
+                if (!result.Success &&
+                    result.RequiresOverrideConfirmation &&
+                    acceptedErrors is null)
+                {
+                    var runtimeErrors = result.Issues
+                        .Where(issue => issue.Severity == VisualIssueSeverity.Error)
+                        .ToArray();
+                    PublishIssues(result.Issues);
+                    if (ConfirmBestEffortGeneration(
+                            runtimeErrors,
+                            "Die Laufzeitprüfung hat weitere Konflikte erkannt. Bis zu diesem Punkt wurde noch kein Container-BasicFrame geschrieben."))
+                    {
+                        acceptedErrors = runtimeErrors;
+                        GenerationProgress = 0;
+                        GenerationProgressText = "Bestätigte Best-Effort-Generierung wird vorbereitet …";
+                        result = await _planService.ExecuteAsync(
+                            acceptedErrors,
+                            progress,
+                            cancellationToken);
+                    }
+                }
                 _lastExecutionIssues = result.Issues
                     .Where(issue => issue.Severity == VisualIssueSeverity.Error)
                     .ToArray();
@@ -1033,6 +1036,36 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 throw;
             }
         }, usesFeeSdk: true);
+    }
+
+    private static bool ConfirmBestEffortGeneration(
+        IReadOnlyList<VisualIssue> errors,
+        string reason)
+    {
+        var details = string.Join(
+            Environment.NewLine,
+            errors.Take(12).Select(issue => $"• [{issue.Code}] {issue.Message}"));
+        if (errors.Count > 12)
+            details += $"{Environment.NewLine}• … und {errors.Count - 12} weitere Fehler";
+
+        return MessageBox.Show(
+                   "ACHTUNG: " + reason +
+                   Environment.NewLine + Environment.NewLine + details +
+                   Environment.NewLine + Environment.NewLine +
+                   "Wenn Sie trotzdem fortfahren, wird eine ausdrücklich bestätigte Best-Effort-Generierung " +
+                   "versucht. Mehrdeutige bestehende Objekte oder Signale werden dabei nicht willkürlich gewählt. " +
+                   "Der erste erzeugte BasicFrame erhält den Zusatz „Trotz Validierungsfehlern erstellt“; pro " +
+                   "bestätigtem Fehler entsteht ein untergeordneter Fehler-BasicFrame." +
+                   Environment.NewLine + Environment.NewLine +
+                   "Nicht übersteuerbar sind technisch abgewiesene oder blockierende FEE-SDK-Aufrufe, eine " +
+                   "getrennte Verbindung, ein nicht verfügbarer Interface-Provider und ein strukturell nicht " +
+                   "mehr an den Container-Parser bindbarer Plan." +
+                   Environment.NewLine + Environment.NewLine +
+                   "Fehlerhafte Teilgenerierung ausdrücklich starten?",
+                   "UNGÜLTIGE GENERIERUNG ERZWINGEN",
+                   MessageBoxButton.YesNo,
+                   MessageBoxImage.Error,
+                   MessageBoxResult.No) == MessageBoxResult.Yes;
     }
 
     private GenerationObjectObservation[] CaptureGenerationObservations() => TreeRoots
@@ -2526,19 +2559,24 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
 
         var container = plan.FindNode(containerId);
-        if (container is not null && ContainerMetadataCatalog.TryGet(container.TypeName, out _))
+        if (container is not null && ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
         {
             var signalNodes = plan.Nodes
                 .Where(node => string.Equals(node.ContainerId, containerId, StringComparison.Ordinal) &&
                                node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
                                !plan.IsSignalRemoved(node.Id))
                 .ToArray();
-            var occupiedSlots = signalNodes
-                .Select(plan.GetEffectiveSlot)
+            // The editor is also the place where a currently empty slot can
+            // receive an existing FEE signal. Therefore show the complete
+            // runtime-container contract, not only slots already occupied by
+            // an XML entry. Effective overrides remain included for backwards
+            // compatible plans.
+            var declaredSlots = descriptor.Slots
+                .Concat(signalNodes.Select(plan.GetEffectiveSlot))
                 .Where(slot => !string.IsNullOrWhiteSpace(slot))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(slot => slot, StringComparer.OrdinalIgnoreCase);
-            foreach (var slot in occupiedSlots)
+            foreach (var slot in declaredSlots)
             {
                 var entries = signalNodes
                     .Where(node => string.Equals(

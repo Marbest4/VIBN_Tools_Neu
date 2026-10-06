@@ -53,6 +53,11 @@ public static class DataGridRevealBehavior
                 var itemIndex = grid.Items.IndexOf(requestedItem);
                 if (viewer is not null && itemIndex >= 0 && itemIndex < grid.Items.Count)
                 {
+                    // Do not call DataGrid.ScrollIntoView here. During a root
+                    // switch that API can race WPF's ItemContainerGenerator
+                    // and throw IndexMustBeLess outside the caller's stack.
+                    // Moving the owned ScrollViewer is sufficient to center
+                    // the related row without materializing stale containers.
                     var targetOffset = viewer.CanContentScroll
                         ? itemIndex - (viewer.ViewportHeight / 2d)
                         : (itemIndex * Math.Max(grid.RowHeight, 1d)) - (viewer.ViewportHeight / 2d);

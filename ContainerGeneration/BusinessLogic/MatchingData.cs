@@ -10,7 +10,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
     /// <param name="containerName">The name of the container.</param>
     /// <param name="containerEntry">The container entry data.</param>
     /// <param name="keyData">The key data dictionary (from which the ContainerName was created).</param
-    public class MatchingData(string componentName, string componentType, string containerName, int? minSignals, int? maxSignals, ContainerEntry containerEntry, Dictionary<string, bool> keyData)
+    public class MatchingData(string componentName, string componentType, string containerName, int? minSignals, int? maxSignals, ContainerEntry containerEntry, Dictionary<string, bool> keyData, string requirementLocation = "")
     {
         /// <summary>
         /// Gets or sets the name of the component.
@@ -46,5 +46,8 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
         /// Gets or sets the key data dictionary.
         /// </summary>
         public Dictionary<string, bool> KeyData { get; set; } = keyData;
+
+        /// <summary>Human-readable origin of the matching slot in Requirements.xml.</summary>
+        public string RequirementLocation { get; set; } = requirementLocation;
     }
 }

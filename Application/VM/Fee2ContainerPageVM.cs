@@ -5,6 +5,7 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using System.Xml.Linq;
 using Microsoft.Win32;
+using VIBN_Tools.Application.Behaviors;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.Core.Collections;
 using VIBN_Tools.GlobalClasses;
@@ -52,6 +53,13 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         AddObjectAsContainerCommand = new RelayCommand<Fee2ContainerUnmappedObjectVM>(
             AddObjectAsContainer,
             item => item is { CanAdd: true } && !IsBusy);
+        AssignObjectToContainerCommand = new RelayCommand<ContainerToFeeVisualDropRequest>(
+            AssignObjectToContainer,
+            request => request is
+            {
+                Source: Fee2ContainerUnmappedObjectVM,
+                Target: Fee2ContainerFoundContainerVM
+            } && !IsBusy);
         FoundContainersView = CollectionViewSource.GetDefaultView(FoundContainers);
         FoundSignalsView = CollectionViewSource.GetDefaultView(FoundSignals);
         NonContainerObjectsView = CollectionViewSource.GetDefaultView(NonContainerObjects);
@@ -81,6 +89,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     public ICommand RemoveContainerCommand { get; }
     public ICommand RemoveSignalCommand { get; }
     public ICommand AddObjectAsContainerCommand { get; }
+    public ICommand AssignObjectToContainerCommand { get; }
     public FeeConnectionService Connection => _connection;
 
     public IReadOnlyList<string> SupportedContainerTypes =>
@@ -209,8 +218,10 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     signal.IsRelatedToSelection = string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal);
                 if (revealTarget)
                 {
-                    SignalRevealTarget = FoundSignals
+                    var target = FoundSignals
                         .FirstOrDefault(signal => string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal));
+                    EnsureSignalVisible(target);
+                    RequestSignalReveal(target);
                 }
             }
             else if (selection is Fee2ContainerFoundSignalVM signal)
@@ -228,8 +239,10 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     relatedContainer.IsRelatedToSelection = string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal);
                 if (revealTarget)
                 {
-                    ContainerRevealTarget = FoundContainers
+                    var target = FoundContainers
                         .FirstOrDefault(relatedContainer => string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal));
+                    EnsureContainerVisible(target);
+                    RequestContainerReveal(target);
                 }
             }
         }
@@ -243,6 +256,44 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             StatusText = "Die Tabellenansicht wurde während der Auswahl aktualisiert; bitte die Zeile erneut wählen.";
             ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
         }
+    }
+
+    private void EnsureContainerVisible(Fee2ContainerFoundContainerVM? target)
+    {
+        if (target is null || FoundContainersView.Contains(target))
+            return;
+        _containerSearchText = string.Empty;
+        OnPropertyChanged(nameof(ContainerSearchText));
+        FoundContainersView.Refresh();
+    }
+
+    private void EnsureSignalVisible(Fee2ContainerFoundSignalVM? target)
+    {
+        if (target is null || FoundSignalsView.Contains(target))
+            return;
+        _signalSearchText = string.Empty;
+        OnPropertyChanged(nameof(SignalSearchText));
+        FoundSignalsView.Refresh();
+    }
+
+    private void RequestContainerReveal(Fee2ContainerFoundContainerVM? target)
+    {
+        if (ReferenceEquals(_containerRevealTarget, target) && target is not null)
+        {
+            _containerRevealTarget = null;
+            OnPropertyChanged(nameof(ContainerRevealTarget));
+        }
+        ContainerRevealTarget = target;
+    }
+
+    private void RequestSignalReveal(Fee2ContainerFoundSignalVM? target)
+    {
+        if (ReferenceEquals(_signalRevealTarget, target) && target is not null)
+        {
+            _signalRevealTarget = null;
+            OnPropertyChanged(nameof(SignalRevealTarget));
+        }
+        SignalRevealTarget = target;
     }
 
     public Fee2ContainerRootSelectionVM? SelectedRoot
@@ -544,6 +595,23 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         SelectedFoundContainer = container;
         StatusText = $"FEE-Objekt '{item.Name}' wurde als prüfbarer Container '{item.TargetContainerType}' ergänzt. Slot- und Signalzuordnungen müssen manuell vervollständigt werden.";
     }
+
+    private void AssignObjectToContainer(ContainerToFeeVisualDropRequest? request)
+    {
+        if (request?.Source is not Fee2ContainerUnmappedObjectVM item ||
+            request.Target is not Fee2ContainerFoundContainerVM container ||
+            SelectedRoot?.Editor is not { } editor)
+        {
+            return;
+        }
+
+        editor.AssignObjectToContainer(item, container);
+        editor.NonContainerObjects.Remove(item);
+        NonContainerObjects.Remove(item);
+        SelectedFoundContainer = container;
+        StatusText = $"FEE-Objekt '{item.Name}' wurde dem Container '{container.Component}' zugeordnet. " +
+                     "Die Zuordnung wird im bearbeiteten FEE2Container-Arbeitsstand mitgeführt.";
+    }
 }
 
 public sealed class Fee2ContainerRootSelectionVM : NotifyBase
@@ -567,7 +635,12 @@ public sealed class Fee2ContainerRootSelectionVM : NotifyBase
     public int UpdatedSlotCount => Root.UpdatedSlotCount;
     public int UnresolvedSlotCount => Root.UnresolvedSlotCount;
     public FeeContainerProvenanceSnapshot? Provenance => Root.Provenance;
-    public Fee2ContainerRoot CreateEditedRoot() => Root with { Provenance = Editor.CreateSnapshot() };
+    public Fee2ContainerRoot CreateEditedRoot() => Root with
+    {
+        Provenance = Editor.CreateSnapshot(),
+        NonContainerObjects = Editor.NonContainerObjects.Select(item => item.Model).ToArray(),
+        ObjectAssociations = Editor.CreateObjectAssociations(),
+    };
 }
 
 public sealed class Fee2ContainerRootEditor
@@ -618,11 +691,13 @@ public sealed class Fee2ContainerRootEditor
         }
         foreach (var item in root.NonContainerObjects ?? [])
             NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
+        ObjectAssociations.AddRange(root.ObjectAssociations ?? []);
     }
 
     public ObservableCollection<Fee2ContainerFoundContainerVM> Containers { get; } = new();
     public ObservableCollection<Fee2ContainerFoundSignalVM> Signals { get; } = new();
     public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new();
+    private List<FeeContainerObjectAssociation> ObjectAssociations { get; } = [];
 
     public Fee2ContainerFoundContainerVM AddObjectAsContainer(Fee2ContainerUnmappedObjectVM item)
     {
@@ -634,6 +709,7 @@ public sealed class Fee2ContainerRootEditor
             existing.IsIncluded = true;
             existing.Component = item.TargetComponent;
             existing.Type = item.TargetContainerType;
+            AssignObjectToContainer(item, existing);
             return existing;
         }
         var added = new Fee2ContainerFoundContainerVM(
@@ -642,8 +718,31 @@ public sealed class Fee2ContainerRootEditor
             item.TargetContainerType,
             0);
         Containers.Add(added);
+        AssignObjectToContainer(item, added);
         return added;
     }
+
+    public void AssignObjectToContainer(
+        Fee2ContainerUnmappedObjectVM item,
+        Fee2ContainerFoundContainerVM container)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(container);
+        ObjectAssociations.RemoveAll(association => association.ObjectGuid == item.Guid);
+        ObjectAssociations.Add(new FeeContainerObjectAssociation(
+            item.Guid,
+            item.Name,
+            item.FeeType,
+            Guid.TryParse(container.Id.Replace("fee:", string.Empty, StringComparison.OrdinalIgnoreCase), out var containerGuid)
+                ? containerGuid
+                : Guid.Empty,
+            container.Id,
+            "Manuell per Drag-and-drop in FEE2Container zugeordnet"));
+        container.AddAssociatedObject(item.Name, item.FeeType);
+    }
+
+    public IReadOnlyList<FeeContainerObjectAssociation> CreateObjectAssociations() =>
+        ObjectAssociations.ToArray();
 
     public FeeContainerProvenanceSnapshot CreateSnapshot()
     {
@@ -722,6 +821,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     private string _type;
     private bool _isIncluded = true;
     private bool _isRelatedToSelection;
+    private string _associatedObjects;
 
     public Fee2ContainerFoundContainerVM(
         string id,
@@ -734,19 +834,32 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
         _component = component;
         _type = type;
         OriginalSignalCount = originalSignalCount;
-        AssociatedObjects = associatedObjects;
+        _associatedObjects = associatedObjects;
     }
 
     public string Id { get; }
     public string Component { get => _component; set => SetPropertyChange(ref _component, value); }
     public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
     public int OriginalSignalCount { get; }
-    public string AssociatedObjects { get; }
+    public string AssociatedObjects => _associatedObjects;
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
     public bool IsRelatedToSelection
     {
         get => _isRelatedToSelection;
         set => SetPropertyChange(ref _isRelatedToSelection, value);
+    }
+
+
+    public void AddAssociatedObject(string name, string feeType)
+    {
+        var description = $"{name} ({feeType})";
+        var values = _associatedObjects
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Append(description)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _associatedObjects = string.Join(", ", values);
+        OnPropertyChanged(nameof(AssociatedObjects));
     }
 }
 

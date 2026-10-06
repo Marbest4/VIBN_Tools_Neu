@@ -132,7 +132,12 @@ public sealed class ReimportDifference : NotifyBase
             AddFieldChange(changes, "ID", previous.Id, detected.Id);
             AddFieldChange(changes, "Adresse", previous.Address, detected.Address);
             AddFieldChange(changes, "Signalname", previous.Signal, detected.Signal);
-            AddFieldChange(changes, "Datentyp", previous.DataType, detected.DataType);
+            AddFieldChange(
+                changes,
+                "Datentyp",
+                previous.DataType,
+                detected.DataType,
+                StringComparison.OrdinalIgnoreCase);
         }
         else
         {
@@ -182,9 +187,10 @@ public sealed class ReimportDifference : NotifyBase
         ICollection<string> changes,
         string field,
         string previous,
-        string detected)
+        string detected,
+        StringComparison comparison = StringComparison.Ordinal)
     {
-        if (string.Equals(previous, detected, StringComparison.Ordinal))
+        if (string.Equals(previous, detected, comparison))
             return;
 
         changes.Add(
@@ -963,7 +969,7 @@ public static class GenerationWorkspaceReconciler
         !string.Equals(previous.Id, current.ID, StringComparison.Ordinal) ||
         !string.Equals(previous.Address, current.Address, StringComparison.Ordinal) ||
         !string.Equals(previous.Signal, current.Signal, StringComparison.Ordinal) ||
-        !string.Equals(previous.DataType, current.DataType, StringComparison.Ordinal);
+        !string.Equals(previous.DataType, current.DataType, StringComparison.OrdinalIgnoreCase);
 
     private static string DescribePreviousAssignment(WorkspaceEntrySnapshot entry) =>
         entry.Location switch

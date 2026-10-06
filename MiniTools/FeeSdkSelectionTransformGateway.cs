@@ -2,7 +2,6 @@ using FS.SDK;
 using FS.SDK.Components;
 using FS.SDK.Mathematics;
 using FS.SDK.Scene.Objects;
-using FS.SDK.Scene.Objects;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
