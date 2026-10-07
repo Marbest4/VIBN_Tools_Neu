@@ -2197,7 +2197,7 @@ public sealed class ContainerToFeeVisualPlanService
             (VisualFeeTechnicalHelperResolver.MatchesIdentity(item, container) ||
              string.IsNullOrWhiteSpace(item.ProvenanceContainerId) && string.IsNullOrWhiteSpace(item.Name) &&
              _feeSignalLinks.Any(link => signalGuids.Contains(link.SignalGuidString) &&
-                 string.Equals(link.ObjectGuidString, item.GuidString, StringComparison.OrdinalIgnoreCase))))).ToArray();
+                 string.Equals(link.ObjectGuidString, item.GuidString, StringComparison.OrdinalIgnoreCase)))).ToArray();
     }
 
     private static string NormalizeToken(string? value) => new((value ?? string.Empty)

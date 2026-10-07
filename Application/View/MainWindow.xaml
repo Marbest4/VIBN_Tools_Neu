@@ -111,8 +111,9 @@
 
 				<ux:NavigationBar Grid.Row="2" TabStripPlacement="Left">
 					<TabItem Header="Project Settings" ux:Icon.Kind="Settings">
-						<p:SettingsPage/>
-					</TabItem>
+                        <local:LazyPageHost PageType="{x:Type p:SettingsPage}"/>
+			
+                    </TabItem>
 
 					<TabItem Header="Kanbanize Karten"
                              ux:Icon.Kind="TaskListAssigned"
