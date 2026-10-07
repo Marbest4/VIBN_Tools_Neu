@@ -17,6 +17,8 @@ namespace VIBN_Tools
         {
             base.OnStartup(e);
 
+            Application.Behaviors.WindowWorkAreaBehavior.Register();
+
             DispatcherUnhandledException += OnDispatcherUnhandledException;
 
             GlobalClasses.Services.Initialize();

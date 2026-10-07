@@ -232,6 +232,10 @@ internal static class RuntimeVisualPlanBinder
             if (index < 0 || index >= source.Length) continue;
             var objects = source[index].Element("SimObjects") ?? new XElement("SimObjects");
             if (objects.Parent is null) source[index].Add(objects);
+            var assignmentKinds = objects.Elements("SimObject")
+                .Where(item => Guid.TryParse(item.Element("Guid")?.Value, out _))
+                .GroupBy(item => Guid.Parse(item.Element("Guid")!.Value))
+                .ToDictionary(group => group.Key, group => group.First().Attribute("assignment")?.Value ?? "Automatic");
             foreach (var generated in objects.Elements("SimObject").Where(item =>
                          item.Element("Role")?.Value is "Primary" or "TechnicalHelper").ToArray()) generated.Remove();
             var runtime = binding.RuntimeContainer;
@@ -249,7 +253,9 @@ internal static class RuntimeVisualPlanBinder
                 if (item.Guid == Guid.Empty) return;
                 identities[item.Guid] = VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Object(item.GuidString,
                     item.Name ?? binding.PlanNode.Name, item.FeeType ?? "", role, target,
-                    item.GetType().FullName ?? item.GetType().Name);
+                    item.GetType().FullName ?? item.GetType().Name,
+                    assignmentKind: assignmentKinds.GetValueOrDefault(item.Guid) ??
+                        (role == "SimObject" && !string.Equals(item.Name, binding.PlanNode.Name, StringComparison.OrdinalIgnoreCase) ? "Manual" : "Automatic"));
             }
             foreach (var target in targets)
                 foreach (var item in target.GetObjects()) Add(item, ReferenceEquals(primary, item) ? "Primary" : "SimObject", target.DisplayName);

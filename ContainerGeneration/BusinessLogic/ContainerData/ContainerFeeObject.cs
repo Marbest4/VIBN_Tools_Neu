@@ -5,6 +5,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
 /// <summary>Portable FEE identity. GUIDs distinguish same-name objects.</summary>
 public sealed class ContainerFeeObject
 {
+    [XmlAttribute("assignment")] public string AssignmentKind { get; set; } = "Automatic";
     public string Guid { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string FeeType { get; set; } = string.Empty;
@@ -15,7 +16,7 @@ public sealed class ContainerFeeObject
     public List<ContainerFeeSlot> Slots { get; set; } = [];
     public ContainerFeeObject Clone() => new()
     {
-        Guid = Guid, Name = Name, FeeType = FeeType, Role = Role, Target = Target, ClrType = ClrType,
+        Guid = Guid, Name = Name, FeeType = FeeType, Role = Role, Target = Target, ClrType = ClrType, AssignmentKind = AssignmentKind,
         Slots = Slots.Select(slot => new ContainerFeeSlot { Name = slot.Name, AssignedGuid = slot.AssignedGuid }).ToList()
     };
 }

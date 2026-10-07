@@ -40,7 +40,9 @@ public sealed partial class ContainerToFeeVisualPlanService
                 objects.Add(ContainerFileXml.Object(guid, assignment.FeeObjectName, feeType, "SimObject",
                     target.DisplayName, assignment.FeeObjectTypeName,
                     _runtimeObjects.GetValueOrDefault(assignment.FeeObjectId)?.Slots?.Select(slot => new ContainerFeeSlot
-                    { Name = slot.Key, AssignedGuid = slot.Value.ToString("D") })));
+                    { Name = slot.Key, AssignedGuid = slot.Value.ToString("D") }),
+                    assignmentKind: source?.Attribute("assignment")?.Value ??
+                        (string.Equals(assignment.FeeObjectName, node.Name, StringComparison.OrdinalIgnoreCase) ? "Automatic" : "Manual")));
             }
             foreach (var item in _feeContainerObjects.Where(item =>
                          item.ProvenanceContainerId == node.Id ||

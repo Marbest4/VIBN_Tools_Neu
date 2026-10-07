@@ -33,7 +33,7 @@ public sealed partial class ContainerToFeeVisualPageVM
         XDocument? document = null;
         await RunBusyAsync("Aktueller FEE-Stand für den Vergleich wird gelesen …", async token =>
         {
-            document = await ContainerFileChangeApplier.ReadCurrentFileAsync(token);
+            document = await ContainerFileChangeApplier.ReadCurrentFileAsync(token, allowIncomplete: true);
         });
         return document ?? throw new InvalidOperationException(StatusText);
     }

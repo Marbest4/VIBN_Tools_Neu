@@ -44,7 +44,8 @@ public sealed record FeeContainerObjectAssociation(
     string ContainerId,
     string Reason,
     string Role = "SimObject",
-    string ProvenanceContainerId = "");
+    string ProvenanceContainerId = "",
+    bool IsManual = false);
 
 public sealed record FeeContainerReconstructionResult(
     FeeContainerProvenanceSnapshot Snapshot,

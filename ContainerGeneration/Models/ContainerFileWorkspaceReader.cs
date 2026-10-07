@@ -67,6 +67,7 @@ public static class ContainerFileWorkspaceReader
                 {
                     Guid = Child(item, "Guid"), Name = Child(item, "Name"), FeeType = Child(item, "FeeType"),
                     Role = Child(item, "Role"), Target = Child(item, "Target"), ClrType = Child(item, "ClrType"),
+                    AssignmentKind = item.Attribute("assignment")?.Value ?? "Automatic",
                     Slots = item.Element("Slots")?.Elements("Slot").Select(slot => new ContainerFeeSlot
                     {
                         Name = slot.Attribute("name")?.Value ?? string.Empty,

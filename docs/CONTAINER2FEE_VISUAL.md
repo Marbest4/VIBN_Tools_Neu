@@ -152,3 +152,16 @@ Die Ansicht wird auf die vorhandene Fensterbreite begrenzt. Die Hauptbereiche ve
 **Container.xml speichern** schreibt das gemeinsame ContainerGeneration-Format `CAAMergeResult`. Neben Signalen enthalten Container eigene `SimObjects/SimObject`-Einträge mit GUID, Name und FEE-Typ. Der verfügbare FEE-Bestand wird in `FeeInventory` gespeichert, ohne ihn im Offlinebetrieb als aktuelle Verbindung auszugeben. Die Generation persistiert nach dem Erstellen die tatsächlich erzeugten beziehungsweise wiederverwendeten Objekt-GUIDs für den Rückweg.
 
 Siehe [ContainerFile-Format und Prüfung](CONTAINERFILE_FORMAT.md) für das XML-Beispiel und die ausführbaren Regressionen.
+
+
+## Anzeige und fehlerhafte Vergleichsdaten
+
+Fenster werden auf den Arbeitsbereich ihres aktuellen Monitors begrenzt. Monitor-, Auflösungs- und DPI-Wechsel aktualisieren diese Begrenzung auch für Dialoge. Der Containerbaum bleibt linksbündig; automatische Auswahlwechsel zentrieren nur vertikal und nur bei aktiviertem Sync. Lange Beschriftungen verschieben die Ansicht nicht horizontal. Signalslot-Karten füllen die verfügbare Listenbreite aus.
+
+Die Validierung ist neben den FEE-Signalen angedockt und über den sichtbaren Trennbalken vergrößerbar. Die Schaltfläche in der Signalüberschrift blendet die Validierung einschließlich ihrer Spalte aus und stellt beim Öffnen die zuletzt manuell gewählte Breite wieder her.
+
+Bei gefundenen FEE-Signalen bezeichnet die Quelle die Kombination aus Interface-GUID und Signalpfad beziehungsweise Adresse. Derselbe Name bei unterschiedlichen Quellen bleibt eindeutig und grün. Mehrere GUIDs mit gleichem Namen innerhalb derselben Quelle erzeugen eine gelbe Warnung. Tatsächliche Zuordnungskonflikte bleiben Fehler.
+
+Der Dateivergleich liest fachlich fehlerhafte XML-Daten ein, einschließlich fehlender Containeridentitäten, doppelter Container, unbekannter Generatortypen und ungültiger Objekt-GUIDs. Doppelte Vorkommen bleiben einzeln erhalten. Betroffene Zeilen sind rot markiert; der Reiter „Fehler / Prüfhinweise“ zeigt die Details samt Herkunft. Fehlerhafte Zeilen können zur Prüfung angehakt und im neuen XML-Stand korrigiert werden. Sie werden nicht automatisch für FEE-Änderungen ausgewählt. XML mit ungültiger Syntax oder DTD wird weiterhin mit einer Fehlermeldung zurückgewiesen.
+
+Ein unvollständig gelesener FEE-Stand bleibt für den Vergleich sichtbar; nicht lesbare Roots und andere Leseprobleme werden separat aufgeführt. Vor der Anwendung wird der reale Bestand nochmals vollständig gelesen und der geprüfte Zielstand validiert. Ein unvollständiger Bestand darf keine Löschungen auslösen.

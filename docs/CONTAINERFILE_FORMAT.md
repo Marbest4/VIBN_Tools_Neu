@@ -49,3 +49,14 @@ dotnet run --project Tests/ContainerGenerationSmokeTests/VIBN_Tools.ContainerGen
 Der erste Test läuft ohne WPF, FEE-SDK oder zusätzliche NuGet-Pakete. Er prüft Schema, Containerklassifizierung einschließlich Typersatz und vollständigem Löschstand, Signal-GUIDs, gleichnamige Objektidentitäten, ausgerichtete Differenzzeilen, sicheren XML-Import und die gemeinsame Sperre für verschachtelte FEE-Schreiboperationen. Die weiteren Tests benötigen Windows, WPF und die unveränderten Repository-SDK-Dateien; sie prüfen auch manuelle Mehrfachzuordnungen mit anderen Namen, Offline-Export/Import, Undo, unbekannte SDK-Typen und abgeschaltete Scroll-Synchronisierung.
 
 In der Linux-Arbeitsumgebung ohne .NET-SDK wurden C#-Syntax und XML/XSD-Struktur geprüft. Die .NET-Testprogramme, der WPF-Build und die Anwendung auf ein echtes FEE-Projekt konnten dort nicht ausgeführt werden. Ein erfolgreicher Livetest muss insbesondere die SDK-Unterstützung für entfallende Variablenzuordnungen und den Vorher-/Nachher-Stand bestätigen.
+
+
+### Manuelle und automatische Zuordnung
+
+`SimObject` unterstützt das optionale Attribut `assignment` mit den Werten `Automatic` und `Manual`. Ohne Attribut gilt die automatische Namensprüfung. Ein ausdrücklich manuell zugeordnetes Objekt mit anderem Namen wird als `<SimObject assignment="Manual">…</SimObject>` exportiert. Das Attribut wird im gemeinsamen Objektmodell und bei dessen Kopien erhalten.
+
+### Regressionen für Anzeige und Root-Wechsel
+
+Die Windows-Prüfprogramme ergänzen schnelle Wechsel zwischen Roots mit stark unterschiedlichen Zeilenzahlen, erhaltene alte Tabellenansichten, überbreite Baumobjekte, Sync-Aus, Quellenunterscheidung gleichnamiger Signale, wiederhergestellte Validierungsbreiten, Monitorbegrenzung und die manuelle Korrektur doppelter Vergleichseinträge. Die portablen Formatprüfungen ergänzen fehlerhafte beziehungsweise doppelte Container und persistierte manuelle Zuordnungen.
+
+Ausführung erfordert ein .NET-SDK; die WPF-Prüfungen zusätzlich Windows und die FEE-SDK-Assemblies. Eine Syntax-/XML-Prüfung ersetzt diese Ausführung nicht. Für den Live-Test: zwei unterschiedlich große FEE-Roots bei nach unten gescrollten Listen mehrfach wechseln, die Anzeige auf einen anders skalierten Monitor verschieben und danach Vergleich und Zuordnung im realen FEE-Projekt prüfen.

@@ -12,29 +12,40 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// <summary>Prepares the complete batch before mutating the stateful FEE SDK.</summary>
 internal static class ContainerFileChangeApplier
 {
-    public static async Task<XDocument> ReadCurrentFileAsync(CancellationToken token)
+    public static async Task<XDocument> ReadCurrentFileAsync(CancellationToken token, bool allowIncomplete = false)
     {
         RequireSession();
         var service = new Fee2ContainerService();
         var discovery = await service.DiscoverAsync(token);
-        if (discovery.Issues.Any(issue => issue.Message.Contains("konnte nicht", StringComparison.OrdinalIgnoreCase)))
+        if (!allowIncomplete && discovery.Issues.Any(issue => issue.Message.Contains("konnte nicht", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Der FEE-Stand konnte nicht vollständig eingelesen werden. Hinweise in FEE2Container prüfen.");
         var containers = new List<XElement>();
         var inventoryObjects = new List<XElement>(); var inventorySignals = new List<XElement>();
+        var diagnostics = new List<XElement>(discovery.Issues.Select(issue =>
+            new XElement("Issue", new XAttribute("root", issue.RootName ?? "FEE"), issue.Message)));
         foreach (var root in discovery.Roots)
         {
-            var snapshot = (await service.CreateExportAsync(root, token)).Snapshot;
-            foreach (var item in snapshot.ContainerDocument.Descendants("Container"))
+            try
             {
-                var clone = new XElement(item); clone.SetAttributeValue("feeRootGuid", root.Guid.ToString("D"));
-                containers.Add(clone);
+                var snapshot = (await service.CreateExportAsync(root, token)).Snapshot;
+                foreach (var item in snapshot.ContainerDocument.Descendants("Container"))
+                {
+                    var clone = new XElement(item); clone.SetAttributeValue("feeRootGuid", root.Guid.ToString("D"));
+                    containers.Add(clone);
+                }
+                inventoryObjects.AddRange(snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Element("SimObjects")?.Elements("SimObject") ?? []);
+                inventorySignals.AddRange(snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Element("Signals")?.Elements("Signal") ?? []);
             }
-            inventoryObjects.AddRange(snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Element("SimObjects")?.Elements("SimObject") ?? []);
-            inventorySignals.AddRange(snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Element("Signals")?.Elements("Signal") ?? []);
+            catch (Exception exception) when (allowIncomplete && exception is not OperationCanceledException)
+            {
+                diagnostics.Add(new XElement("Issue", new XAttribute("root", root.Name), "Root konnte nicht vollständig gelesen werden: " + exception.Message));
+            }
         }
-        return ContainerFileXml.Document(containers, new XElement("FeeInventory",
+        var result = ContainerFileXml.Document(containers, new XElement("FeeInventory",
             new XElement("SimObjects", inventoryObjects.DistinctBy(item => item.Element("Guid")?.Value).Select(item => new XElement(item))),
             new XElement("Signals", inventorySignals.DistinctBy(item => item.Element("Guid")?.Value).Select(item => new XElement(item)))));
+        if (allowIncomplete && diagnostics.Count > 0) result.Root!.Add(new XElement("ComparisonDiagnostics", diagnostics));
+        return result;
     }
 
     public static Task<string> ApplyAsync(IReadOnlyList<ContainerFileChange> changes, XDocument reviewed,
@@ -45,6 +56,9 @@ internal static class ContainerFileChangeApplier
         IProgress<VisualGenerationProgress>? progress, CancellationToken token)
     {
         RequireSession();
+        var fileErrors = ContainerFileComparison.Inspect(reviewed, "Geprüfter Stand", type => ContainerMetadataCatalog.TryGet(type, out _));
+        if (fileErrors.Count > 0) throw new InvalidOperationException(fileErrors[0].Text);
+        _ = ContainerFileComparison.Compare(reviewed, reviewed);
         var revision = Services.Connection.ConnectionRevision;
         void CheckSession()
         {

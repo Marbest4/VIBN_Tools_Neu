@@ -48,11 +48,37 @@ Assert(ContainerFileComparison.Compare(before, signalGuidChange).Count(item => i
 var duplicateContainer = ContainerFileXml.Document([Container("Same", "Button"), Container("Same", "Button")]);
 try { ContainerFileComparison.Compare(before, duplicateContainer); throw new Exception("Ambiguous container identities were accepted."); }
 catch (System.IO.InvalidDataException) { }
+var duplicateReview = ContainerFileComparison.CompareForReview(empty, duplicateContainer);
+Assert(duplicateReview.Count == 2 && duplicateReview.All(item => item.HasErrors && !item.IsSelected),
+    "Review discarded duplicate containers or selected ambiguous writes by default.");
+Assert(duplicateReview.Select(item => item.ReviewKey).Distinct().Count() == 2,
+    "Duplicate occurrences cannot be marked separately.");
+var broken = ContainerFileXml.Document([new XElement("Container", new XElement("DataList"),
+    new XElement("SimObjects", ContainerFileXml.Object("bad-guid", "Surface", "")))]);
+var brokenReview = ContainerFileComparison.CompareForReview(before, broken);
+Assert(brokenReview.Any(item => item.NewContainer is not null && item.HasErrors), "Invalid identities were rejected instead of marked for review.");
+Assert(ContainerFileComparison.Inspect(broken, "Neu").Count >= 4, "Missing name/type and invalid object GUID/type were not reported.");
+var incompleteFee = new XDocument(before);
+incompleteFee.Root!.Add(new XElement("ComparisonDiagnostics", new XElement("Issue", new XAttribute("root", "Root A"), "Read failed")));
+Assert(ContainerFileComparison.Inspect(incompleteFee, "FEE").Any(item => item.Text.Contains("Root A") && item.Message == "Read failed"),
+    "Partial FEE read diagnostics were lost.");
+Assert(ContainerFileComparison.Inspect(before, "Alt").Count == 0, "Valid input was marked invalid.");
+var noNotes = new XDocument(before); foreach (var note in noNotes.Descendants("Note").ToArray()) note.Remove();
+Assert(ContainerFileComparison.Inspect(noNotes, "Alt").Count == 0, "Optional signal notes were treated as errors.");
+Assert(ContainerFileComparison.CompareForReview(empty, before, _ => false).All(item => item.HasErrors),
+    "Unsupported generation types were discarded instead of marked.");
+var automatic = ContainerFileXml.Object(firstGuid, "Other", "Surface");
+Assert(!ContainerFileXml.CanRetainObjectAssociation(automatic, "Other", "Container_A"), "A different name was automatically assigned.");
+Assert(ContainerFileXml.CanRetainObjectAssociation(automatic, "container_a", "Container_A"), "Same-name automatic association was rejected.");
+var manual = ContainerFileXml.Object(firstGuid, "Other", "Surface", assignmentKind: "Manual");
+Assert(ContainerFileXml.CanRetainObjectAssociation(manual, "Other", "Container_A"), "Explicit mixed-name assignment was rejected.");
+var manualModel = new VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData.ContainerFeeObject { AssignmentKind = "Manual" };
+Assert(manualModel.Clone().AssignmentKind == "Manual", "Cloning lost manual association intent.");
 try { ContainerFileXml.ParseContainer("<!DOCTYPE Container [<!ENTITY data SYSTEM 'file:///etc/passwd'>]><Container><Component>&data;</Component><Type>Button</Type><DataList/></Container>"); throw new Exception("DTD was accepted."); }
 catch (XmlException) { }
 
 var schema = new XmlSchemaSet(); schema.Add(null, Path.Combine(AppContext.BaseDirectory, "CAAResult.xsd"));
-var document = ContainerFileXml.Document([duplicateObjects], new XElement("FeeInventory",
+var document = ContainerFileXml.Document([duplicateObjects, Container("Manual", "Button", manual)], new XElement("FeeInventory",
     new XElement("SimObjects", ContainerFileXml.Object(firstGuid, "Axis", "Surface", "Available")),
     new XElement("Signals", new XElement("Signal", new XElement("Guid", secondGuid), new XElement("InterfaceGuid", firstGuid),
         new XElement("InterfaceName", "Existing"), new XElement("Tag", "Signal_A"), new XElement("Address", "%I0.0"),

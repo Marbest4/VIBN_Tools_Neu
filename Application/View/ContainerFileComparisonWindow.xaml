@@ -12,6 +12,9 @@
             <Setter Property="Foreground" Value="Black"/>
             <Style.Triggers><DataTrigger Binding="{Binding IsDifferent}" Value="True">
                 <Setter Property="Background" Value="#FFFFE5AD"/>
+            </DataTrigger><DataTrigger Binding="{Binding HasErrors}" Value="True">
+                <Setter Property="Background" Value="#FFFFC7CE"/>
+                <Setter Property="ToolTip" Value="{Binding ValidationText}"/>
             </DataTrigger></Style.Triggers>
         </Style>
     </Window.Resources>
@@ -38,6 +41,7 @@
                     <DataGridTextColumn Header="Container" Binding="{Binding Name}" Width="*" IsReadOnly="True"/>
                     <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="100" IsReadOnly="True"/>
                     <DataGridTextColumn Header="Änderung" Binding="{Binding KindText}" Width="140" IsReadOnly="True"/>
+                    <DataGridTextColumn Header="Prüfhinweise" Binding="{Binding ValidationText}" Width="240" IsReadOnly="True"/>
                 </DataGrid.Columns>
             </DataGrid>
             <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch"/>
@@ -66,6 +70,13 @@
                                 <DataGridTextColumn Header="Neu" Binding="{Binding NewValue}" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Fehler / Prüfhinweise">
+                        <ListBox ItemsSource="{Binding Diagnostics}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate><DataTemplate>
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="4" Foreground="#9C0006"/>
+                            </DataTemplate></ListBox.ItemTemplate>
+                        </ListBox>
                     </TabItem>
                 </TabControl>
                 <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>

@@ -3960,8 +3960,10 @@ public sealed class ContainerToFeeVisualFeeSignalVM : MvvmBase
         AssignedTargets = explicitTargets.Concat(liveTargets)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        HasDuplicateName = !string.IsNullOrWhiteSpace(model.Tag) && allSignals
-            .Where(item => string.Equals(item.Tag, model.Tag, StringComparison.OrdinalIgnoreCase))
+        HasDuplicateName = !string.IsNullOrWhiteSpace(model.Tag) && !string.IsNullOrWhiteSpace(model.InterfaceGuidString) && allSignals
+            .Where(item => string.Equals(item.Tag, model.Tag, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.InterfaceGuidString, model.InterfaceGuidString, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(item.Location, model.Location, StringComparison.OrdinalIgnoreCase))
             .Select(item => item.GuidString)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Count() > 1;
@@ -3983,19 +3985,19 @@ public sealed class ContainerToFeeVisualFeeSignalVM : MvvmBase
     public bool IsAssigned => AssignedTargets.Count > 0;
     public bool HasDuplicateName { get; }
     public bool HasDuplicateAssignment { get; }
-    public bool HasError => HasDuplicateName || HasDuplicateAssignment;
-    public string AssignmentText => HasError
-        ? string.Join(" · ", new[]
+    public bool HasError => HasDuplicateAssignment;
+    public bool HasWarning => HasDuplicateName;
+    public string AssignmentText => string.Join(" · ", new[]
         {
-            HasDuplicateName ? "Fehler: Signalname ist im FEE mehrfach vorhanden" : null,
+            HasDuplicateName ? "Warnung: Signalname ist innerhalb derselben FEE-Quelle mehrfach vorhanden" : null,
             HasDuplicateAssignment ? "Fehler: Signal ist mehreren Container-Einträgen zugeordnet" : null,
-        }.Where(item => item is not null))
-        : IsAssigned
+            IsAssigned
             ? $"Zugewiesen: {string.Join("; ", AssignedTargets)}"
-            : "Noch nicht zugewiesen";
+            : "Noch nicht zugewiesen"
+        }.Where(item => item is not null));
     public string StateBackground => HasError
         ? "#FFFFCDD2"
-        : IsAssigned ? "#FFC6EFCE" : "#FFF3F5F7";
+        : HasWarning ? "#FFFFF2CC" : "#FFC6EFCE";
     public string ToolTipText => $"Signal: {Tag}{Environment.NewLine}{AssignmentText}";
     public bool IsSynchronizationMatch
     {

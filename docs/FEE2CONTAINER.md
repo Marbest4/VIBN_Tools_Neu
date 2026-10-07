@@ -67,3 +67,12 @@ Die Spalte **FEE-Objekte** nennt die Anzahl der zugeordneten Objekte. **Zugeordn
 Beim Export werden Objektzuordnungen und Signal-GUIDs erhalten. Das gemeinsame, abwärtskompatibel erweiterte `CAAResult.xsd` akzeptiert `SimObjects` pro Container und optionalen verfügbaren Bestand unter `FeeInventory`. ContainerGeneration übernimmt Objektidentitäten beim ContainerFile-Import, Export, Speichern des Arbeitsstands und Undo. Eine Objektzuordnung ohne kompatibles Generatorziel bleibt eine dokumentierte Zugehörigkeit; dadurch wird keine unbekannte Slotverknüpfung erfunden.
 
 Zur Prüfung des echten Projektbestands: nach **Update Objects** den Root einlesen, **Erkannte Container**, zugeordnete Objekte und nicht zugeordnete Objekte kontrollieren, dann exportieren und in ContainerGeneration erneut laden. Eine vollständige Erkennung eines konkreten FEE-Projekts muss mit dem dort verwendeten SDK und Modell geprüft werden.
+
+
+## Namensprüfung und Root-Wechsel
+
+Automatische SimObject-Zuordnungen verlangen denselben Objekt- und Containernamen (ohne Unterscheidung der Groß-/Kleinschreibung). Die Prüfung gilt auch für gespeicherte GUID-Zuordnungen beim Einlesen. Primär- und technische Hilfsobjekte werden weiterhin als Bestandteile der Containerstruktur geführt. Ein abweichend benanntes SimObject bleibt zur manuellen Zuordnung verfügbar.
+
+Manuelle Zuordnungen dürfen abweichende Namen haben. Der XML-Eintrag erhält hierfür `assignment="Manual"`; automatische Zuordnungen werden mit `assignment="Automatic"` gespeichert. Dieser Unterschied bleibt beim Export, beim Einlesen in ContainerGeneration und beim erneuten FEE-Root-Einlesen erhalten. Ältere Dateien ohne Kennzeichnung werden für SimObjects wie automatische Zuordnungen behandelt; eine abweichende manuelle Zuordnung muss einmal ausdrücklich neu vorgenommen werden.
+
+Beim Root-Wechsel werden neue Detailkollektionen und Ansichten veröffentlicht. Die Daten hinter der vorherigen virtuellen Tabellenansicht werden nicht geleert, solange WPF noch verzögerte Zeilenanforderungen bearbeiten kann. Suchfilter bleiben erhalten; Auswahl und ausstehende Synchronisationsanforderungen werden zurückgesetzt.

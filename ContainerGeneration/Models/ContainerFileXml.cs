@@ -34,9 +34,15 @@ public static class ContainerFileXml
     public static IEnumerable<XElement> Objects(XElement container) =>
         container.Element("SimObjects")?.Elements("SimObject") ?? [];
 
+    public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName) =>
+        item.Element("Role")?.Value is "Primary" or "TechnicalHelper" ||
+        item.Attribute("assignment")?.Value == "Manual" ||
+        string.Equals(liveName, containerName, StringComparison.OrdinalIgnoreCase);
+
     public static XElement Object(string guid, string name, string feeType, string role = "SimObject",
-        string target = "", string clrType = "", IEnumerable<ContainerFeeSlot>? slots = null) =>
-        new("SimObject", new XElement("Guid", guid), new XElement("Name", name),
+        string target = "", string clrType = "", IEnumerable<ContainerFeeSlot>? slots = null,
+        string assignmentKind = "Automatic") =>
+        new("SimObject", new XAttribute("assignment", assignmentKind), new XElement("Guid", guid), new XElement("Name", name),
             new XElement("FeeType", feeType), new XElement("Role", role),
             new XElement("Target", target), new XElement("ClrType", clrType),
             new XElement("Slots", (slots ?? []).Select(slot => new XElement("Slot",

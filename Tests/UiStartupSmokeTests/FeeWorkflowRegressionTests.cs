@@ -26,6 +26,11 @@ internal static partial class Program
             VerifyTechnicalHelperSignalLinks(directory);
             VerifyPixelListReveal();
             VerifyPortableContainerObjects(directory);
+            VerifySignalSourceWarnings();
+            VerifyRootSwitchSnapshots();
+            VerifyTreeVerticalReveal();
+            VerifyDockedValidationAndWindowBounds();
+            VerifyInvalidComparisonCanBeReviewed();
         }
         finally
         {
@@ -116,6 +121,9 @@ internal static partial class Program
         viewModel.AssignObjectToContainerCommand.Execute(new ContainerToFeeVisualDropRequest(selected, target));
         if (target.AssociatedObjectItems.Count != 3 || viewModel.NonContainerObjects.Count != 0)
             throw new InvalidOperationException("An explicitly assigned mixed-name batch was rejected or partially assigned.");
+        if (root.CreateEditedRoot().Provenance!.ContainerDocument.Descendants("SimObject")
+            .Any(item => item.Attribute("assignment")?.Value != "Manual"))
+            throw new InvalidOperationException("Manual assignment intent was not persisted for a later root read.");
         var destination = new Fee2ContainerFoundContainerVM("destination", "Axis", "Cylinder", 0);
         root.Editor.Containers.Add(destination);
         viewModel.AssignObjectToContainerCommand.Execute(new ContainerToFeeVisualDropRequest(target.AssociatedObjectItems.First(), destination));

@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Xml.Linq;
 using Microsoft.Win32;
 using VIBN_Tools.ContainerGeneration.Models;
+using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.SharedWpf.Commands;
 
@@ -39,11 +40,13 @@ public sealed class ContainerFileComparisonVM : MvvmBase
             Changes.Any(item => item.IsSelected && item.Kind != ContainerFileChangeKind.Unchanged));
         SelectChangesCommand = new RelayCommand(() => { foreach (var item in Changes) item.IsSelected = item.Kind != ContainerFileChangeKind.Unchanged; RefreshSelection(); });
         ClearSelectionCommand = new RelayCommand(() => { foreach (var item in Changes) item.IsSelected = false; RefreshSelection(); });
+        Rebuild();
     }
 
     public ObservableCollection<ContainerFileChange> Changes { get; } = [];
     public ObservableCollection<ContainerFileDifference> Rows { get; } = [];
     public ObservableCollection<ContainerFileDifference> InventoryRows { get; } = [];
+    public ObservableCollection<ContainerFileDiagnostic> Diagnostics { get; } = [];
     public string OldLabel { get => _oldLabel; private set { _oldLabel = value; OnPropertyChanged(); } }
     public string NewLabel { get => _newLabel; private set { _newLabel = value; OnPropertyChanged(); } }
     public string Status { get => _status; private set { _status = value; OnPropertyChanged(); } }
@@ -76,7 +79,7 @@ public sealed class ContainerFileComparisonVM : MvvmBase
         try
         {
             var document = ContainerFileXml.Load(dialog.FileName);
-            _ = ContainerFileComparison.Compare(old ? document : _oldFile, old ? _newFile : document);
+            _ = ContainerFileComparison.CompareForReview(old ? document : _oldFile, old ? _newFile : document, IsKnownType);
             if (old) { _oldFile = document; OldLabel = dialog.FileName; }
             else { _newFile = document; NewLabel = dialog.FileName; }
             Rebuild();
@@ -94,20 +97,22 @@ public sealed class ContainerFileComparisonVM : MvvmBase
 
     private void Rebuild(IReadOnlyDictionary<string, bool>? selection = null)
     {
-        var changes = ContainerFileComparison.Compare(_oldFile, _newFile);
+        var changes = ContainerFileComparison.CompareForReview(_oldFile, _newFile, IsKnownType);
         _selected = null; _edits.Clear();
         Changes.Clear(); foreach (var item in changes)
         {
-            if (selection?.TryGetValue(item.Name + "\u001f" + item.Type, out var selected) == true) item.IsSelected = selected;
+            if (selection?.TryGetValue(item.ReviewKey, out var selected) == true) item.IsSelected = selected;
             Changes.Add(item);
         }
+        Diagnostics.Clear();
+        foreach (var issue in ContainerFileComparison.Inspect(_oldFile, "Alt / FEE", IsKnownType).Concat(ContainerFileComparison.Inspect(_newFile, "Neu", IsKnownType))) Diagnostics.Add(issue);
         InventoryRows.Clear();
         foreach (var row in ContainerFileComparison.Align(Inventory(_oldFile), Inventory(_newFile))) InventoryRows.Add(row);
         SelectedChange = Changes.FirstOrDefault(item => item.Kind != ContainerFileChangeKind.Unchanged) ?? Changes.FirstOrDefault();
         _applied = false;
         Status = $"{Changes.Count(item => item.Kind == ContainerFileChangeKind.Added)} neu, " +
             $"{Changes.Count(item => item.Kind == ContainerFileChangeKind.Removed)} entfallen, " +
-            $"{Changes.Count(item => item.Kind == ContainerFileChangeKind.Changed)} geändert. Auswahl und neuen XML-Stand vor Anwendung prüfen.";
+            $"{Changes.Count(item => item.Kind == ContainerFileChangeKind.Changed)} geändert; {Diagnostics.Count} Prüfhinweis(e). Fehlerhafte Einträge können markiert und im neuen XML-Stand korrigiert werden.";
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -127,16 +132,20 @@ public sealed class ContainerFileComparisonVM : MvvmBase
         if (!_edits.Any(pair => pair.Key.NewContainer?.ToString() != pair.Value)) return true;
         try
         {
-            var selection = Changes.ToDictionary(item => item.Name + "\u001f" + item.Type, item => item.IsSelected);
+            var selection = Changes.ToDictionary(item => item.ReviewKey, item => item.IsSelected);
             var containers = new List<XElement>();
+            var occurrences = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in Changes.Where(item => item.NewContainer is not null))
             {
-                var edited = _edits.TryGetValue(item, out var text) ? ContainerFileXml.ParseContainer(text) : new XElement(item.NewContainer!);
-                selection[edited.Element("Component")!.Value + "\u001f" + edited.Element("Type")!.Value] = item.IsSelected;
+                var edited = _edits.TryGetValue(item, out var text) && text != item.NewContainer!.ToString()
+                    ? ContainerFileXml.ParseContainer(text) : new XElement(item.NewContainer!);
+                var identity = (edited.Element("Component")?.Value?.Trim() ?? "") + "\u001f" + (edited.Element("Type")?.Value?.Trim() ?? "");
+                occurrences.TryGetValue(identity, out var occurrence); occurrences[identity] = ++occurrence;
+                selection[identity + "\u001f" + occurrence] = item.IsSelected;
                 containers.Add(edited);
             }
             var next = ContainerFileXml.Document(containers, _newFile.Root?.Element("FeeInventory"));
-            _ = ContainerFileComparison.Compare(_oldFile, next);
+            _ = ContainerFileComparison.CompareForReview(_oldFile, next, IsKnownType);
             _newFile = next;
             Rebuild(selection); return true;
         }
@@ -163,9 +172,18 @@ public sealed class ContainerFileComparisonVM : MvvmBase
         if (!CommitPendingEdit()) return;
         var selected = Changes.Where(item => item.IsSelected && item.Kind != ContainerFileChangeKind.Unchanged).ToArray();
         if (selected.Length == 0) return;
+        var reviewed = ReviewedDocument();
+        var errors = ContainerFileComparison.Inspect(reviewed, "Geprüfter Stand", IsKnownType);
+        if (errors.Count > 0)
+        {
+            Status = "Anwendung angehalten: Fehler im geprüften Stand zuerst korrigieren. " + errors[0].Text;
+            return;
+        }
         IsBusy = true;
-        try { Status = await _apply(selected, ReviewedDocument()); _applied = true; }
+        try { Status = await _apply(selected, reviewed); _applied = true; }
         catch (Exception ex) { Status = "Anwendung angehalten: " + ex.Message; _applied = true; }
         finally { IsBusy = false; }
     }
+
+    private static bool IsKnownType(string type) => ContainerMetadataCatalog.TryGet(type, out _);
 }

@@ -60,6 +60,12 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         RemoveObjectAssociationCommand = new RelayCommand<FeeContainerObjectAssociation>(
             RemoveObjectAssociation,
             association => association is not null && !IsBusy);
+        ConfigureDetailViews();
+        _connection.PropertyChanged += OnConnectionPropertyChanged;
+    }
+
+    private void ConfigureDetailViews()
+    {
         FoundContainersView = CollectionViewSource.GetDefaultView(FoundContainers);
         FoundSignalsView = CollectionViewSource.GetDefaultView(FoundSignals);
         NonContainerObjectsView = CollectionViewSource.GetDefaultView(NonContainerObjects);
@@ -72,17 +78,16 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         NonContainerObjectsView.Filter = item => item is Fee2ContainerUnmappedObjectVM feeObject &&
             Matches(ObjectSearchText, feeObject.Name, feeObject.FeeType, feeObject.Reason,
                 feeObject.TargetComponent, feeObject.TargetContainerType);
-        _connection.PropertyChanged += OnConnectionPropertyChanged;
     }
 
     public ObservableCollection<Fee2ContainerRootSelectionVM> Roots { get; } = new RangeObservableCollection<Fee2ContainerRootSelectionVM>();
     public ObservableCollection<string> Issues { get; } = new RangeObservableCollection<string>();
-    public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; } = new RangeObservableCollection<Fee2ContainerFoundContainerVM>();
-    public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; } = new RangeObservableCollection<Fee2ContainerFoundSignalVM>();
-    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new RangeObservableCollection<Fee2ContainerUnmappedObjectVM>();
-    public ICollectionView FoundContainersView { get; }
-    public ICollectionView FoundSignalsView { get; }
-    public ICollectionView NonContainerObjectsView { get; }
+    public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; private set; } = new RangeObservableCollection<Fee2ContainerFoundContainerVM>();
+    public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; private set; } = new RangeObservableCollection<Fee2ContainerFoundSignalVM>();
+    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; private set; } = new RangeObservableCollection<Fee2ContainerUnmappedObjectVM>();
+    public ICollectionView FoundContainersView { get; private set; } = null!;
+    public ICollectionView FoundSignalsView { get; private set; } = null!;
+    public ICollectionView NonContainerObjectsView { get; private set; } = null!;
     public ICommand RefreshCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand CancelCommand { get; }
@@ -551,15 +556,19 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         ContainerRevealTarget = null;
         SignalRevealTarget = null;
         var editor = selection?.Editor;
-        // Defer all three view refreshes so WPF receives one coherent root
-        // transition instead of trying to navigate rows while their backing
-        // collections are being cleared and refilled.
-        using var containersRefresh = FoundContainersView.DeferRefresh();
-        using var signalsRefresh = FoundSignalsView.DeferRefresh();
-        using var objectsRefresh = NonContainerObjectsView.DeferRefresh();
-        FoundContainers.ReplaceWith(editor?.Containers ?? []);
-        FoundSignals.ReplaceWith(editor?.Signals ?? []);
-        NonContainerObjects.ReplaceWith(editor?.NonContainerObjects ?? []);
+        // Keep the old view and its backing data intact while WPF finishes
+        // queued row-generation requests. Mutating a bound collection here can
+        // invalidate a pending index in DataGrid/VirtualizingStackPanel.
+        FoundContainers = new ObservableCollection<Fee2ContainerFoundContainerVM>(editor?.Containers ?? []);
+        FoundSignals = new ObservableCollection<Fee2ContainerFoundSignalVM>(editor?.Signals ?? []);
+        NonContainerObjects = new ObservableCollection<Fee2ContainerUnmappedObjectVM>(editor?.NonContainerObjects ?? []);
+        ConfigureDetailViews();
+        OnPropertyChanged(nameof(FoundContainers));
+        OnPropertyChanged(nameof(FoundSignals));
+        OnPropertyChanged(nameof(NonContainerObjects));
+        OnPropertyChanged(nameof(FoundContainersView));
+        OnPropertyChanged(nameof(FoundSignalsView));
+        OnPropertyChanged(nameof(NonContainerObjectsView));
     }
 
     private static bool Matches(string query, params string?[] values)
@@ -739,13 +748,31 @@ public sealed class Fee2ContainerRootEditor
         }
         foreach (var item in root.NonContainerObjects ?? [])
             NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
-        ObjectAssociations.AddRange(root.ObjectAssociations ?? []);
+        foreach (var association in root.ObjectAssociations ?? [])
+        {
+            var container = Containers.FirstOrDefault(item => item.Id == association.ContainerId);
+            if (container is not null && (association.IsManual || association.Role is "Primary" or "TechnicalHelper" ||
+                string.Equals(association.ObjectName, container.Component, StringComparison.OrdinalIgnoreCase)))
+                ObjectAssociations.Add(association);
+            else RestoreUnmatched(association.ObjectGuid, association.ObjectName, association.ObjectType);
+        }
         foreach (var container in document?.Descendants("Container") ?? [])
             foreach (var item in VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects(container))
-                if (Guid.TryParse(item.Element("Guid")?.Value, out var guid) && !ObjectAssociations.Any(association => association.ObjectGuid == guid))
-                    ObjectAssociations.Add(new FeeContainerObjectAssociation(guid, item.Element("Name")?.Value ?? "",
-                        item.Element("FeeType")?.Value ?? "", Guid.Empty, container.Attribute("id")?.Value ?? "",
-                        "Explizite Zuordnung aus ContainerFile", item.Element("Role")?.Value ?? "SimObject"));
+            {
+                if (!Guid.TryParse(item.Element("Guid")?.Value, out var guid) || ObjectAssociations.Any(association => association.ObjectGuid == guid)) continue;
+                var name = item.Element("Name")?.Value ?? ""; var type = item.Element("FeeType")?.Value ?? "";
+                if (VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.CanRetainObjectAssociation(item, name, container.Element("Component")?.Value ?? ""))
+                    ObjectAssociations.Add(new FeeContainerObjectAssociation(guid, name, type, Guid.Empty, container.Attribute("id")?.Value ?? "",
+                        "Gespeicherte Zuordnung aus ContainerFile", item.Element("Role")?.Value ?? "SimObject",
+                        IsManual: item.Attribute("assignment")?.Value == "Manual"));
+                else RestoreUnmatched(guid, name, type);
+            }
+        void RestoreUnmatched(Guid guid, string name, string type)
+        {
+            if (!NonContainerObjects.Any(item => item.Guid == guid))
+                NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(guid, name, type,
+                    "Automatische Zuordnung verworfen: Objekt- und Containername unterscheiden sich; manuelle Zuordnung möglich")));
+        }
         RefreshObjectAssociations();
     }
 
@@ -792,7 +819,7 @@ public sealed class Fee2ContainerRootEditor
                 ? containerGuid
                 : Guid.Empty,
             container.Id,
-            "Manuell per Drag-and-drop in FEE2Container zugeordnet"));
+            "Manuell per Drag-and-drop in FEE2Container zugeordnet", IsManual: true));
         RefreshObjectAssociations();
     }
 
@@ -828,6 +855,7 @@ public sealed class Fee2ContainerRootEditor
         element.SetElementValue("Name", association.ObjectName);
         element.SetElementValue("FeeType", association.ObjectType);
         element.SetElementValue("Role", association.Role);
+        element.SetAttributeValue("assignment", association.IsManual ? "Manual" : "Automatic");
         return element;
     }
 

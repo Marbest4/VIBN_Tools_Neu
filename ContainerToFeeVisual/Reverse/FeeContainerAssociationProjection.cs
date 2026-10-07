@@ -25,9 +25,11 @@ internal static class FeeContainerAssociationProjection
             stableIds[container] = ContainerXmlVisualPlanParser.CreateContainerId(id, name, type, occurrence);
             // Explicit manual associations survive even when names differ.
             foreach (var item in ContainerFileXml.Objects(container))
-                if (Guid.TryParse(item.Element("Guid")?.Value, out var guid) && live.TryGetValue(guid, out var actual))
+                if (Guid.TryParse(item.Element("Guid")?.Value, out var guid) && live.TryGetValue(guid, out var actual) &&
+                    ContainerFileXml.CanRetainObjectAssociation(item, actual.Name, name))
                     associations.Add(new FeeContainerObjectAssociation(guid, actual.Name, actual.FeeType,
-                        Guid.Empty, id, "Explizite Zuordnung aus Container-Provenienz", item.Element("Role")?.Value ?? "SimObject"));
+                        Guid.Empty, id, item.Attribute("assignment")?.Value == "Manual" ? "Manuelle Zuordnung aus Container-Provenienz" : "Gespeicherte Zuordnung mit gleichem Namen",
+                        item.Element("Role")?.Value ?? "SimObject", IsManual: item.Attribute("assignment")?.Value == "Manual"));
         }
         foreach (var group in reconstructed.ObjectAssociations.GroupBy(item => item.ContainerId))
         {
@@ -40,7 +42,8 @@ internal static class FeeContainerAssociationProjection
                  string.Equals(item.Element("Type")?.Value, source.Element("Type")?.Value, StringComparison.OrdinalIgnoreCase))).ToArray();
             if (matches.Length != 1) continue;
             foreach (var item in group)
-                if (!associations.Any(association => association.ObjectGuid == item.ObjectGuid))
+                if (!associations.Any(association => association.ObjectGuid == item.ObjectGuid) &&
+                    (item.Role != "SimObject" || string.Equals(item.ObjectName, matches[0].Element("Component")?.Value, StringComparison.OrdinalIgnoreCase)))
                     associations.Add(item with { ContainerId = matches[0].Attribute("id")?.Value ?? "" });
         }
         foreach (var container in containers)
@@ -50,7 +53,7 @@ internal static class FeeContainerAssociationProjection
                 .Select(item => ContainerFileXml.Object(item.ObjectGuid.ToString("D"), item.ObjectName, item.ObjectType, item.Role,
                     slots: live.GetValueOrDefault(item.ObjectGuid)?.Slots?.Select(slot =>
                         new VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData.ContainerFeeSlot
-                        { Name = slot.Key, AssignedGuid = slot.Value.ToString("D") })))));
+                        { Name = slot.Key, AssignedGuid = slot.Value.ToString("D") }), assignmentKind: item.IsManual ? "Manual" : "Automatic"))));
         }
         return associations;
     }

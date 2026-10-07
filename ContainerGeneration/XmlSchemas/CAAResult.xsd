@@ -44,6 +44,7 @@
                 </xs:element></xs:sequence></xs:complexType>
             </xs:element>
         </xs:sequence>
+        <xs:attribute name="assignment" type="xs:string" use="optional"/>
     </xs:complexType>
     <xs:complexType name="SimObjectsType"><xs:sequence>
         <xs:element name="SimObject" type="FeeObjectType" minOccurs="0" maxOccurs="unbounded"/>

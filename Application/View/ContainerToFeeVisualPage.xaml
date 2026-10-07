@@ -307,7 +307,7 @@
                     </StackPanel>
                     <TreeView Grid.Row="3" ItemsSource="{Binding TreeRoots}"
                               ItemContainerStyle="{StaticResource VisualTreeItemStyle}"
-                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               ScrollViewer.VerticalScrollBarVisibility="Auto"
                               ScrollViewer.CanContentScroll="True"
                               VirtualizingPanel.IsVirtualizing="True"
@@ -486,6 +486,7 @@
                     <TextBlock Grid.Row="3" Style="{StaticResource VisualPanelHeader}" Margin="0,8,0,4"
                                Text="Signalslots des ausgewählten Containers" />
                     <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}" MinHeight="190"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              SelectedItem="{Binding SelectedSignalSlot, Mode=TwoWay}"
                              behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
                              behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedSignalSlot}"
@@ -615,8 +616,8 @@
                     <ColumnDefinition Width="*" MinWidth="190" />
                     <ColumnDefinition Width="5" />
                     <ColumnDefinition Width="*" MinWidth="190" />
-                    <ColumnDefinition Width="5" />
-                    <ColumnDefinition Width="*" MinWidth="190" />
+                    <ColumnDefinition Width="5" behaviors:CollapsibleColumnBehavior.IsVisible="{Binding IsChecked, ElementName=ValidationToggle}" />
+                    <ColumnDefinition Width="*" MinWidth="190" behaviors:CollapsibleColumnBehavior.IsVisible="{Binding IsChecked, ElementName=ValidationToggle}" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -750,7 +751,12 @@
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Gefundene FEE-Signale" />
+                        <DockPanel Grid.Row="0">
+                            <ToggleButton x:Name="ValidationToggle" DockPanel.Dock="Right" IsChecked="True"
+                                          Width="24" Height="24" Margin="4,0,0,4" Content="↔"
+                                          ToolTip="Validierung ein-/ausblenden; ihre Breite lässt sich am Trennbalken ändern." />
+                            <TextBlock Style="{StaticResource VisualPanelHeader}" Text="Gefundene FEE-Signale" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
                         <Expander Grid.Row="1" Margin="0,0,0,6" MaxHeight="145"
                                   Header="{Binding SelectedExistingInterfacesSummary}"
                                   ToolTip="Ein oder mehrere vorhandene Interfaces auswählen. Nur deren Signale werden durchsucht und automatisch verknüpft.">
@@ -830,19 +836,22 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
                         <WrapPanel Grid.Row="5" Margin="0,6,0,0">
-                            <Border Width="13" Height="13" Background="#FFC6EFCE"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="zugewiesen"/>
-                            <Border Width="13" Height="13" Background="#FFF3F5F7"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="offen"/>
-                            <Border Width="13" Height="13" Background="#FFFFCDD2"/><TextBlock Margin="3,0,0,0" FontSize="10" Text="Fehler"/>
+                            <Border Width="13" Height="13" Background="#FFC6EFCE"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="eindeutig"/>
+                            <Border Width="13" Height="13" Background="#FFFFF2CC"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="Namensduplikat / gleiche Quelle"/>
+                            <Border Width="13" Height="13" Background="#FFFFCDD2"/><TextBlock Margin="3,0,0,0" FontSize="10" Text="Zuordnungskonflikt"/>
                         </WrapPanel>
                     </Grid>
                 </Border>
 
-                <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" Background="Transparent" />
+                <GridSplitter Grid.Column="3" HorizontalAlignment="Stretch" Background="#FFD0D0D0"
+                              ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" ShowsPreview="True"
+                              Visibility="{Binding IsChecked, ElementName=ValidationToggle, Converter={StaticResource BooleanToVisibilityConverter}}" />
 
-                <Expander Grid.Column="4" Header="Validierung" IsExpanded="True" ExpandDirection="Left"
-                          ToolTip="Ein-/ausklappbare Validierung neben den gefundenen FEE-Signalen.">
-                    <Border Width="310" Padding="8" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
-                        <ListBox ItemsSource="{Binding Issues}"
+                <Border Grid.Column="4" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4"
+                        Visibility="{Binding IsChecked, ElementName=ValidationToggle, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource VisualPanelHeader}" Text="Validierung" />
+                        <ListBox ItemsSource="{Binding Issues}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  SelectedItem="{Binding SelectedIssue, Mode=TwoWay}"
                                  behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedIssue}"
@@ -880,8 +889,8 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                    </Border>
-                </Expander>
+                    </DockPanel>
+                </Border>
             </Grid>
         </Grid>
 

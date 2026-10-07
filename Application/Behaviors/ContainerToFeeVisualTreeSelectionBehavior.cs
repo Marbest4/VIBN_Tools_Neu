@@ -12,6 +12,14 @@ namespace VIBN_Tools.Application.Behaviors;
 /// <summary>Provides a bindable TreeView.SelectedItem for the visual plan.</summary>
 public static class ContainerToFeeVisualTreeSelectionBehavior
 {
+    static ContainerToFeeVisualTreeSelectionBehavior()
+    {
+        // Intercept at the item, before the enclosing ScrollViewer can enqueue
+        // a horizontal MakeVisible request (restoring the offset later flickers).
+        EventManager.RegisterClassHandler(typeof(TreeViewItem), FrameworkElement.RequestBringIntoViewEvent,
+            new RequestBringIntoViewEventHandler(OnRequestBringIntoView), true);
+    }
+
     private static readonly DependencyProperty SelectionRevealRevisionProperty = DependencyProperty.RegisterAttached(
         "SelectionRevealRevision",
         typeof(long),
@@ -130,7 +138,6 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         if (scrollViewer is null)
             return;
         state.VerticalOffset = scrollViewer.VerticalOffset;
-        state.HorizontalOffset = scrollViewer.HorizontalOffset;
         var revealRevision = (long)treeView.GetValue(SelectionRevealRevisionProperty);
         state.RestorePending = true;
         treeView.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
@@ -141,7 +148,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
                     return;
                 var current = FindVisualChild<ScrollViewer>(treeView);
                 current?.ScrollToVerticalOffset(state.VerticalOffset);
-                current?.ScrollToHorizontalOffset(state.HorizontalOffset);
+                current?.ScrollToLeftEnd();
             }
             finally
             {
@@ -176,13 +183,26 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         var state = ScrollStates.GetOrCreateValue(tree);
         state.IsSelecting = true;
         var vertical = viewer.VerticalOffset;
-        var horizontal = viewer.HorizontalOffset;
         _ = tree.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
         {
             state.IsSelecting = false;
             viewer.ScrollToVerticalOffset(vertical);
-            viewer.ScrollToHorizontalOffset(horizontal);
+            viewer.ScrollToLeftEnd();
         }));
+    }
+
+    private static void OnRequestBringIntoView(object sender, RequestBringIntoViewEventArgs args)
+    {
+        if (args.Handled) return;
+        if (sender is not TreeViewItem item) return;
+        DependencyObject? parent = item;
+        while (parent is not null && parent is not TreeView)
+            parent = VisualTreeHelper.GetParent(parent);
+        if (parent is not TreeView tree || !GetIsEnabled(tree)) return;
+        args.Handled = true;
+        FindVisualChild<ScrollViewer>(tree)?.ScrollToLeftEnd();
+        if (GetRevealEnabled(tree) && !(ScrollStates.TryGetValue(tree, out var state) && state.IsSelecting))
+            CenterContainer(tree, item);
     }
 
     private static void OnBoundSelectedItemChanged(
@@ -216,7 +236,6 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
                 if (container is null || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
                     return;
                 container.IsSelected = true;
-                container.BringIntoView();
                 treeView.UpdateLayout();
                 CenterContainer(treeView, container);
             }
@@ -243,6 +262,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
                 ? delta / Math.Max(1d, header.ActualHeight)
                 : delta;
             viewer.ScrollToVerticalOffset(Math.Max(0d, viewer.VerticalOffset + scrollDelta));
+            viewer.ScrollToLeftEnd();
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
         {
@@ -309,6 +329,5 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         public bool RestorePending { get; set; }
         public bool IsSelecting { get; set; }
         public double VerticalOffset { get; set; }
-        public double HorizontalOffset { get; set; }
     }
 }
