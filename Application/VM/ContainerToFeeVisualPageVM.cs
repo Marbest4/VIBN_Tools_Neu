@@ -24,7 +24,7 @@ namespace VIBN_Tools.Application.VM;
 /// keeps assignments, sidecars and undo/redo consistent with the unchanged
 /// legacy generation executor.
 /// </summary>
-public sealed class ContainerToFeeVisualPageVM : MvvmBase
+public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
 {
     private const string LogArea = "Container2FEE Visual";
     private const string FeeSdkAbortedMessage =
@@ -107,6 +107,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         LoadPlanCommand = new AsyncRelayCommand(LoadPlanAsync, () => !IsBusy);
         SavePlanCommand = new AsyncRelayCommand(SavePlanAsync, () => HasPlan && !IsBusy);
         SaveContainerXmlCommand = new AsyncRelayCommand(SaveContainerXmlAsync, () => HasPlan && !IsBusy);
+        CompareContainerFilesCommand = new RelayCommand(OpenContainerFileComparison, () => !IsBusy);
         OpenDocumentationCommand = new RelayCommand(OpenDocumentation);
         RefreshFeeObjectsCommand = new AsyncRelayCommand(
             RefreshFeeObjectsAsync,

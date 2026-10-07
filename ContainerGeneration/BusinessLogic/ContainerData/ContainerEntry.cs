@@ -10,6 +10,8 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
     /// </summary>
     public class ContainerEntry : NotifyBase
     {
+        [XmlAttribute("feeGuid")]
+        public string FeeGuid { get; set; } = string.Empty;
         private string _id = string.Empty;
         private string _address = string.Empty;
         private string _dataType = string.Empty;
@@ -246,6 +248,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         {
             ContainerEntry clone = new ContainerEntry();
             clone.SignalId = EnsureSignalId();
+            clone.FeeGuid = FeeGuid;
             clone.ID = this.ID;
             clone.Address = this.Address;
             clone.DataType = this.DataType;

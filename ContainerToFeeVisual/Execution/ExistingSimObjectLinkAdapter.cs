@@ -13,7 +13,13 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// </summary>
 internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
 {
-    public async Task<VisualExecutionResult> ExecuteAsync(
+    public Task<VisualExecutionResult> ExecuteAsync(
+        VisualPlan plan,
+        IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
+        CancellationToken cancellationToken) => FeeMutationScope.RunAsync(
+        () => ExecuteCoreAsync(plan, runtimeObjects, cancellationToken), cancellationToken);
+
+    private async Task<VisualExecutionResult> ExecuteCoreAsync(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         CancellationToken cancellationToken)

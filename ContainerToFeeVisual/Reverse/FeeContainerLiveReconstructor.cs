@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using VIBN_Tools.ContainerGeneration.Models;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
 
@@ -41,7 +42,9 @@ public sealed record FeeContainerObjectAssociation(
     string ObjectType,
     Guid ContainerObjectGuid,
     string ContainerId,
-    string Reason);
+    string Reason,
+    string Role = "SimObject",
+    string ProvenanceContainerId = "");
 
 public sealed record FeeContainerReconstructionResult(
     FeeContainerProvenanceSnapshot Snapshot,
@@ -77,7 +80,8 @@ public static class FeeContainerLiveReconstructor
         ArgumentNullException.ThrowIfNull(variables);
         ArgumentNullException.ThrowIfNull(assignments);
 
-        var sourceObjects = objects.Where(item => item.Guid != Guid.Empty).ToArray();
+        var sourceObjects = objects.Where(item => item.Guid != Guid.Empty && !EndsWithType(item.FeeType, "Decoration"))
+            .DistinctBy(item => item.Guid).ToArray();
         var variableByGuid = variables
             .Where(item => item.VariableGuid != Guid.Empty)
             .GroupBy(item => item.VariableGuid)
@@ -116,12 +120,13 @@ public static class FeeContainerLiveReconstructor
         var unversioned = candidates
             .Where(item => string.IsNullOrWhiteSpace(item.Object.ProvenanceContainerId))
             .Where(item => !IsRedundantLegacySimObject(item, candidates))
+            .GroupBy(item => (item.ComponentName.ToUpperInvariant(), item.XmlType.ToUpperInvariant()))
+            .Select(group => group.OrderBy(item => CandidatePriority(item.Object.FeeType)).ThenBy(item => item.Object.Guid).First())
             .ToArray();
         candidates = versioned.Concat(unversioned).ToList();
 
-        var objectAssociations = ResolveMotionJointAssociations(sourceObjects, candidates, issues)
-            .Concat(ResolvePickAndPlaceAssociations(sourceObjects, candidates, issues))
-            .ToArray();
+        var objectAssociations = ResolveAllObjectAssociations(sourceObjects, candidates, issues);
+        relevantObjectGuids.Clear();
         relevantObjectGuids.UnionWith(objectAssociations.Select(item => item.ObjectGuid));
 
         var containerElements = new List<XElement>();
@@ -131,8 +136,9 @@ public static class FeeContainerLiveReconstructor
                      .ThenBy(item => item.XmlType, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(item => item.Object.Guid))
         {
-            assignmentsByObject.TryGetValue(candidate.Object.Guid, out var objectAssignments);
-            objectAssignments ??= [];
+            var members = objectAssociations.Where(item => item.ContainerObjectGuid == candidate.Object.Guid).ToArray();
+            var objectAssignments = members.SelectMany(item => assignmentsByObject.GetValueOrDefault(item.ObjectGuid) ?? [])
+                .Distinct().ToArray();
             var resolved = objectAssignments
                 .Select(assignment => TryCreateEntry(candidate, assignment, variableByGuid))
                 .Where(item => item is not null)
@@ -185,7 +191,8 @@ public static class FeeContainerLiveReconstructor
                     new XElement("DataType", variable.DataType ?? string.Empty),
                     new XElement("Signal", variable.Signal ?? string.Empty),
                     new XElement("Slot", entry.XmlSlot),
-                    new XElement("Note", $"Aus FEE rekonstruiert; Objekt {candidate.Object.Guid:D}.")));
+                    new XElement("Note", $"Aus FEE rekonstruiert; Objekt {candidate.Object.Guid:D}."),
+                    new XAttribute("feeGuid", variable.VariableGuid.ToString("D"))));
                 bindings.Add(new FeeContainerSignalBinding(
                     containerIndex,
                     dataList.Elements("Entry").Count() - 1,
@@ -196,7 +203,10 @@ public static class FeeContainerLiveReconstructor
                 new XAttribute("id", $"fee:{candidate.Object.Guid:D}"),
                 new XElement("Component", componentName),
                 new XElement("Type", candidate.XmlType),
-                dataList));
+                dataList,
+                new XElement("SimObjects", members.Select(item => ContainerFileXml.Object(
+                    item.ObjectGuid.ToString("D"), item.ObjectName, item.ObjectType,
+                    item.ObjectGuid == candidate.Object.Guid ? "Primary" : IsHelper(item.ObjectType) ? "TechnicalHelper" : "SimObject")))));
         }
 
         var document = new XDocument(
@@ -233,91 +243,44 @@ public static class FeeContainerLiveReconstructor
             objectAssociations);
     }
 
-    private static IReadOnlyList<FeeContainerObjectAssociation> ResolveMotionJointAssociations(
-        IReadOnlyList<FeeContainerLiveObject> objects,
-        IReadOnlyList<ContainerCandidate> candidates,
+    private static FeeContainerObjectAssociation[] ResolveAllObjectAssociations(
+        IReadOnlyList<FeeContainerLiveObject> objects, IReadOnlyList<ContainerCandidate> candidates,
         ICollection<FeeContainerReconstructionIssue> issues)
     {
         var result = new List<FeeContainerObjectAssociation>();
-        foreach (var joint in objects.Where(item => EndsWithType(item.FeeType, "MotionJoint")))
+        foreach (var item in objects)
         {
-            var compatible = candidates.Where(candidate =>
-                    candidate.Descriptor.Targets.Any(target =>
-                        string.Equals(target.AllowedType.Name, "MotionJoint", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(target.AllowedType.Name, "FeeJoint", StringComparison.OrdinalIgnoreCase)) &&
-                    ((!string.IsNullOrWhiteSpace(joint.ProvenanceContainerId) &&
-                      string.Equals(joint.ProvenanceContainerId, candidate.Object.ProvenanceContainerId, StringComparison.Ordinal)) ||
-                     string.Equals(joint.Name, candidate.ComponentName, StringComparison.OrdinalIgnoreCase)))
-                .DistinctBy(candidate => candidate.Object.Guid)
+            var matches = candidates.Where(candidate => candidate.Object.Guid == item.Guid ||
+                ((!string.IsNullOrWhiteSpace(item.Name) &&
+                  string.Equals(item.Name, candidate.ComponentName, StringComparison.OrdinalIgnoreCase)) ||
+                 (IsHelper(item.FeeType) && !string.IsNullOrWhiteSpace(item.ProvenanceContainerId) &&
+                  item.ProvenanceContainerId == candidate.Object.ProvenanceContainerId)))
                 .ToArray();
-            if (compatible.Length == 1)
+            // Provenance disambiguates equal names but never invents an automatic
+            // association between differently named physical scene objects.
+            var own = matches.Where(candidate => candidate.Object.Guid == item.Guid).ToArray();
+            if (own.Length == 1) matches = own;
+            else if (matches.Length > 1 && !string.IsNullOrWhiteSpace(item.ProvenanceContainerId))
+                matches = matches.Where(candidate => candidate.Object.ProvenanceContainerId == item.ProvenanceContainerId).ToArray();
+            if (matches.Length == 1)
             {
-                var container = compatible[0];
-                result.Add(new FeeContainerObjectAssociation(
-                    joint.Guid,
-                    joint.Name,
-                    joint.FeeType,
-                    container.Object.Guid,
-                    $"fee:{container.Object.Guid:D}",
-                    !string.IsNullOrWhiteSpace(joint.ProvenanceContainerId)
-                        ? "Über Container-Provenienz zugeordnet"
-                        : "Über eindeutigen Komponentenname und kompatiblen MotionJoint-Zieltyp zugeordnet"));
+                var container = matches[0];
+                result.Add(new FeeContainerObjectAssociation(item.Guid, item.Name, item.FeeType,
+                    container.Object.Guid, $"fee:{container.Object.Guid:D}",
+                    item.Guid == container.Object.Guid ? "Primäres Containerobjekt" :
+                    IsHelper(item.FeeType) ? "Technisches Hilfsobjekt" : "Automatisch über eindeutigen gleichen Namen zugeordnet",
+                    item.Guid == container.Object.Guid ? "Primary" : IsHelper(item.FeeType) ? "TechnicalHelper" : "SimObject",
+                    container.Object.ProvenanceContainerId ?? ""));
             }
-            else if (compatible.Length > 1)
-            {
-                issues.Add(new FeeContainerReconstructionIssue(
-                    joint.Guid,
-                    $"MotionJoint '{joint.Name}' passt zu mehreren Containern und bleibt zur Prüfung unzugeordnet."));
-            }
+            else if (matches.Length > 1)
+                issues.Add(new FeeContainerReconstructionIssue(item.Guid,
+                    $"'{item.Name}' ({item.FeeType}) passt zu mehreren Containern und bleibt zur manuellen Zuordnung verfügbar."));
         }
-        return result;
+        return result.ToArray();
     }
 
-    private static IReadOnlyList<FeeContainerObjectAssociation> ResolvePickAndPlaceAssociations(
-        IReadOnlyList<FeeContainerLiveObject> objects,
-        IReadOnlyList<ContainerCandidate> candidates,
-        ICollection<FeeContainerReconstructionIssue> issues)
-    {
-        var result = new List<FeeContainerObjectAssociation>();
-        foreach (var pickAndPlace in objects.Where(item => EndsWithType(item.FeeType, "PickAndPlace")))
-        {
-            var compatible = candidates.Where(candidate =>
-                    candidate.Descriptor.Targets.Any(target =>
-                        string.Equals(target.AllowedType.Name, "FeePickAndPlace", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(target.AllowedType.Name, "PickAndPlace", StringComparison.OrdinalIgnoreCase)) &&
-                    ((!string.IsNullOrWhiteSpace(pickAndPlace.ProvenanceContainerId) &&
-                      string.Equals(
-                          pickAndPlace.ProvenanceContainerId,
-                          candidate.Object.ProvenanceContainerId,
-                          StringComparison.Ordinal)) ||
-                     string.Equals(
-                         pickAndPlace.Name,
-                         candidate.ComponentName,
-                         StringComparison.OrdinalIgnoreCase)))
-                .DistinctBy(candidate => candidate.Object.Guid)
-                .ToArray();
-            if (compatible.Length == 1)
-            {
-                var container = compatible[0];
-                result.Add(new FeeContainerObjectAssociation(
-                    pickAndPlace.Guid,
-                    pickAndPlace.Name,
-                    pickAndPlace.FeeType,
-                    container.Object.Guid,
-                    $"fee:{container.Object.Guid:D}",
-                    !string.IsNullOrWhiteSpace(pickAndPlace.ProvenanceContainerId)
-                        ? "Über Container-Provenienz zugeordnet"
-                        : "Über eindeutigen Komponentenname und kompatibles PickAndPlace-Ziel zugeordnet"));
-            }
-            else if (compatible.Length > 1)
-            {
-                issues.Add(new FeeContainerReconstructionIssue(
-                    pickAndPlace.Guid,
-                    $"PickAndPlace '{pickAndPlace.Name}' passt zu mehreren Gripper-Containern und bleibt zur Prüfung unzugeordnet."));
-            }
-        }
-        return result;
-    }
+    private static bool IsHelper(string type) => new[] { "BoolNot", "MoveBit", "BoolAnd", "BoolOr" }
+        .Any(value => EndsWithType(type, value));
 
     private static bool TryCreateCandidate(
         FeeContainerLiveObject item,
@@ -403,17 +366,21 @@ public static class FeeContainerLiveReconstructor
     }
 
     private static string? MapSlot(ContainerCandidate candidate, string runtimeSlot)
+        => MapRuntimeSlot(candidate.XmlType, runtimeSlot);
+
+    internal static string? MapRuntimeSlot(string xmlType, string runtimeSlot)
     {
         if (string.IsNullOrWhiteSpace(runtimeSlot))
             return null;
-        var directSlot = candidate.Descriptor.Slots.FirstOrDefault(slot =>
+        if (!ContainerMetadataCatalog.TryGet(xmlType, out var descriptor)) return null;
+        var directSlot = descriptor.Slots.FirstOrDefault(slot =>
             string.Equals(slot, runtimeSlot, StringComparison.OrdinalIgnoreCase));
         if (directSlot is not null)
             return directSlot;
 
         var normalizedSlot = runtimeSlot.Trim().ToUpperInvariant();
 
-        return candidate.XmlType switch
+        return xmlType switch
         {
             "Button" => normalizedSlot switch
             {
@@ -430,7 +397,7 @@ public static class FeeContainerLiveReconstructor
                 "WHITE" => "PLC_NO_White",
                 _ => null,
             },
-            "ReturnCircuit" => normalizedSlot switch
+            "ReturnCircuit" or "SafeArea" => normalizedSlot switch
             {
                 "INPUT 01" => "PLC_OUT_Signal",
                 "OUTPUT 01" => "PLC_IN_Signal",

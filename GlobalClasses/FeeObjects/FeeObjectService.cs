@@ -676,6 +676,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             { nameof(KinematicFrame), (name,guid) => new FeeKinematicFrame { Name = name, GuidString = guid } },
             { "BoolNot", (name,guid) => new FeeSimpleNot { Name = name, GuidString = guid } },
             { "MoveBit", (name,guid) => new FeeSimpleMove { Name = name, GuidString = guid } },
+            { "BoolAnd", (name,guid) => new FeeSimpleAnd { Name = name, GuidString = guid } },
+            { "BoolOr", (name,guid) => new FeeSimpleOr { Name = name, GuidString = guid } },
             { "Cabinet", (name,guid) => new FeeCabinet { Name = name, GuidString = guid } },
             { "CabinetElement", (name,guid) => new FeeCabinetElement { Name = name, GuidString = guid } },
         };
@@ -687,7 +689,9 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 return ctor(name, guid);
             }
 
-            return null;
+            // Keep SDK types without a specialized validation model in the
+            // scene snapshot. Reverse export must never silently lose them.
+            return new FeeAbstractObject { Name = name, GuidString = guid, FeeType = type };
 
             ////Fallback with FeeAbstractObject as object
             //return new FeeAbstractObject()

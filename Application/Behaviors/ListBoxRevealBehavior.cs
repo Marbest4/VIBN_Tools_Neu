@@ -70,7 +70,7 @@ public static class ListBoxRevealBehavior
 
         var revision = (long)listBox.GetValue(RevealRevisionProperty) + 1;
         listBox.SetValue(RevealRevisionProperty, revision);
-        if (args.NewValue is null)
+        if (args.NewValue is null || !GetIsEnabled(listBox))
             return;
 
         // A direct mouse/keyboard selection is already visible by definition.
@@ -84,7 +84,7 @@ public static class ListBoxRevealBehavior
         var item = args.NewValue;
         _ = listBox.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
         {
-            if ((long)listBox.GetValue(RevealRevisionProperty) != revision)
+            if (!GetIsEnabled(listBox) || (long)listBox.GetValue(RevealRevisionProperty) != revision)
                 return;
             if (!listBox.Items.Contains(item))
                 return;

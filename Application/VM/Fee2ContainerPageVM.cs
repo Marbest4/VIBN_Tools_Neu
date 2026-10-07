@@ -607,31 +607,9 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             return;
         }
 
-        var items = GetDraggedObjects(request.Source);
-        if (items.Count == 0 || !editor.Containers.Contains(container))
-            return;
-        var availableGuids = editor.NonContainerObjects.Select(item => item.Guid)
-            .Concat(editor.CreateObjectAssociations().Select(item => item.ObjectGuid)).ToHashSet();
-        if (items.Any(item => !availableGuids.Contains(item.Guid)))
-        {
-            StatusText = "Die Auswahl gehört nicht mehr zum aktiven FEE-Root. Bitte erneut auswählen.";
-            return;
-        }
-        if (items.Any(item => !Fee2ContainerRootEditor.HasMatchingName(item, container)))
-        {
-            StatusText = $"Zuordnung nicht geändert: Alle ausgewählten FEE-Objekte müssen den Namen '{container.Component}' besitzen.";
-            return;
-        }
-        foreach (var item in items)
-        {
-            editor.AssignObjectToContainer(item, container);
-            var existing = editor.NonContainerObjects.FirstOrDefault(value => value.Guid == item.Guid);
-            if (existing is not null)
-            {
-                editor.NonContainerObjects.Remove(existing);
-                NonContainerObjects.Remove(existing);
-            }
-        }
+        editor.AssignObjectToContainer(item, container);
+        editor.NonContainerObjects.Remove(item);
+        NonContainerObjects.Remove(item);
         SelectedFoundContainer = container;
         StatusText = $"{items.Count} FEE-Objekt(e) wurden dem Container '{container.Component}' zugeordnet. " +
                      "Die Zuordnung wird im bearbeiteten FEE2Container-Arbeitsstand mitgeführt.";
@@ -696,11 +674,14 @@ public sealed class Fee2ContainerRootSelectionVM : NotifyBase
 public sealed class Fee2ContainerRootEditor
 {
     private readonly Fee2ContainerRoot _root;
+    private readonly Dictionary<Guid, XElement> _sourceObjects = [];
 
     public Fee2ContainerRootEditor(Fee2ContainerRoot root)
     {
         _root = root;
         var document = root.Provenance?.ContainerDocument;
+        foreach (var element in document?.Descendants("SimObject") ?? [])
+            if (Guid.TryParse(element.Element("Guid")?.Value, out var guid)) _sourceObjects[guid] = new XElement(element);
         if (document is not null)
         {
             var bindings = root.Provenance!.SignalBindings
@@ -742,7 +723,6 @@ public sealed class Fee2ContainerRootEditor
         foreach (var item in root.NonContainerObjects ?? [])
             NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
         ObjectAssociations.AddRange(root.ObjectAssociations ?? []);
-        RefreshObjectAssociations();
     }
 
     public ObservableCollection<Fee2ContainerFoundContainerVM> Containers { get; } = new();
@@ -818,6 +798,17 @@ public sealed class Fee2ContainerRootEditor
     public IReadOnlyList<FeeContainerObjectAssociation> CreateObjectAssociations() =>
         ObjectAssociations.ToArray();
 
+    private XElement CreateObjectElement(FeeContainerObjectAssociation association)
+    {
+        var element = _sourceObjects.TryGetValue(association.ObjectGuid, out var source)
+            ? new XElement(source) : VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Object(
+                association.ObjectGuid.ToString("D"), association.ObjectName, association.ObjectType, association.Role);
+        element.SetElementValue("Name", association.ObjectName);
+        element.SetElementValue("FeeType", association.ObjectType);
+        element.SetElementValue("Role", association.Role);
+        return element;
+    }
+
     public FeeContainerProvenanceSnapshot CreateSnapshot()
     {
         var containerElements = new List<XElement>();
@@ -838,7 +829,8 @@ public sealed class Fee2ContainerRootEditor
                     new XElement("DataType", signal.DataType),
                     new XElement("Signal", signal.Signal),
                     new XElement("Slot", signal.Slot),
-                    new XElement("Note", signal.Note)));
+                    new XElement("Note", signal.Note),
+                    signal.VariableGuid is Guid guid ? new XAttribute("feeGuid", guid.ToString("D")) : null));
                 if (signal.VariableGuid is Guid variableGuid)
                     bindings.Add(new FeeContainerSignalBinding(containerIndex, entryIndex, variableGuid));
                 if (!string.IsNullOrWhiteSpace(signal.Signal))
@@ -858,7 +850,10 @@ public sealed class Fee2ContainerRootEditor
                 new XAttribute("id", container.Id),
                 new XElement("Component", container.Component),
                 new XElement("Type", CanonicalizeContainerType(container.Type)),
-                dataList));
+                dataList,
+                new XElement("SimObjects", ObjectAssociations.Where(item => item.ContainerId == container.Id)
+                    .Select(item => CreateObjectElement(item)))));
+
         }
 
         var document = new XDocument(
@@ -868,7 +863,8 @@ public sealed class Fee2ContainerRootEditor
                 new XAttribute("createdAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
                 new XAttribute("autoCreateFile", string.Empty),
                 new XAttribute("zuli", string.Empty),
-                new XElement("ContainerList", containerElements)));
+                new XElement("ContainerList", containerElements),
+                _root.Provenance?.ContainerDocument.Root?.Element("FeeInventory") is { } inventory ? new XElement(inventory) : null));
         return new FeeContainerProvenanceSnapshot(
             new Dictionary<string, string>(StringComparer.Ordinal),
             document,
@@ -916,7 +912,6 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
     public int OriginalSignalCount { get; }
     public string AssociatedObjects => _associatedObjects;
-    public ObservableCollection<FeeContainerObjectAssociation> AssociatedObjectItems { get; } = new();
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
     public bool IsRelatedToSelection
     {
@@ -930,6 +925,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
         AssociatedObjectItems.ReplaceWith(associations.ToArray());
         _associatedObjects = string.Join(", ", AssociatedObjectItems.Select(item => $"{item.ObjectName} ({item.ObjectType})"));
         OnPropertyChanged(nameof(AssociatedObjects));
+        OnPropertyChanged(nameof(AssociatedObjectCount));
     }
 }
 

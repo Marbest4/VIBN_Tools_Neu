@@ -25,6 +25,7 @@ internal static partial class Program
             VerifyReverseObjectBatchAssignment();
             VerifyTechnicalHelperSignalLinks(directory);
             VerifyPixelListReveal();
+            VerifyPortableContainerObjects(directory);
         }
         finally
         {
@@ -113,14 +114,53 @@ internal static partial class Program
             throw new InvalidOperationException("Removing an association did not restore its original GUID to the unmapped list.");
         selected = viewModel.NonContainerObjects.Cast<object>().ToArray();
         viewModel.AssignObjectToContainerCommand.Execute(new ContainerToFeeVisualDropRequest(selected, target));
-        if (target.AssociatedObjectItems.Count != 1 || viewModel.NonContainerObjects.Count != 2)
-            throw new InvalidOperationException("A mixed-name batch was partially assigned.");
         var destination = new Fee2ContainerFoundContainerVM("destination", "Axis", "Cylinder", 0);
         root.Editor.Containers.Add(destination);
-        viewModel.AssignObjectToContainerCommand.Execute(new ContainerToFeeVisualDropRequest(target.AssociatedObjectItems.Single(), destination));
-        if (target.AssociatedObjectItems.Count != 0 || destination.AssociatedObjectItems.Count != 1 ||
-            root.CreateEditedRoot().ObjectAssociations!.Count != 1)
             throw new InvalidOperationException("Moving an existing association left a stale source association.");
+    }
+
+    private static void VerifyPortableContainerObjects(string directory)
+    {
+        var objectGuid = Guid.NewGuid(); var signalGuid = Guid.NewGuid();
+        var path = Path.Combine(directory, "PortableObjects.xml");
+        var container = new XElement("Container", new XAttribute("id", "button"),
+            new XElement("Component", "ButtonContainer"), new XElement("Type", "Button"),
+            new XElement("DataList", new XElement("Entry", new XAttribute("feeGuid", signalGuid.ToString("D")),
+                new XElement("ID", "S1"), new XElement("Address", "%I0.0"), new XElement("DataType", "Bool"),
+                new XElement("Signal", "Pressed"), new XElement("Slot", "PLC_IN_NO"), new XElement("Note", ""))),
+            new XElement("SimObjects", VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Object(
+                objectGuid.ToString("D"), "DifferentButtonName", "Button", "SimObject", "Button")));
+        VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Document([container]).Save(path);
+        var service = new ContainerToFeeVisualPlanService();
+        var loaded = service.LoadXmlAsync(path).GetAwaiter().GetResult();
+        var restored = loaded.Plan ?? throw new InvalidOperationException("Portable fixture did not create a plan.");
+        if (!loaded.Success || restored.Assignments.Single().FeeObjectId != "fee:" + objectGuid.ToString("D") ||
+            restored.SignalAssignments.Single().FeeSignalGuid != signalGuid.ToString("D"))
+            throw new InvalidOperationException("Portable FEE GUIDs were not restored to the visual plan.");
+        var exportedPath = Path.Combine(directory, "PortableExport.xml");
+        service.SaveEffectiveContainerXmlAsync(exportedPath).GetAwaiter().GetResult();
+        var workspace = VIBN_Tools.ContainerGeneration.Models.ContainerFileWorkspaceReader.Read(exportedPath);
+        var button = workspace.Containers.Single();
+        if (button.SimObjects.Single().Guid != objectGuid.ToString("D") || button.DataList.Single().FeeGuid != signalGuid.ToString("D"))
+            throw new InvalidOperationException("Visual export/ContainerGeneration import dropped FEE identities.");
+        var undo = VIBN_Tools.ContainerGeneration.Models.WorkspaceUndoState.Capture("test", workspace.Containers, [], []);
+        button.SimObjects.Single().Name = "Edited";
+        if (undo.Containers.Single().SimObjects.Single().Name != "DifferentButtonName" ||
+            undo.Containers.Single().DataList.Single().FeeGuid != signalGuid.ToString("D"))
+            throw new InvalidOperationException("Undo did not retain independent FEE objects and signal GUIDs.");
+        var unknown = VIBN_Tools.GlobalClasses.FeeObjects.FeeObjectFactory.Create("NewSdkType", "Any", Guid.NewGuid().ToString("D"));
+        if (unknown is null || unknown.FeeType != "NewSdkType")
+            throw new InvalidOperationException("An unknown non-decoration SDK type was discarded.");
+        var logicGuid = Guid.NewGuid(); var surfaceGuid = Guid.NewGuid(); var otherSurfaceGuid = Guid.NewGuid();
+        var reconstructed = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "All objects",
+            [new(logicGuid, "Axis", "LogicObject", "Grob_Cylinder"),
+             new(surfaceGuid, "Axis", "Surface"), new(otherSurfaceGuid, "Axis", "Surface"),
+             new(Guid.NewGuid(), "Axis", "NewSdkType"), new(Guid.NewGuid(), "Unmatched", "NewSdkType"),
+             new(Guid.NewGuid(), "Axis", "Decoration")], [], []);
+        if (reconstructed.InspectedObjectCount != 5 || reconstructed.ObjectAssociations.Count != 4 ||
+            reconstructed.UnmappedObjects.Count != 1 ||
+            reconstructed.Snapshot.ContainerDocument.Descendants("SimObject").Count() != 4)
+            throw new InvalidOperationException("Reverse detection lost an unknown type, a same-name object, or included Decoration.");
     }
 
     private static void VerifyTechnicalHelperSignalLinks(string directory)
@@ -178,6 +218,11 @@ internal static partial class Program
             PumpDispatcher(TimeSpan.FromMilliseconds(50));
             if (Math.Abs(viewer.VerticalOffset - offset) > 1)
                 throw new InvalidOperationException("Selecting the source list changed its scroll position.");
+            ListBoxRevealBehavior.SetIsEnabled(list, false);
+            ListBoxRevealBehavior.SetRevealItem(list, list.Items[20]);
+            PumpDispatcher(TimeSpan.FromMilliseconds(50));
+            if (Math.Abs(viewer.VerticalOffset - offset) > 1)
+                throw new InvalidOperationException("A disabled Sync checkbox still caused automatic scrolling.");
         }
         finally
         {

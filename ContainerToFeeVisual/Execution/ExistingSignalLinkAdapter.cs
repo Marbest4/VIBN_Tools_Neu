@@ -12,7 +12,14 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// </summary>
 internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
 {
-    public async Task<VisualExecutionResult> ExecuteAsync(
+    public Task<VisualExecutionResult> ExecuteAsync(
+        VisualPlan plan,
+        IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
+        IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,
+        CancellationToken cancellationToken) => FeeMutationScope.RunAsync(
+        () => ExecuteCoreAsync(plan, runtimeObjects, runtimeInterfaces, cancellationToken), cancellationToken);
+
+    private async Task<VisualExecutionResult> ExecuteCoreAsync(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,

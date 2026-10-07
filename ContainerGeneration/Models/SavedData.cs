@@ -6,6 +6,8 @@ namespace VIBN_Tools.ContainerGeneration.Models
 {
     public class SavedData
     {
+        [XmlAnyElement("FeeInventory")]
+        public System.Xml.XmlElement? FeeInventory { get; set; }
         public List<ContainerEntry> FilteredEntries { get; set; } = new List<ContainerEntry>();
         public List<ContainerEntry> UnassignedEntries { get; set; } = new List<ContainerEntry>();
         public List<ContainerData> ContainerList { get; set; } = new List<ContainerData>();

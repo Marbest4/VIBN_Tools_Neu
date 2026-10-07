@@ -27,15 +27,21 @@ public sealed record WorkspaceEntrySnapshot(
     string Note,
     bool WasManuallyEdited,
     ContainerEntryReviewState ReviewState,
-    string ReviewMessage);
+    string ReviewMessage,
+    string FeeGuid = "");
+
+public sealed record WorkspaceContainerFeeSnapshot(string Id, string Name, string Type, IReadOnlyList<ContainerFeeObject> Objects);
 
 public sealed class GenerationWorkspaceSnapshot
 {
     public IReadOnlyList<WorkspaceEntrySnapshot> Entries { get; }
+    public IReadOnlyList<WorkspaceContainerFeeSnapshot> FeeObjects { get; }
 
-    public GenerationWorkspaceSnapshot(IReadOnlyList<WorkspaceEntrySnapshot> entries)
+    public GenerationWorkspaceSnapshot(IReadOnlyList<WorkspaceEntrySnapshot> entries,
+        IReadOnlyList<WorkspaceContainerFeeSnapshot>? feeObjects = null)
     {
         Entries = entries;
+        FeeObjects = feeObjects ?? [];
     }
 }
 
@@ -291,8 +297,9 @@ public static class GenerationWorkspaceReconciler
         IEnumerable<ContainerEntry> filtered)
     {
         var entries = new List<WorkspaceEntrySnapshot>();
+        var sourceContainers = containers.ToArray();
 
-        foreach (var container in containers)
+        foreach (var container in sourceContainers)
         {
             entries.AddRange(container.DataList.Select(entry =>
                 CreateSnapshot(entry, WorkspaceEntryLocation.Container, container)));
@@ -313,7 +320,9 @@ public static class GenerationWorkspaceReconciler
                         ContainerEntryReviewState.ManuallyEdited)
                     .ThenBy(entry => entry.Location)
                     .First())
-                .ToList());
+                .ToList(), sourceContainers.Where(container => container.SimObjects.Count > 0)
+                    .Select(container => new WorkspaceContainerFeeSnapshot(container.Id, container.Component, container.Type,
+                        container.SimObjects.Select(item => item.Clone()).ToArray())).ToArray());
     }
 
     public static ReimportSummary Reconcile(
@@ -410,6 +419,7 @@ public static class GenerationWorkspaceReconciler
                     filtered);
 
                 current.Entry.Slot = previous.Slot;
+                current.Entry.FeeGuid = previous.FeeGuid;
                 if (!string.IsNullOrWhiteSpace(previous.Note))
                     current.Entry.Note = previous.Note;
 
@@ -575,6 +585,19 @@ public static class GenerationWorkspaceReconciler
                 targetEntry: restoredEntry));
         }
 
+        foreach (var previous in snapshot.FeeObjects)
+        {
+            var matches = containers.Where(container => container.Component == previous.Name && container.Type == previous.Type).ToArray();
+            if (matches.Length > 1) continue;
+            var container = matches.SingleOrDefault();
+            if (container is null)
+            {
+                container = new ContainerData { Id = previous.Id, Component = previous.Name, Type = previous.Type };
+                containers.Add(container);
+            }
+            foreach (var item in previous.Objects)
+                if (!container.SimObjects.Any(existing => existing.Guid == item.Guid)) container.SimObjects.Add(item.Clone());
+        }
         return new ReimportSummary(
             preserved,
             recognized,
@@ -775,7 +798,7 @@ public static class GenerationWorkspaceReconciler
             entry.Note,
             entry.IsManuallyEdited,
             entry.ReviewState,
-            entry.ReviewMessage);
+            entry.ReviewMessage, entry.FeeGuid);
     }
 
     private static IEnumerable<CurrentEntry> EnumerateCurrentEntries(
@@ -827,6 +850,7 @@ public static class GenerationWorkspaceReconciler
         var entry = new ContainerEntry
         {
             SignalId = snapshot.SignalId,
+            FeeGuid = snapshot.FeeGuid,
             ID = snapshot.Id,
             Address = snapshot.Address,
             Signal = snapshot.Signal,

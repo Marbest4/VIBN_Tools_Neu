@@ -10,7 +10,7 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// Coordinates parsing, sidecar persistence, validated drag/drop changes,
 /// undo/redo and execution through the unchanged legacy generator.
 /// </summary>
-public sealed class ContainerToFeeVisualPlanService
+public sealed partial class ContainerToFeeVisualPlanService
 {
     private readonly IVisualPlanLogger _logger;
     private readonly ContainerXmlVisualPlanParser _parser;
@@ -1219,11 +1219,10 @@ public sealed class ContainerToFeeVisualPlanService
     {
         var plan = CurrentPlan ?? throw new InvalidOperationException("Es ist kein visueller Plan geladen.");
         cancellationToken.ThrowIfCancellationRequested();
-        var effectiveDocument = RuntimeVisualPlanBinder.CreateEffectiveDocument(plan);
-        var includedIds = CreateEffectiveIncludedContainerIds(plan, effectiveDocument);
-        var snapshot = FeeContainerProvenanceCodec.Create(
-            effectiveDocument,
-            includedIds,
+        var effectiveDocument = CreateEffectiveContainerDocument();
+        var snapshot = new FeeContainerProvenanceSnapshot(
+            new Dictionary<string, string>(), effectiveDocument, [],
+            effectiveDocument.Descendants("Container").Count(), effectiveDocument.Descendants("Entry").Count(),
             plan.SourceFingerprint);
         cancellationToken.ThrowIfCancellationRequested();
         await Task.Run(

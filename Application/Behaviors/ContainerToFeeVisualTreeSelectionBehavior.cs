@@ -36,6 +36,11 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             typeof(ContainerToFeeVisualTreeSelectionBehavior),
             new PropertyMetadata(false, OnIsEnabledChanged));
 
+    public static readonly DependencyProperty RevealEnabledProperty = DependencyProperty.RegisterAttached(
+        "RevealEnabled", typeof(bool), typeof(ContainerToFeeVisualTreeSelectionBehavior), new PropertyMetadata(true));
+    public static bool GetRevealEnabled(DependencyObject element) => (bool)element.GetValue(RevealEnabledProperty);
+    public static void SetRevealEnabled(DependencyObject element, bool value) => element.SetValue(RevealEnabledProperty, value);
+
     public static readonly DependencyProperty DeleteCommandProperty =
         DependencyProperty.RegisterAttached(
             "DeleteCommand",
@@ -189,7 +194,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
 
         var revision = (long)treeView.GetValue(SelectionRevealRevisionProperty) + 1;
         treeView.SetValue(SelectionRevealRevisionProperty, revision);
-        if (args.NewValue is null)
+        if (args.NewValue is null || !GetRevealEnabled(treeView))
             return;
 
         // Keep the viewport stable when the user clicked the tree itself.
@@ -202,7 +207,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
 
         treeView.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            if ((long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
+            if (!GetRevealEnabled(treeView) || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
                 return;
             try
             {
