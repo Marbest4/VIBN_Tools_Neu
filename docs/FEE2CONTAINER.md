@@ -21,7 +21,7 @@ Zusätzlich erhält jedes neu erzeugte Containerobjekt eigene versionierte Prope
 ## Bedienung
 
 1. In **Project Settings** eine FEE-Verbindung herstellen.
-2. Den Hauptreiter **FEE2Container** öffnen.
+2. **ModelValidation → Update Objects** erfolgreich ausführen, anschließend **FEE2Container** öffnen. Nach jedem Disconnect und Reconnect ist erneut **Update Objects** nötig; bis dahin bleibt **FEE-Roots einlesen** gesperrt.
 3. **FEE-Roots einlesen** wählen. Der Projektbestand wird einmal über denselben Batch-Leseweg wie ModelValidation geladen und anschließend im Speicher je Root ausgewertet; dadurch entfällt die frühere rekursive Root-für-Root-Abfrage.
 4. Einen Root für die Detailansicht anklicken und einen oder mehrere Roots über die Spalte **Export** auswählen. Auch bei `FEE-Struktur (rekonstruiert)` werden Containeranzahl, Signalanzahl und Prüfhinweise bereits beim Einlesen ermittelt. Unter der Root-Liste zeigen drei jeweils vertikal scrollbar gehaltene Tabellen die erkannten Container, deren Signal-/Slot-/Adresszuordnungen und sämtliche nicht eindeutig containerrelevanten Objekte des Root-Teilbaums. Die Auswahl arbeitet in beide Richtungen: Der angeklickte Datensatz bleibt dunkelblau, während ein Container alle ihm zugeordneten Signale hellblau hervorhebt und ein Signal den zugehörigen Container hellblau hervorhebt. Container und Signale lassen sich über **Export** ein- oder ausschließen und in den editierbaren Feldern korrigieren. Ein nicht zugeordnetes Objekt kann nach bewusster Wahl von Komponente und Containertyp als prüfbarer Container übernommen werden.
 
@@ -49,3 +49,10 @@ Beim Umschalten der Root-Zeile werden ausstehende Cross-List-Zentrierungen des v
 Beim Root-Wechsel werden die drei Detailansichten unter einer gemeinsamen `ICollectionView`-Aktualisierung und je einem Collection-Reset ersetzt; die alte Selektion wird vor dem Austausch gelöst. Damit erhält WPF keinen Zwischenzustand aus alten Zeilenindizes und bereits neuen Collections. Die ergänzenden `TagEntries`-Abfragen verwenden den gemeinsamen FEE-Objektclient seriell; parallele `GetProperty`-Aufrufe hatten sich bei großen Modellen gegenseitig blockiert. Für einen alten Root ohne Root-Provenienz werden untergeordnete Tag-Properties nicht einzeln abgefragt, weil die vollständige strukturelle Rekonstruktion bereits aus dem ModelValidation-Snapshot erfolgt. Ein einzelner im Hersteller-SDK selbst blockierender Aufruf bleibt ohne separate Worker-EXE weiterhin nicht hart terminierbar.
 
 `Switch` und `Fuse` werden nur als rückwärtskompatible Eingabealiasse akzeptiert. Anzeige, Bearbeitung und Export verwenden stets die kanonischen Typen `CabinetSwitch` und `CabinetFuse`.
+
+
+## Mehrfachauswahl und Objektzuordnungen
+
+In **Nicht containerrelevante FEE-Objekte** lassen sich mit Strg/Shift mehrere Zeilen auswählen. Über den Ziehgriff wird die gesamte Auswahl auf einen vorhandenen Container verschoben. Jedes Objekt muss denselben Namen wie die Containerkomponente besitzen; enthält die Auswahl einen abweichenden Namen, bleibt die gesamte Auswahl unverändert. Mehrere gleichnamige Objekte werden anhand ihrer GUID getrennt geführt, auch wenn Name und FEE-Typ identisch sind.
+
+Die Spalte **Zugeordnete FEE-Objekte** zeigt jeden Eintrag einzeln. Per Rechtsklick → **Zuordnung entfernen** wird genau dieses Objekt aus der Zuordnung entfernt und steht wieder in der Liste nicht zugeordneter Objekte zur Verfügung. Ein zugeordnetes Objekt kann auch direkt auf einen anderen Container mit demselben Namen gezogen werden; der alte Eintrag wird dabei entfernt. Diese Aktionen bearbeiten den FEE2Container-Arbeitsstand und löschen keine Szenenobjekte in FEE.

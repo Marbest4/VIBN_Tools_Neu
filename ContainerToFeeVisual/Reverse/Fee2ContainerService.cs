@@ -424,7 +424,7 @@ public sealed class Fee2ContainerService
             issues.Concat(reconstruction.Issues).ToArray());
     }
 
-    private static async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, string>>> ReadObjectTagsAsync(
+    internal static async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, string>>> ReadObjectTagsAsync(
         IEnumerable<string> guidTexts,
         CancellationToken cancellationToken)
     {

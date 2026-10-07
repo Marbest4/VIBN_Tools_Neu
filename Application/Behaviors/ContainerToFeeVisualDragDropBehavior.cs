@@ -122,7 +122,15 @@ public static class ContainerToFeeVisualDragDropBehavior
         // crossed; resolving OriginalSource later could therefore pick a
         // recycled container and link the wrong FEE object.
         state.Source = ResolveItem(element, args.OriginalSource as DependencyObject);
-        state.Owner = FindAncestor<ListBox>(element);
+        state.Owner = FindAncestor<ListBox>(element) as ItemsControl ?? FindAncestor<DataGrid>(element);
+        // The dedicated drag handle keeps an existing batch selected. WPF
+        // otherwise reduces DataGrid.SelectedItems to the clicked row before
+        // the drag threshold is crossed.
+        if (state.Source is object[] && state.Owner is DataGrid grid && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            grid.Focus();
+            args.Handled = true;
+        }
         CaptureScrollOffset(state);
     }
 
@@ -214,6 +222,11 @@ public static class ContainerToFeeVisualDragDropBehavior
             return listBox.SelectedItems.Cast<object>().ToArray();
         }
 
+        var grid = FindAncestor<DataGrid>(sourceElement);
+        if (grid?.SelectionMode == DataGridSelectionMode.Extended &&
+            grid.SelectedItems.Count > 1 && grid.SelectedItems.Contains(item))
+            return grid.SelectedItems.Cast<object>().ToArray();
+
         return item;
     }
 
@@ -274,7 +287,7 @@ public static class ContainerToFeeVisualDragDropBehavior
     {
         public Point Start { get; set; }
         public object? Source { get; set; }
-        public ListBox? Owner { get; set; }
+        public ItemsControl? Owner { get; set; }
         public bool HasScrollOffset { get; set; }
         public double VerticalOffset { get; set; }
         public double HorizontalOffset { get; set; }

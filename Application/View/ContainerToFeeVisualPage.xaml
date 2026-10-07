@@ -383,6 +383,7 @@
 
                     <ListBox Grid.Row="2" ItemsSource="{Binding Targets}"
                              SelectedItem="{Binding SelectedTarget, Mode=TwoWay}"
+                             behaviors:ListBoxRevealBehavior.IsEnabled="True"
                              behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedTarget}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -476,6 +477,7 @@
                                Text="Signalslots des ausgewählten Containers" />
                     <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}" MinHeight="190"
                              SelectedItem="{Binding SelectedSignalSlot, Mode=TwoWay}"
+                             behaviors:ListBoxRevealBehavior.IsEnabled="True"
                              behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedSignalSlot}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -634,6 +636,7 @@
                                   ToolTip="SimObjects nach Zuordnungszustand filtern" />
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeObjectsView}"
                                  SelectedItem="{Binding SelectedFeeObject, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="True"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeObject}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -773,6 +776,7 @@
                         </Grid>
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeSignalsView}"
                                  SelectedItem="{Binding SelectedFeeSignal, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="True"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeSignal}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -828,6 +832,7 @@
                     <Border Width="310" Padding="8" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
                         <ListBox ItemsSource="{Binding Issues}"
                                  SelectedItem="{Binding SelectedIssue, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="True"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedIssue}"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">

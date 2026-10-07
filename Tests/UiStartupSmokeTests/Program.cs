@@ -27,7 +27,7 @@ using VIBN_Tools.Tia.Contracts;
 
 namespace VIBN_Tools.UiStartup.SmokeTests;
 
-internal static class Program
+internal static partial class Program
 {
     [STAThread]
     private static int Main()
@@ -264,6 +264,7 @@ internal static class Program
                 throw new InvalidOperationException("The refreshed visual interface selector contains transient duplicates.");
             }
             VerifyVisualSimObjectColorAggregation();
+            VerifyFeeWorkflowRegressions();
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
                 .First(node => node.Kind == VisualNodeKind.Container);
@@ -1051,6 +1052,21 @@ internal static class Program
                 });
             SetPrivateField(service, "_hasDiscoveredFeeSimObjectLinks", true);
 
+            var duplicateLogic = new VisualFeeContainerObject(Guid.NewGuid().ToString("D"),
+                "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder");
+            SetPrivateField(service, "_feeContainerObjects", new[]
+            {
+                new VisualFeeContainerObject(logicGuid.ToString("D"), "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder"),
+                duplicateLogic,
+            });
+            var assignedTargetId = service.CurrentPlan!.Assignments.Single().TargetId;
+            if (!service.GetSimObjectConnectionState(assignedTargetId, visualJoint.Id).IsVerified)
+                throw new InvalidOperationException("A unique live link was rejected because another logic has the same name.");
+            SetPrivateField(service, "_feeContainerObjects", new[]
+            {
+                new VisualFeeContainerObject(logicGuid.ToString("D"), "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder"),
+            });
+
             var interfaceGuid = Guid.NewGuid().ToString("D");
             var feeInterface = new VisualFeeInterface(interfaceGuid, "Existing", "Test", 2);
             var matchingSignals = new[]
@@ -1131,18 +1147,18 @@ internal static class Program
             if (!ReferenceEquals(viewModel.SelectedIssue, objectIssue) ||
                 !ReferenceEquals(viewModel.SelectedTreeNode, simObject) ||
                 !availableObject.IsSynchronizationMatch ||
-                viewModel.AvailableFeeSignals.Any(item => item.IsSynchronizationMatch))
+                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 2)
             {
                 throw new InvalidOperationException(
-                    "Selecting a validation entry did not replace the previous synchronization scope with its affected FEE object.");
+                    "Selecting a validation entry did not synchronize its affected object and the signals of the same container.");
             }
             viewModel.SelectedFeeSignal = activeSignal;
             if (!ReferenceEquals(viewModel.SelectedFeeSignal, activeSignal) ||
-                viewModel.SelectedIssue is not null ||
+                !ReferenceEquals(viewModel.SelectedIssue, objectIssue) ||
                 !ReferenceEquals(viewModel.SelectedTreeNode, nodes.Single(item => item.Kind == VisualNodeKind.Signal)))
             {
                 throw new InvalidOperationException(
-                    "The newest active list selection did not replace a stale validation/tree selection.");
+                    "The signal selection did not retain its related validation issue and select the matching tree signal.");
             }
             if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||

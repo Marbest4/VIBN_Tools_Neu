@@ -163,7 +163,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             base.ApplyBatchData(data);
 
             var logicDefinition = data.AllLogicDefinitions
-                .FirstOrDefault(x => x.Guid == LogicDefinitionGuid.ToString());
+                .FirstOrDefault(x => Guid.TryParse(x.Guid, out var definitionGuid) && definitionGuid == LogicDefinitionGuid);
 
             LogicDefinitionName = logicDefinition?.Name ?? "UNDEFINED";
         }

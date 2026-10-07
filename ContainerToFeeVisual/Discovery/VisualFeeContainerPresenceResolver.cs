@@ -35,9 +35,17 @@ public static class VisualFeeContainerPresenceResolver
         foreach (var node in plan.Nodes.Where(node => node.Kind == VisualNodeKind.TechnicalHelper))
         {
             var container = FindContainer(plan, node);
-            if (container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor) ||
-                string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType))
+            if (container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
             {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType))
+            {
+                var helperMatches = objects.Where(item => item.Kind == VisualFeeContainerObjectKind.TechnicalHelper &&
+                    VisualFeeTechnicalHelperResolver.IsExpectedType(node.Name, item.Definition) &&
+                    VisualFeeTechnicalHelperResolver.MatchesIdentity(item, container)).ToArray();
+                result[node.Id] = CreatePresence(node.Id, helperMatches, $"Hilfsobjekt '{node.Name}' für '{container.Name}'");
                 continue;
             }
 
