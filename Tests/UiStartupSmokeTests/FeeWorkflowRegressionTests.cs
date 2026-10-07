@@ -114,8 +114,13 @@ internal static partial class Program
             throw new InvalidOperationException("Removing an association did not restore its original GUID to the unmapped list.");
         selected = viewModel.NonContainerObjects.Cast<object>().ToArray();
         viewModel.AssignObjectToContainerCommand.Execute(new ContainerToFeeVisualDropRequest(selected, target));
+        if (target.AssociatedObjectItems.Count != 3 || viewModel.NonContainerObjects.Count != 0)
+            throw new InvalidOperationException("An explicitly assigned mixed-name batch was rejected or partially assigned.");
         var destination = new Fee2ContainerFoundContainerVM("destination", "Axis", "Cylinder", 0);
         root.Editor.Containers.Add(destination);
+        viewModel.AssignObjectToContainerCommand.Execute(new ContainerToFeeVisualDropRequest(target.AssociatedObjectItems.First(), destination));
+        if (target.AssociatedObjectItems.Count != 2 || destination.AssociatedObjectItems.Count != 1 ||
+            root.CreateEditedRoot().ObjectAssociations!.Count != 3)
             throw new InvalidOperationException("Moving an existing association left a stale source association.");
     }
 

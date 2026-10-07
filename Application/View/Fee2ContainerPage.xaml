@@ -136,7 +136,34 @@
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="190" />
                         <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="145" />
-                        <DataGridTextColumn Header="Zugeordnete FEE-Objekte" Binding="{Binding AssociatedObjects}" Width="240" IsReadOnly="True" />
+                        <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" Width="100" IsReadOnly="True" />
+                        <DataGridTemplateColumn Header="Zugeordnete FEE-Objekte" Width="240" IsReadOnly="True">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ItemsControl ItemsSource="{Binding AssociatedObjectItems}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Padding="4,2" Cursor="Hand"
+                                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                        behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
+                                                        ToolTip="{Binding ObjectGuid}">
+                                                    <Border.ContextMenu>
+                                                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                            <MenuItem Header="Zuordnung entfernen"
+                                                                      Command="{Binding PlacementTarget.Tag.RemoveObjectAssociationCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                                                      CommandParameter="{Binding}" />
+                                                        </ContextMenu>
+                                                    </Border.ContextMenu>
+                                                    <TextBlock TextWrapping="Wrap">
+                                                        <Run Text="{Binding ObjectName}" /><Run Text=" (" /><Run Text="{Binding ObjectType}" /><Run Text=") · " /><Run Text="{Binding Role}" />
+                                                    </TextBlock>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Ursprüngliche Einträge" Binding="{Binding OriginalSignalCount}" Width="Auto" IsReadOnly="True" />
                         <DataGridTemplateColumn Header="Aktion" Width="Auto">
                             <DataGridTemplateColumn.CellTemplate>

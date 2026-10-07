@@ -4,8 +4,12 @@
         Title="ContainerFiles – Vergleich und Änderungsübersicht" Width="1400" Height="850"
         MinWidth="950" MinHeight="600" WindowStartupLocation="CenterOwner">
     <Window.Resources>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
+        <Style TargetType="DataGridCell"><Setter Property="Foreground" Value="Black"/></Style>
         <Style TargetType="Button"><Setter Property="Margin" Value="0,0,8,6"/><Setter Property="Padding" Value="10,6"/></Style>
         <Style TargetType="DataGridRow">
+            <Setter Property="Foreground" Value="Black"/>
             <Style.Triggers><DataTrigger Binding="{Binding IsDifferent}" Value="True">
                 <Setter Property="Background" Value="#FFFFE5AD"/>
             </DataTrigger></Style.Triggers>

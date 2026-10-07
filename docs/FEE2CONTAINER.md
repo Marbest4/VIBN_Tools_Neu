@@ -49,3 +49,21 @@ Beim Umschalten der Root-Zeile werden ausstehende Cross-List-Zentrierungen des v
 Beim Root-Wechsel werden die drei Detailansichten unter einer gemeinsamen `ICollectionView`-Aktualisierung und je einem Collection-Reset ersetzt; die alte Selektion wird vor dem Austausch gelöst. Damit erhält WPF keinen Zwischenzustand aus alten Zeilenindizes und bereits neuen Collections. Die ergänzenden `TagEntries`-Abfragen verwenden den gemeinsamen FEE-Objektclient seriell; parallele `GetProperty`-Aufrufe hatten sich bei großen Modellen gegenseitig blockiert. Für einen alten Root ohne Root-Provenienz werden untergeordnete Tag-Properties nicht einzeln abgefragt, weil die vollständige strukturelle Rekonstruktion bereits aus dem ModelValidation-Snapshot erfolgt. Ein einzelner im Hersteller-SDK selbst blockierender Aufruf bleibt ohne separate Worker-EXE weiterhin nicht hart terminierbar.
 
 `Switch` und `Fuse` werden nur als rückwärtskompatible Eingabealiasse akzeptiert. Anzeige, Bearbeitung und Export verwenden stets die kanonischen Typen `CabinetSwitch` und `CabinetFuse`.
+
+
+## Mehrfachauswahl und Objektzuordnungen
+
+In **FEE-Objekte ohne eindeutige Containerzuordnung** lassen sich mit Strg/Shift mehrere Zeilen auswählen. Über den Ziehgriff wird die gesamte Auswahl auf einen vorhandenen Container verschoben. Für automatische Zuordnungen muss der Objektname eindeutig zur Containerkomponente passen. Die ausdrücklich manuelle Zuordnung per Drag-and-drop erlaubt auch unterschiedliche Namen, einschließlich gemischter Mehrfachselektionen. Mehrere gleichnamige Objekte werden anhand ihrer GUID getrennt geführt, auch wenn Name und FEE-Typ identisch sind.
+
+Die Spalte **Zugeordnete FEE-Objekte** zeigt jeden Eintrag einzeln. Per Rechtsklick → **Zuordnung entfernen** wird genau dieses Objekt aus der Zuordnung entfernt und steht wieder in der Liste nicht zugeordneter Objekte zur Verfügung. Ein zugeordnetes Objekt kann auch direkt auf einen anderen Container gezogen werden, auch bei abweichendem Namen; der alte Eintrag wird dabei entfernt. Diese Aktionen bearbeiten den FEE2Container-Arbeitsstand und löschen keine Szenenobjekte in FEE.
+
+
+## FEE-Objekte im ContainerFile
+
+Der Szenen-Snapshot erhält auch SDK-Typen ohne spezielles ModelValidation-Modell. Nur `Decoration` wird verworfen. Objekte außerhalb eines BasicFrames erscheinen im Bereich **Projektobjekte ohne BasicFrame**. Unbekannte Typen und mehrdeutige Namen bleiben sichtbar und manuell zuordenbar; ein unbekannter FEE-Typ allein begründet keinen geratenen Container-Typ.
+
+Die Spalte **FEE-Objekte** nennt die Anzahl der zugeordneten Objekte. **Zugeordnete FEE-Objekte** zeigt Name, tatsächlichen FEE-Typ, Rolle und GUID als Tooltip. Das primäre Containerobjekt, weitere SimObjects und technische Hilfsobjekte werden getrennt gespeichert. GUIDs unterscheiden Objekte mit identischem Namen und Typ.
+
+Beim Export werden Objektzuordnungen und Signal-GUIDs erhalten. Das gemeinsame, abwärtskompatibel erweiterte `CAAResult.xsd` akzeptiert `SimObjects` pro Container und optionalen verfügbaren Bestand unter `FeeInventory`. ContainerGeneration übernimmt Objektidentitäten beim ContainerFile-Import, Export, Speichern des Arbeitsstands und Undo. Eine Objektzuordnung ohne kompatibles Generatorziel bleibt eine dokumentierte Zugehörigkeit; dadurch wird keine unbekannte Slotverknüpfung erfunden.
+
+Zur Prüfung des echten Projektbestands: nach **Update Objects** den Root einlesen, **Erkannte Container**, zugeordnete Objekte und nicht zugeordnete Objekte kontrollieren, dann exportieren und in ContainerGeneration erneut laden. Eine vollständige Erkennung eines konkreten FEE-Projekts muss mit dem dort verwendeten SDK und Modell geprüft werden.

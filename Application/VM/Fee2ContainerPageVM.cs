@@ -607,9 +607,26 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             return;
         }
 
-        editor.AssignObjectToContainer(item, container);
-        editor.NonContainerObjects.Remove(item);
-        NonContainerObjects.Remove(item);
+        var items = GetDraggedObjects(request.Source);
+        if (items.Count == 0 || !editor.Containers.Contains(container))
+            return;
+        var availableGuids = editor.NonContainerObjects.Select(item => item.Guid)
+            .Concat(editor.CreateObjectAssociations().Select(item => item.ObjectGuid)).ToHashSet();
+        if (items.Any(item => !availableGuids.Contains(item.Guid)))
+        {
+            StatusText = "Die Auswahl gehört nicht mehr zum aktiven FEE-Root. Bitte erneut auswählen.";
+            return;
+        }
+        foreach (var item in items)
+        {
+            editor.AssignObjectToContainer(item, container);
+            var existing = editor.NonContainerObjects.FirstOrDefault(value => value.Guid == item.Guid);
+            if (existing is not null)
+            {
+                editor.NonContainerObjects.Remove(existing);
+                NonContainerObjects.Remove(existing);
+            }
+        }
         SelectedFoundContainer = container;
         StatusText = $"{items.Count} FEE-Objekt(e) wurden dem Container '{container.Component}' zugeordnet. " +
                      "Die Zuordnung wird im bearbeiteten FEE2Container-Arbeitsstand mitgeführt.";
@@ -723,6 +740,13 @@ public sealed class Fee2ContainerRootEditor
         foreach (var item in root.NonContainerObjects ?? [])
             NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
         ObjectAssociations.AddRange(root.ObjectAssociations ?? []);
+        foreach (var container in document?.Descendants("Container") ?? [])
+            foreach (var item in VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects(container))
+                if (Guid.TryParse(item.Element("Guid")?.Value, out var guid) && !ObjectAssociations.Any(association => association.ObjectGuid == guid))
+                    ObjectAssociations.Add(new FeeContainerObjectAssociation(guid, item.Element("Name")?.Value ?? "",
+                        item.Element("FeeType")?.Value ?? "", Guid.Empty, container.Attribute("id")?.Value ?? "",
+                        "Explizite Zuordnung aus ContainerFile", item.Element("Role")?.Value ?? "SimObject"));
+        RefreshObjectAssociations();
     }
 
     public ObservableCollection<Fee2ContainerFoundContainerVM> Containers { get; } = new();
@@ -912,6 +936,8 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
     public int OriginalSignalCount { get; }
     public string AssociatedObjects => _associatedObjects;
+    public int AssociatedObjectCount => AssociatedObjectItems.Count;
+    public ObservableCollection<FeeContainerObjectAssociation> AssociatedObjectItems { get; } = new();
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
     public bool IsRelatedToSelection
     {
