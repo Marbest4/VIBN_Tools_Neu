@@ -28,7 +28,8 @@ namespace VIBN_Tools.ContainerGeneration.Utils
             List<ComponentContainer> containerList,
             string filePath,
             string? autoCrateFileName = null,
-            string? zuliFileName = null)
+            string? zuliFileName = null,
+            XmlElement? feeInventory = null)
         {
             string currentDateTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             Version? version = (Assembly.GetEntryAssembly() ?? Assembly.GetExecutingAssembly())
@@ -41,7 +42,8 @@ namespace VIBN_Tools.ContainerGeneration.Utils
                 CreatedAt = currentDateTime,
                 AutoCreateFile = autoCrateFileName ?? string.Empty,
                 Zuli = zuliFileName ?? string.Empty,
-                ContainerList = containerList
+                ContainerList = containerList,
+                FeeInventory = feeInventory
             };
 
             var dirName = Path.GetDirectoryName(filePath);

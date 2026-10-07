@@ -32,7 +32,7 @@
         <StackPanel>
             <TextBlock FontSize="24" FontWeight="SemiBold" Text="FEE2Container" />
             <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
-                       Text="Zeigt nur die obersten BasicFrames als auswählbare Hauptknoten. Deren Container liegen in den Ergebnislisten darunter. Container2FEE-Provenienz ermöglicht einen exakten Round-Trip; bestehende Modelle werden aus unterstützten Objekttypen sowie ihren Signal- und Slotzuordnungen rekonstruiert und mit Prüfhinweisen gekennzeichnet." />
+                       Text="Liest alle FEE-Objekte außer Decoration. BasicFrames und Projektobjekte ohne BasicFrame bilden die auswählbaren Bereiche. Container zeigen Signale und FEE-Objekte getrennt. Eindeutige gleichnamige Objekte werden automatisch zugeordnet; andere und mehrdeutige Objekte bleiben für die manuelle Zuordnung verfügbar." />
         </StackPanel>
 
         <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
@@ -136,7 +136,34 @@
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="190" />
                         <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="145" />
-                        <DataGridTextColumn Header="Zugeordnete FEE-Objekte" Binding="{Binding AssociatedObjects}" Width="240" IsReadOnly="True" />
+                        <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" Width="100" IsReadOnly="True" />
+                        <DataGridTemplateColumn Header="Zugeordnete FEE-Objekte" Width="240" IsReadOnly="True">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ItemsControl ItemsSource="{Binding AssociatedObjectItems}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Padding="4,2" Cursor="Hand"
+                                                        Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                        behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
+                                                        ToolTip="{Binding ObjectGuid}">
+                                                    <Border.ContextMenu>
+                                                        <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                                            <MenuItem Header="Zuordnung entfernen"
+                                                                      Command="{Binding PlacementTarget.Tag.RemoveObjectAssociationCommand, RelativeSource={RelativeSource AncestorType={x:Type ContextMenu}}}"
+                                                                      CommandParameter="{Binding}" />
+                                                        </ContextMenu>
+                                                    </Border.ContextMenu>
+                                                    <TextBlock TextWrapping="Wrap">
+                                                        <Run Text="{Binding ObjectName}" /><Run Text=" (" /><Run Text="{Binding ObjectType}" /><Run Text=") · " /><Run Text="{Binding Role}" />
+                                                    </TextBlock>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Ursprüngliche Einträge" Binding="{Binding OriginalSignalCount}" Width="Auto" IsReadOnly="True" />
                         <DataGridTemplateColumn Header="Aktion" Width="Auto">
                             <DataGridTemplateColumn.CellTemplate>
@@ -193,12 +220,13 @@
 
             <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
                           ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" ShowsPreview="True" />
-            <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="Nicht containerrelevante FEE-Objekte – vollständig prüfen und bei Bedarf manuell zuordnen">
+            <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="FEE-Objekte ohne eindeutige Containerzuordnung – vollständig prüfen und bei Bedarf manuell zuordnen">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                     <TextBox Margin="4" Padding="6,3" Text="{Binding ObjectSearchText, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Nicht zugeordnete Objekte nach Name, FEE-Typ, Grund oder Zielcontainer durchsuchen." />
                 <DataGrid Grid.Row="1" ItemsSource="{Binding NonContainerObjectsView}" AutoGenerateColumns="False"
+                          SelectionMode="Extended" SelectionUnit="FullRow"
                           IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
                           CanUserResizeRows="True" CanUserReorderColumns="True"
                           MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
@@ -213,7 +241,7 @@
                                 <DataTemplate>
                                     <Border Padding="8,2" Cursor="Hand"
                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
-                                            ToolTip="Dieses FEE-Objekt auf einen vorhandenen Container ziehen.">
+                                            ToolTip="Ausgewählte FEE-Objekte gemeinsam auf einen Container mit demselben Namen ziehen (Strg/Shift für Mehrfachauswahl).">
                                         <TextBlock HorizontalAlignment="Center" FontSize="16" Text="↕" />
                                     </Border>
                                 </DataTemplate>

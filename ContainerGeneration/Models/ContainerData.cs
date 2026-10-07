@@ -194,6 +194,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
             Component = container.Component;
             Type = container.Type;
             DataList = new ObservableCollection<ContainerEntry>(container.DataList);
+            SimObjects = new ObservableCollection<ContainerFeeObject>(container.SimObjects);
 
             foreach (var entry in DataList)
             {
@@ -301,7 +302,8 @@ namespace VIBN_Tools.ContainerGeneration.Models
                 Id = item.Id,
                 Component = item.Component,
                 Type = item.Type,
-                DataList = new ObservableCollection<ContainerEntry>(item.DataList)
+                DataList = new ObservableCollection<ContainerEntry>(item.DataList),
+                SimObjects = new ObservableCollection<ContainerFeeObject>(item.SimObjects)
             }).ToList();
         }
 

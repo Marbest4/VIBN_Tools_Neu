@@ -55,11 +55,11 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             item => item is { CanAdd: true } && !IsBusy);
         AssignObjectToContainerCommand = new RelayCommand<ContainerToFeeVisualDropRequest>(
             AssignObjectToContainer,
-            request => request is
-            {
-                Source: Fee2ContainerUnmappedObjectVM,
-                Target: Fee2ContainerFoundContainerVM
-            } && !IsBusy);
+            request => request?.Target is Fee2ContainerFoundContainerVM &&
+                GetDraggedObjects(request.Source).Count > 0 && !IsBusy);
+        RemoveObjectAssociationCommand = new RelayCommand<FeeContainerObjectAssociation>(
+            RemoveObjectAssociation,
+            association => association is not null && !IsBusy);
         FoundContainersView = CollectionViewSource.GetDefaultView(FoundContainers);
         FoundSignalsView = CollectionViewSource.GetDefaultView(FoundSignals);
         NonContainerObjectsView = CollectionViewSource.GetDefaultView(NonContainerObjects);
@@ -90,6 +90,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     public ICommand RemoveSignalCommand { get; }
     public ICommand AddObjectAsContainerCommand { get; }
     public ICommand AssignObjectToContainerCommand { get; }
+    public ICommand RemoveObjectAssociationCommand { get; }
     public FeeConnectionService Connection => _connection;
 
     public IReadOnlyList<string> SupportedContainerTypes =>
@@ -337,10 +338,10 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         private set { _statusText = value; OnPropertyChanged(); }
     }
 
-    public bool CanRefresh => !IsBusy && Connection.CanUseFeeFeatures;
+    public bool CanRefresh => !IsBusy && Connection.CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent;
     public bool CanExport => !IsBusy && Roots.Any(root => root.IsSelected);
     public string RefreshUnavailableReason => Connection.CanUseFeeFeatures
-        ? (IsBusy ? "Ein FEE2Container-Vorgang läuft bereits." : string.Empty)
+        ? (IsBusy ? "Ein FEE2Container-Vorgang läuft bereits." : Connection.ModelValidationUnavailableReason ?? string.Empty)
         : Connection.UnavailableReason;
     public string ExportUnavailableReason => !Roots.Any(root => root.IsSelected)
         ? "Mindestens einen BasicFrame über die Checkbox auswählen."
@@ -489,6 +490,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private void OnConnectionPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is not nameof(FeeConnectionService.CanUseFeeFeatures) and
+            not nameof(FeeConnectionService.AreModelValidationObjectsCurrent) and
+            not nameof(FeeConnectionService.ModelValidationUnavailableReason) and
             not nameof(FeeConnectionService.UnavailableReason)) return;
         OnPropertyChanged(nameof(CanRefresh));
         OnPropertyChanged(nameof(RefreshUnavailableReason));
@@ -598,19 +601,61 @@ public sealed class Fee2ContainerPageVM : MvvmBase
 
     private void AssignObjectToContainer(ContainerToFeeVisualDropRequest? request)
     {
-        if (request?.Source is not Fee2ContainerUnmappedObjectVM item ||
-            request.Target is not Fee2ContainerFoundContainerVM container ||
+        if (request?.Target is not Fee2ContainerFoundContainerVM container ||
             SelectedRoot?.Editor is not { } editor)
         {
             return;
         }
 
-        editor.AssignObjectToContainer(item, container);
-        editor.NonContainerObjects.Remove(item);
-        NonContainerObjects.Remove(item);
+        var items = GetDraggedObjects(request.Source);
+        if (items.Count == 0 || !editor.Containers.Contains(container))
+            return;
+        var availableGuids = editor.NonContainerObjects.Select(item => item.Guid)
+            .Concat(editor.CreateObjectAssociations().Select(item => item.ObjectGuid)).ToHashSet();
+        if (items.Any(item => !availableGuids.Contains(item.Guid)))
+        {
+            StatusText = "Die Auswahl gehört nicht mehr zum aktiven FEE-Root. Bitte erneut auswählen.";
+            return;
+        }
+        foreach (var item in items)
+        {
+            editor.AssignObjectToContainer(item, container);
+            var existing = editor.NonContainerObjects.FirstOrDefault(value => value.Guid == item.Guid);
+            if (existing is not null)
+            {
+                editor.NonContainerObjects.Remove(existing);
+                NonContainerObjects.Remove(existing);
+            }
+        }
         SelectedFoundContainer = container;
-        StatusText = $"FEE-Objekt '{item.Name}' wurde dem Container '{container.Component}' zugeordnet. " +
+        StatusText = $"{items.Count} FEE-Objekt(e) wurden dem Container '{container.Component}' zugeordnet. " +
                      "Die Zuordnung wird im bearbeiteten FEE2Container-Arbeitsstand mitgeführt.";
+    }
+
+    private static IReadOnlyList<Fee2ContainerUnmappedObjectVM> GetDraggedObjects(object source)
+    {
+        object[] sources = source is object[] batch ? batch : [source];
+        if (sources.Any(item => item is not (Fee2ContainerUnmappedObjectVM or FeeContainerObjectAssociation)))
+            return [];
+        return sources.Select(item => item is Fee2ContainerUnmappedObjectVM unmapped
+                ? unmapped
+                : new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(
+                    ((FeeContainerObjectAssociation)item).ObjectGuid,
+                    ((FeeContainerObjectAssociation)item).ObjectName,
+                    ((FeeContainerObjectAssociation)item).ObjectType,
+                    "Manuelle Zuordnung")))
+            .DistinctBy(item => item.Guid).ToArray();
+    }
+
+    private void RemoveObjectAssociation(FeeContainerObjectAssociation? association)
+    {
+        if (association is null || SelectedRoot?.Editor is not { } editor)
+            return;
+        var restored = editor.RemoveObjectAssociation(association);
+        if (restored is null)
+            return;
+        NonContainerObjects.Add(restored);
+        StatusText = $"Zuordnung von '{association.ObjectName}' entfernt. Das FEE-Objekt steht wieder für die Zuordnung bereit.";
     }
 }
 
@@ -646,11 +691,14 @@ public sealed class Fee2ContainerRootSelectionVM : NotifyBase
 public sealed class Fee2ContainerRootEditor
 {
     private readonly Fee2ContainerRoot _root;
+    private readonly Dictionary<Guid, XElement> _sourceObjects = [];
 
     public Fee2ContainerRootEditor(Fee2ContainerRoot root)
     {
         _root = root;
         var document = root.Provenance?.ContainerDocument;
+        foreach (var element in document?.Descendants("SimObject") ?? [])
+            if (Guid.TryParse(element.Element("Guid")?.Value, out var guid)) _sourceObjects[guid] = new XElement(element);
         if (document is not null)
         {
             var bindings = root.Provenance!.SignalBindings
@@ -692,6 +740,13 @@ public sealed class Fee2ContainerRootEditor
         foreach (var item in root.NonContainerObjects ?? [])
             NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
         ObjectAssociations.AddRange(root.ObjectAssociations ?? []);
+        foreach (var container in document?.Descendants("Container") ?? [])
+            foreach (var item in VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects(container))
+                if (Guid.TryParse(item.Element("Guid")?.Value, out var guid) && !ObjectAssociations.Any(association => association.ObjectGuid == guid))
+                    ObjectAssociations.Add(new FeeContainerObjectAssociation(guid, item.Element("Name")?.Value ?? "",
+                        item.Element("FeeType")?.Value ?? "", Guid.Empty, container.Attribute("id")?.Value ?? "",
+                        "Explizite Zuordnung aus ContainerFile", item.Element("Role")?.Value ?? "SimObject"));
+        RefreshObjectAssociations();
     }
 
     public ObservableCollection<Fee2ContainerFoundContainerVM> Containers { get; } = new();
@@ -738,11 +793,43 @@ public sealed class Fee2ContainerRootEditor
                 : Guid.Empty,
             container.Id,
             "Manuell per Drag-and-drop in FEE2Container zugeordnet"));
-        container.AddAssociatedObject(item.Name, item.FeeType);
+        RefreshObjectAssociations();
+    }
+
+    public static bool HasMatchingName(Fee2ContainerUnmappedObjectVM item, Fee2ContainerFoundContainerVM container) =>
+        string.Equals(item.Name, container.Component, StringComparison.OrdinalIgnoreCase);
+
+    private void RefreshObjectAssociations()
+    {
+        foreach (var container in Containers)
+            container.SetAssociatedObjects(ObjectAssociations.Where(item => item.ContainerId == container.Id));
+    }
+
+    public Fee2ContainerUnmappedObjectVM? RemoveObjectAssociation(FeeContainerObjectAssociation association)
+    {
+        if (!ObjectAssociations.Remove(association))
+            return null;
+        RefreshObjectAssociations();
+        var restored = new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(
+            association.ObjectGuid, association.ObjectName, association.ObjectType,
+            "Containerzuordnung wurde manuell entfernt"));
+        NonContainerObjects.Add(restored);
+        return restored;
     }
 
     public IReadOnlyList<FeeContainerObjectAssociation> CreateObjectAssociations() =>
         ObjectAssociations.ToArray();
+
+    private XElement CreateObjectElement(FeeContainerObjectAssociation association)
+    {
+        var element = _sourceObjects.TryGetValue(association.ObjectGuid, out var source)
+            ? new XElement(source) : VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Object(
+                association.ObjectGuid.ToString("D"), association.ObjectName, association.ObjectType, association.Role);
+        element.SetElementValue("Name", association.ObjectName);
+        element.SetElementValue("FeeType", association.ObjectType);
+        element.SetElementValue("Role", association.Role);
+        return element;
+    }
 
     public FeeContainerProvenanceSnapshot CreateSnapshot()
     {
@@ -764,7 +851,8 @@ public sealed class Fee2ContainerRootEditor
                     new XElement("DataType", signal.DataType),
                     new XElement("Signal", signal.Signal),
                     new XElement("Slot", signal.Slot),
-                    new XElement("Note", signal.Note)));
+                    new XElement("Note", signal.Note),
+                    signal.VariableGuid is Guid guid ? new XAttribute("feeGuid", guid.ToString("D")) : null));
                 if (signal.VariableGuid is Guid variableGuid)
                     bindings.Add(new FeeContainerSignalBinding(containerIndex, entryIndex, variableGuid));
                 if (!string.IsNullOrWhiteSpace(signal.Signal))
@@ -784,7 +872,10 @@ public sealed class Fee2ContainerRootEditor
                 new XAttribute("id", container.Id),
                 new XElement("Component", container.Component),
                 new XElement("Type", CanonicalizeContainerType(container.Type)),
-                dataList));
+                dataList,
+                new XElement("SimObjects", ObjectAssociations.Where(item => item.ContainerId == container.Id)
+                    .Select(item => CreateObjectElement(item)))));
+
         }
 
         var document = new XDocument(
@@ -794,7 +885,8 @@ public sealed class Fee2ContainerRootEditor
                 new XAttribute("createdAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
                 new XAttribute("autoCreateFile", string.Empty),
                 new XAttribute("zuli", string.Empty),
-                new XElement("ContainerList", containerElements)));
+                new XElement("ContainerList", containerElements),
+                _root.Provenance?.ContainerDocument.Root?.Element("FeeInventory") is { } inventory ? new XElement(inventory) : null));
         return new FeeContainerProvenanceSnapshot(
             new Dictionary<string, string>(StringComparer.Ordinal),
             document,
@@ -842,6 +934,8 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
     public int OriginalSignalCount { get; }
     public string AssociatedObjects => _associatedObjects;
+    public int AssociatedObjectCount => AssociatedObjectItems.Count;
+    public ObservableCollection<FeeContainerObjectAssociation> AssociatedObjectItems { get; } = new();
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
     public bool IsRelatedToSelection
     {
@@ -850,16 +944,12 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     }
 
 
-    public void AddAssociatedObject(string name, string feeType)
+    public void SetAssociatedObjects(IEnumerable<FeeContainerObjectAssociation> associations)
     {
-        var description = $"{name} ({feeType})";
-        var values = _associatedObjects
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Append(description)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        _associatedObjects = string.Join(", ", values);
+        AssociatedObjectItems.ReplaceWith(associations.ToArray());
+        _associatedObjects = string.Join(", ", AssociatedObjectItems.Select(item => $"{item.ObjectName} ({item.ObjectType})"));
         OnPropertyChanged(nameof(AssociatedObjects));
+        OnPropertyChanged(nameof(AssociatedObjectCount));
     }
 }
 

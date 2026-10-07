@@ -34,6 +34,7 @@ namespace VIBN_Tools.Application.VM
     /// </summary>
     public class ContainerGenerationPageVM : MvvmBase
     {
+        private System.Xml.XmlElement? _feeInventory;
 
 
 
@@ -1249,7 +1250,7 @@ namespace VIBN_Tools.Application.VM
                 if (summary.HasBlockingIssues)
                     exportContainerList.Add(WorkspaceValidationOverrideMarker.Create(summary));
 
-                Result<string> result = XmlHandler.WriteContainerXml(exportContainerList, filePath, Path.GetFileName(Settings.PathRequirementsXml), Path.GetFileName(Settings.PathZuli));
+                Result<string> result = XmlHandler.WriteContainerXml(exportContainerList, filePath, Path.GetFileName(Settings.PathRequirementsXml), Path.GetFileName(Settings.PathZuli), _feeInventory);
                 if (!result.IsSuccess)
                 {
                     StatusText = result.ErrorMessage;
@@ -1351,6 +1352,7 @@ namespace VIBN_Tools.Application.VM
                     CaptureUndo("ContainerFile als Arbeitsstand laden");
                 _pendingReimportSnapshot = null;
                 ClearPendingReimportResult();
+                _feeInventory = loaded.FeeInventory;
                 ReplaceWorkspace(containers, unassigned, []);
                 ReattachAllSlotChangedHandlers();
                 WorkspaceDataPath = string.Empty;
@@ -1477,6 +1479,7 @@ namespace VIBN_Tools.Application.VM
                         // destroy the current work.
                         if (HasWorkspaceData)
                             CaptureUndo("Gespeicherten Arbeitsstand laden");
+                        _feeInventory = loadedData.FeeInventory;
                         ReplaceWorkspace(
                             loadedData.ContainerList,
                             loadedData.UnassignedEntries,
@@ -1524,10 +1527,11 @@ namespace VIBN_Tools.Application.VM
                 "Arbeitsstand speichern",
                 ContainerList,
                 UnassignedEntries,
-                FilteredEntries);
+                FilteredEntries, _feeInventory);
             var savedData = new SavedData
             {
                 ContainerList = snapshot.Containers.ToList(),
+                FeeInventory = snapshot.FeeInventory,
                 FilteredEntries = snapshot.Filtered.ToList(),
                 UnassignedEntries = snapshot.Unassigned.ToList(),
                 ActivityLog = ActivityLog.Select(entry => new WorkspaceActivityLogEntry
@@ -2015,12 +2019,13 @@ namespace VIBN_Tools.Application.VM
                     state.Description,
                     ContainerList,
                     UnassignedEntries,
-                    FilteredEntries));
+                    FilteredEntries, _feeInventory));
             TrimHistory(_redoHistory);
             _isRestoringWorkspace = true;
             _suppressUndoCapture = true;
             try
             {
+                _feeInventory = state.FeeInventory;
                 ReplaceWorkspace(
                     state.Containers,
                     state.Unassigned,
@@ -2062,13 +2067,14 @@ namespace VIBN_Tools.Application.VM
                     state.Description,
                     ContainerList,
                     UnassignedEntries,
-                    FilteredEntries));
+                    FilteredEntries, _feeInventory));
             TrimHistory(_undoHistory);
 
             _isRestoringWorkspace = true;
             _suppressUndoCapture = true;
             try
             {
+                _feeInventory = state.FeeInventory;
                 ReplaceWorkspace(
                     state.Containers,
                     state.Unassigned,
@@ -2108,7 +2114,7 @@ namespace VIBN_Tools.Application.VM
                     description,
                     ContainerList,
                     UnassignedEntries,
-                    FilteredEntries));
+                    FilteredEntries, _feeInventory));
 
             TrimHistory(_undoHistory);
             _redoHistory.Clear();

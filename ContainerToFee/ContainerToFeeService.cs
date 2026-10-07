@@ -17,7 +17,6 @@ namespace VIBN_Tools.ContainerToFee
 
         private static readonly Dictionary<Type, IContainerFactory> _factories;
         private static readonly CabinetContainerManager _cabinetContainerManager;
-        private static readonly SemaphoreSlim GenerationGate = new(1, 1);
 
         static ContainerToFeeService()
         {
@@ -60,8 +59,7 @@ namespace VIBN_Tools.ContainerToFee
             CancellationToken cancellationToken = default)
         {
             var allContainers = containers.ToList();
-            await GenerationGate.WaitAsync(cancellationToken);
-            try
+            await FeeMutationScope.RunAsync(async () =>
             {
                 var completed = 0;
                 // FEE scene mutations share one SDK connection and are not
@@ -80,11 +78,8 @@ namespace VIBN_Tools.ContainerToFee
                     completed++;
                     progress?.Invoke(completed, allContainers.Count, name);
                 }
-            }
-            finally
-            {
-                GenerationGate.Release();
-            }
+                return true;
+            }, cancellationToken);
         }
 
 

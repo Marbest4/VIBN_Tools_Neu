@@ -644,9 +644,8 @@ internal static class Program
             ],
             [],
             []);
-        if (jointAssociation.ObjectAssociations.Count != 1 ||
-            jointAssociation.ObjectAssociations[0].ObjectGuid != liftJointGuid ||
-            jointAssociation.ObjectAssociations[0].ContainerObjectGuid != liftLogicGuid ||
+        if (jointAssociation.ObjectAssociations.Count != 2 ||
+            jointAssociation.ObjectAssociations.Single(item => item.ObjectGuid == liftJointGuid).ContainerObjectGuid != liftLogicGuid ||
             jointAssociation.UnmappedObjects.Any(item => item.Guid == liftJointGuid))
         {
             throw new InvalidOperationException(

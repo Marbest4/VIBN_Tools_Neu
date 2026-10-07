@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using VIBN_Tools.Application.VM;
 
 namespace VIBN_Tools.Application.Behaviors;
 
@@ -34,6 +35,11 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             typeof(bool),
             typeof(ContainerToFeeVisualTreeSelectionBehavior),
             new PropertyMetadata(false, OnIsEnabledChanged));
+
+    public static readonly DependencyProperty RevealEnabledProperty = DependencyProperty.RegisterAttached(
+        "RevealEnabled", typeof(bool), typeof(ContainerToFeeVisualTreeSelectionBehavior), new PropertyMetadata(true));
+    public static bool GetRevealEnabled(DependencyObject element) => (bool)element.GetValue(RevealEnabledProperty);
+    public static void SetRevealEnabled(DependencyObject element, bool value) => element.SetValue(RevealEnabledProperty, value);
 
     public static readonly DependencyProperty DeleteCommandProperty =
         DependencyProperty.RegisterAttached(
@@ -66,6 +72,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         {
             treeView.SelectedItemChanged += OnSelectedItemChanged;
             treeView.PreviewKeyDown += OnPreviewKeyDown;
+            treeView.PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
             treeView.Loaded += OnLoaded;
             treeView.Unloaded += OnUnloaded;
             if (treeView.IsLoaded)
@@ -75,6 +82,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         {
             treeView.SelectedItemChanged -= OnSelectedItemChanged;
             treeView.PreviewKeyDown -= OnPreviewKeyDown;
+            treeView.PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDown;
             treeView.Loaded -= OnLoaded;
             treeView.Unloaded -= OnUnloaded;
             DetachItemsSource(treeView);
@@ -123,11 +131,14 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             return;
         state.VerticalOffset = scrollViewer.VerticalOffset;
         state.HorizontalOffset = scrollViewer.HorizontalOffset;
+        var revealRevision = (long)treeView.GetValue(SelectionRevealRevisionProperty);
         state.RestorePending = true;
         treeView.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
         {
             try
             {
+                if ((long)treeView.GetValue(SelectionRevealRevisionProperty) != revealRevision)
+                    return;
                 var current = FindVisualChild<ScrollViewer>(treeView);
                 current?.ScrollToVerticalOffset(state.VerticalOffset);
                 current?.ScrollToHorizontalOffset(state.HorizontalOffset);
@@ -156,6 +167,24 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             SetSelectedItem(treeView, args.NewValue);
     }
 
+    private static void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs args)
+    {
+        if (sender is not TreeView tree ||
+            ItemsControl.ContainerFromElement(tree, args.OriginalSource as DependencyObject) is not TreeViewItem ||
+            FindVisualChild<ScrollViewer>(tree) is not { } viewer)
+            return;
+        var state = ScrollStates.GetOrCreateValue(tree);
+        state.IsSelecting = true;
+        var vertical = viewer.VerticalOffset;
+        var horizontal = viewer.HorizontalOffset;
+        _ = tree.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+        {
+            state.IsSelecting = false;
+            viewer.ScrollToVerticalOffset(vertical);
+            viewer.ScrollToHorizontalOffset(horizontal);
+        }));
+    }
+
     private static void OnBoundSelectedItemChanged(
         DependencyObject dependencyObject,
         DependencyPropertyChangedEventArgs args)
@@ -165,30 +194,36 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
 
         var revision = (long)treeView.GetValue(SelectionRevealRevisionProperty) + 1;
         treeView.SetValue(SelectionRevealRevisionProperty, revision);
-        if (args.NewValue is null)
+        if (args.NewValue is null || !GetRevealEnabled(treeView))
             return;
 
         // Keep the viewport stable when the user clicked the tree itself.
         // Selections originating in one of the related lists still center the
         // requested tree item because the keyboard focus then belongs to that
         // source list.
-        if (treeView.IsKeyboardFocusWithin && ReferenceEquals(treeView.SelectedItem, args.NewValue))
+        if (ScrollStates.TryGetValue(treeView, out var state) && state.IsSelecting ||
+            treeView.IsKeyboardFocusWithin && ReferenceEquals(treeView.SelectedItem, args.NewValue))
             return;
 
         treeView.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            if ((long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
+            if (!GetRevealEnabled(treeView) || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
                 return;
-            var container = FindContainer(treeView, args.NewValue);
-            if (container is null)
-                return;
-            container.IsSelected = true;
-            // Rebuilding the immutable-facing plan tree after drag/drop must
-            // not send the user back to its beginning. Keep the edited node
-            // as the visual scroll anchor.
-            container.BringIntoView();
-            treeView.UpdateLayout();
-            CenterContainer(treeView, container);
+            try
+            {
+                treeView.UpdateLayout();
+                var container = RealizeContainer(treeView, args.NewValue) ?? FindContainer(treeView, args.NewValue);
+                if (container is null || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
+                    return;
+                container.IsSelected = true;
+                container.BringIntoView();
+                treeView.UpdateLayout();
+                CenterContainer(treeView, container);
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
+            {
+                // A deferred reveal can outlive the collection it was requested for.
+            }
         });
     }
 
@@ -199,10 +234,13 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             return;
         try
         {
-            var position = container.TransformToAncestor(viewer).Transform(new Point(0, 0));
-            var delta = position.Y - Math.Max(0d, (viewer.ViewportHeight - container.ActualHeight) / 2d);
-            var scrollDelta = viewer.CanContentScroll
-                ? delta / Math.Max(1d, container.ActualHeight)
+            var header = container is TreeViewItem treeItem
+                ? treeItem.Template?.FindName("PART_Header", treeItem) as FrameworkElement ?? container
+                : container;
+            var position = header.TransformToAncestor(viewer).Transform(new Point(0, 0));
+            var delta = position.Y - Math.Max(0d, (viewer.ViewportHeight - header.ActualHeight) / 2d);
+            var scrollDelta = viewer.CanContentScroll && VirtualizingPanel.GetScrollUnit(treeView) == ScrollUnit.Item
+                ? delta / Math.Max(1d, header.ActualHeight)
                 : delta;
             viewer.ScrollToVerticalOffset(Math.Max(0d, viewer.VerticalOffset + scrollDelta));
         }
@@ -210,6 +248,30 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         {
             // A freshly rebuilt tree can replace the container before centering.
         }
+    }
+
+    private static TreeViewItem? RealizeContainer(ItemsControl parent, object item)
+    {
+        // Only realize the branch containing the target. Expanded ancestors
+        // can still be outside the viewport and have no generated containers.
+        var childItem = parent.Items.Cast<object>().FirstOrDefault(candidate =>
+            ReferenceEquals(candidate, item) || candidate is ContainerToFeeVisualTreeNodeVM node &&
+            node.SelfAndDescendants().Any(descendant => ReferenceEquals(descendant, item)));
+        if (childItem is null)
+            return null;
+        var index = parent.Items.IndexOf(childItem);
+        if (parent.ItemContainerGenerator.ContainerFromItem(childItem) is not TreeViewItem)
+        {
+            FindVisualChild<VirtualizingStackPanel>(parent)?.BringIndexIntoViewPublic(index);
+            parent.UpdateLayout();
+        }
+        if (parent.ItemContainerGenerator.ContainerFromItem(childItem) is not TreeViewItem child)
+            return null;
+        if (ReferenceEquals(childItem, item))
+            return child;
+        child.IsExpanded = true;
+        child.UpdateLayout();
+        return RealizeContainer(child, item);
     }
 
     private static TreeViewItem? FindContainer(ItemsControl parent, object item)
@@ -245,6 +307,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         public INotifyCollectionChanged? Source { get; set; }
         public NotifyCollectionChangedEventHandler? OnCollectionChanged { get; set; }
         public bool RestorePending { get; set; }
+        public bool IsSelecting { get; set; }
         public double VerticalOffset { get; set; }
         public double HorizontalOffset { get; set; }
     }

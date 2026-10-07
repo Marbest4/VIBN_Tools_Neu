@@ -185,7 +185,10 @@ namespace VIBN_Tools.Application.VM
             UpdateStatusText = "FEE-Objekte und Validierungsdaten werden aktualisiert …";
             try
             {
+                var connectionRevision = Services.Connection.BeginModelValidationUpdate();
                 await Services.FeeObjects.UpdateFeeDataAsync();
+                if (!Services.Connection.CompleteModelValidationUpdate(connectionRevision))
+                    UpdateStatusText = "Die FEE-Verbindung hat sich während Update Objects geändert. Bitte erneut ausführen.";
             }
             catch (Exception exception)
             {

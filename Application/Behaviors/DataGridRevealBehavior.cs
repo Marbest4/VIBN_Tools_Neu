@@ -58,10 +58,22 @@ public static class DataGridRevealBehavior
                     // and throw IndexMustBeLess outside the caller's stack.
                     // Moving the owned ScrollViewer is sufficient to center
                     // the related row without materializing stale containers.
-                    var targetOffset = viewer.CanContentScroll
+                    var logicalScroll = viewer.CanContentScroll && VirtualizingPanel.GetScrollUnit(grid) == ScrollUnit.Item;
+                    var rowHeight = double.IsFinite(grid.RowHeight) && grid.RowHeight > 0
+                        ? grid.RowHeight
+                        : grid.ItemContainerGenerator.ContainerFromIndex(itemIndex) is DataGridRow existingRow
+                            ? Math.Max(existingRow.ActualHeight, 1d) : 24d;
+                    var targetOffset = logicalScroll
                         ? itemIndex - (viewer.ViewportHeight / 2d)
-                        : (itemIndex * Math.Max(grid.RowHeight, 1d)) - (viewer.ViewportHeight / 2d);
+                        : (itemIndex * rowHeight) - (viewer.ViewportHeight / 2d);
                     viewer.ScrollToVerticalOffset(Math.Max(0d, targetOffset));
+                    grid.UpdateLayout();
+                    if (!logicalScroll && grid.ItemContainerGenerator.ContainerFromItem(requestedItem) is DataGridRow row)
+                    {
+                        var position = row.TransformToAncestor(viewer).Transform(new Point(0, 0));
+                        viewer.ScrollToVerticalOffset(Math.Max(0d, viewer.VerticalOffset + position.Y -
+                            Math.Max(0d, (viewer.ViewportHeight - row.ActualHeight) / 2d)));
+                    }
                 }
             }
             catch (ArgumentOutOfRangeException)

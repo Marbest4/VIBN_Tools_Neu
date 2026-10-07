@@ -38,5 +38,8 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         [XmlArray("ContainerList")]
         [XmlArrayItem("Container")]
         public required List<ComponentContainer> ContainerList { get; set; }
+
+        [XmlAnyElement("FeeInventory")]
+        public System.Xml.XmlElement? FeeInventory { get; set; }
     }
 }

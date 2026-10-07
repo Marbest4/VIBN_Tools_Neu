@@ -3,6 +3,7 @@ using System.Diagnostics;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 using static VIBN_Tools.GlobalClasses.Interfaces;
+using VIBN_Tools.ContainerToFee;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
 
@@ -64,6 +65,9 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 duplicateIdentities.Contains(CreateIdentity(runtimeObject))));
         }
 
+        var helpers = allObjects.Where(item => item is FeeSimpleNot or FeeSimpleMove or FeeSimpleAnd or FeeSimpleOr).ToArray();
+        var helperTags = await Fee2ContainerService.ReadObjectTagsAsync(
+            helpers.Select(item => item.GuidString), cancellationToken);
         var containerObjects = allObjects.OfType<FeeLogic>()
             .Select(item => new VisualFeeContainerObject(
                 item.Guid.ToString("D"),
@@ -80,6 +84,12 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 item.Name ?? string.Empty,
                 VisualFeeContainerObjectKind.Cabinet,
                 string.Empty)))
+            .Concat(helpers.Select(item => new VisualFeeContainerObject(
+                item.GuidString,
+                item.Name ?? string.Empty,
+                VisualFeeContainerObjectKind.TechnicalHelper,
+                item.FeeType,
+                ContainerObjectProvenance.Read(helperTags.GetValueOrDefault(item.Guid), item.Marks).ContainerId)))
             .ToArray();
 
         var topLevelBasicFrames = allObjects.OfType<FeeBasicFrame>()

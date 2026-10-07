@@ -44,5 +44,8 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         [XmlArray("DataList")]
         [XmlArrayItem("Entry")]
         public ObservableCollection<ContainerEntry> DataList { get; set; } = new ObservableCollection<ContainerEntry>();
+
+        [XmlArray("SimObjects"), XmlArrayItem("SimObject")]
+        public ObservableCollection<ContainerFeeObject> SimObjects { get; set; } = [];
     }
 }
