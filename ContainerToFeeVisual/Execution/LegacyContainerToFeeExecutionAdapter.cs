@@ -14,7 +14,16 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// </summary>
 internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger logger)
 {
-    public async Task<VisualExecutionResult> ExecuteAsync(
+    public Task<VisualExecutionResult> ExecuteAsync(
+        VisualPlan plan,
+        IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
+        IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,
+        IReadOnlyList<VisualIssue> acceptedValidationErrors,
+        IProgress<VisualGenerationProgress>? progress,
+        CancellationToken cancellationToken) => FeeMutationScope.RunAsync(
+            () => ExecuteCoreAsync(plan, runtimeObjects, runtimeInterfaces, acceptedValidationErrors, progress, cancellationToken), cancellationToken);
+
+    private async Task<VisualExecutionResult> ExecuteCoreAsync(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,
@@ -400,6 +409,15 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                                 : $"Container {completed} von {total} erstellt: {name}"));
                     },
                     cancellationToken);
+                // Store the actual generated/reused identities, including
+                // newly created targets, after successful object creation.
+                RuntimeVisualPlanBinder.AddRuntimeObjectIdentities(sourceDocument, plan, selectedBindings);
+                var completedProvenance = FeeContainerProvenanceCodec.Create(sourceDocument, includedContainerIds,
+                    plan.SourceFingerprint, signalSources);
+                var completedWrite = await FeeTagPropertyStore.TryWriteAndVerifyAsync(basicFrame.Guid, completedProvenance.Tags);
+                if (!completedWrite.Confirmed)
+                    executionWarnings.Add(new VisualIssue(VisualIssueSeverity.Warning, "PROVENANCE_OBJECTS_UNCONFIRMED",
+                        completedWrite.Warning ?? "Die erzeugten FEE-Objektidentitäten wurden nicht bestätigt."));
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -492,7 +510,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
         return candidate?.Id;
     }
 
-    private static SignalResolutionRequest CreateSignalResolutionRequest(
+    internal static SignalResolutionRequest CreateSignalResolutionRequest(
         VisualPlan plan,
         VisualNode container,
         FeeInterfaceSignal signal,

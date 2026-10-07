@@ -15,6 +15,12 @@
     </UserControl.DataContext>
 
     <UserControl.Resources>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black" />
+        <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black" />
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Foreground" Value="Black" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
         <Style x:Key="VisualPanelHeader" TargetType="TextBlock">
@@ -31,6 +37,7 @@
         </Style>
 
         <Style x:Key="VisualTreeItemStyle" TargetType="TreeViewItem">
+            <Setter Property="Foreground" Value="Black" />
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
             <Setter Property="Visibility"
                     Value="{Binding IsVisible, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -142,10 +149,10 @@
         </HierarchicalDataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Disabled"
                   CanContentScroll="False">
-    <Grid Margin="10" MinWidth="960">
+    <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -187,6 +194,7 @@
                 </StackPanel>
 
                 <WrapPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2">
+                    <Button Style="{StaticResource VisualToolbarButton}" Content="ContainerFiles vergleichen" Command="{Binding CompareContainerFilesCommand}" />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Rückgängig"
                             Command="{Binding UndoCommand}" />
                     <Button Style="{StaticResource VisualToolbarButton}" Content="Wiederholen"
@@ -305,6 +313,7 @@
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
+                              behaviors:ContainerToFeeVisualTreeSelectionBehavior.RevealEnabled="{Binding SynchronizeRelatedSelections}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
                     <WrapPanel Grid.Row="4" Margin="0,7,0,0"
@@ -383,6 +392,7 @@
 
                     <ListBox Grid.Row="2" ItemsSource="{Binding Targets}"
                              SelectedItem="{Binding SelectedTarget, Mode=TwoWay}"
+                             behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
                              behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedTarget}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -392,6 +402,7 @@
                              VirtualizingPanel.VirtualizationMode="Recycling">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
+                                <Setter Property="Foreground" Value="Black" />
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                 <Setter Property="Padding" Value="0" />
                                 <Setter Property="Margin" Value="0,0,0,7" />
@@ -476,6 +487,7 @@
                                Text="Signalslots des ausgewählten Containers" />
                     <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}" MinHeight="190"
                              SelectedItem="{Binding SelectedSignalSlot, Mode=TwoWay}"
+                             behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
                              behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedSignalSlot}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -484,6 +496,7 @@
                              VirtualizingPanel.VirtualizationMode="Recycling">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem">
+                                <Setter Property="Foreground" Value="Black" />
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                 <Setter Property="Padding" Value="0" />
                                 <Setter Property="Margin" Value="0,0,0,7" />
@@ -603,7 +616,7 @@
                     <ColumnDefinition Width="5" />
                     <ColumnDefinition Width="*" MinWidth="190" />
                     <ColumnDefinition Width="5" />
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" MinWidth="190" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -634,6 +647,7 @@
                                   ToolTip="SimObjects nach Zuordnungszustand filtern" />
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeObjectsView}"
                                  SelectedItem="{Binding SelectedFeeObject, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeObject}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -643,6 +657,7 @@
                                  VirtualizingPanel.VirtualizationMode="Recycling">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
+                                <Setter Property="Foreground" Value="Black" />
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                     <Setter Property="Padding" Value="0" />
                                 </Style>
@@ -773,6 +788,7 @@
                         </Grid>
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeSignalsView}"
                                  SelectedItem="{Binding SelectedFeeSignal, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeSignal}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -828,6 +844,7 @@
                     <Border Width="310" Padding="8" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
                         <ListBox ItemsSource="{Binding Issues}"
                                  SelectedItem="{Binding SelectedIssue, Mode=TwoWay}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedIssue}"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">

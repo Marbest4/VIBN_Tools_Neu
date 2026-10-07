@@ -23,50 +23,52 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
             .ToArray();
         var links = new List<VisualFeeObjectLink>();
         var failures = 0;
-        var reusedBulkAssignments = 0;
+        var resolvedSlotCount = 0;
         foreach (var item in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var assignedSlotNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var direct in item.Slots ?? new Dictionary<string, Guid>())
             {
                 if (direct.Value != Guid.Empty)
                 {
                     links.Add(new VisualFeeObjectLink(
                         item.Guid.ToString("D"), direct.Key, direct.Value.ToString("D"), string.Empty));
-                    assignedSlotNames.Add(direct.Key);
                 }
             }
 
             foreach (var slotName in GetRelevantSlotNames(item))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                // The project-wide object XML already contains this concrete
-                // assignment. Per-slot reads are retained only for slots absent
-                // from that batch (including SDK/version-specific routes).
-                if (assignedSlotNames.Contains(slotName))
-                {
-                    reusedBulkAssignments++;
-                    continue;
-                }
+                // AssignedGuid in the XML can identify a slot group rather
+                // than its final scene-object endpoints. Resolve populated
+                // slots too; otherwise the list sees a link but the tree
+                // cannot find the actual container logic behind that group.
                 try
                 {
                     var assignments = await Services.ApiInstance.Interface
                         .GetSlotSlotAssignmentAsync(item.Guid, slotName);
                     if (assignments is null)
                         continue;
+                    var resolvedLinks = new List<VisualFeeObjectLink>();
                     foreach (var (linkedGuid, linkedSlots) in assignments)
                     {
                         if (!Guid.TryParse(linkedGuid, out var parsedGuid))
                             continue;
                         foreach (var linkedSlot in linkedSlots ?? [])
                         {
-                            links.Add(new VisualFeeObjectLink(
+                            resolvedLinks.Add(new VisualFeeObjectLink(
                                 item.Guid.ToString("D"),
                                 slotName,
                                 parsedGuid.ToString("D"),
                                 linkedSlot ?? string.Empty));
                         }
+                    }
+                    if (resolvedLinks.Count > 0)
+                    {
+                        links.RemoveAll(link => string.Equals(link.ObjectGuidString, item.GuidString, StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(link.SlotName, slotName, StringComparison.OrdinalIgnoreCase));
+                        links.AddRange(resolvedLinks);
+                        resolvedSlotCount++;
                     }
                 }
                 catch (OperationCanceledException)
@@ -85,7 +87,7 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
             logger.Warning($"{failures} FEE-SimObject-Slot(s) konnten nicht rückgelesen werden.");
         logger.Information(
             $"{distinct.Length} vorhandene SimObject-Slotverknüpfung(en) gelesen; " +
-            $"{reusedBulkAssignments} bereits aus dem gebündelten Objekt-Snapshot übernommen.");
+            $"{resolvedSlotCount} Slot(s) einschließlich gruppierter Endpunkte aufgelöst; XML-Zuordnungen bleiben bei nicht rücklesbaren Slots als Rückfall erhalten.");
         return new VisualFeeObjectLinkDiscoveryResult(distinct, failures);
     }
 

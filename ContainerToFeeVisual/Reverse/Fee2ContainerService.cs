@@ -1,6 +1,7 @@
 using FS.SDK.Components;
 using FS.SDK.Scene.Objects;
 using System.Xml.Linq;
+using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerToFee;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
@@ -258,10 +259,14 @@ public sealed class Fee2ContainerService
         var inspected = 0;
         var ignored = 0;
         var usedProvenance = true;
+        var inventoryObjects = new List<XElement>();
+        var inventorySignals = new List<XElement>();
         foreach (var root in roots)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var export = await CreateExportAsync(root, cancellationToken);
+            inventoryObjects.AddRange(export.Snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Element("SimObjects")?.Elements("SimObject") ?? []);
+            inventorySignals.AddRange(export.Snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Element("Signals")?.Elements("Signal") ?? []);
             var rootContainers = export.Snapshot.ContainerDocument.Descendants("Container").ToArray();
             foreach (var element in rootContainers)
             {
@@ -292,7 +297,10 @@ public sealed class Fee2ContainerService
                 new XAttribute("createdAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
                 new XAttribute("autoCreateFile", string.Empty),
                 new XAttribute("zuli", string.Empty),
-                new XElement("ContainerList", containerElements)));
+                new XElement("ContainerList", containerElements),
+                new XElement("FeeInventory",
+                    new XElement("SimObjects", inventoryObjects.DistinctBy(item => item.Element("Guid")?.Value).Select(item => new XElement(item))),
+                    new XElement("Signals", inventorySignals.DistinctBy(item => item.Element("Guid")?.Value).Select(item => new XElement(item))))));
         var snapshot = new FeeContainerProvenanceSnapshot(
             new Dictionary<string, string>(StringComparer.Ordinal),
             document,
@@ -424,7 +432,7 @@ public sealed class Fee2ContainerService
             issues.Concat(reconstruction.Issues).ToArray());
     }
 
-    private static async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, string>>> ReadObjectTagsAsync(
+    internal static async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, string>>> ReadObjectTagsAsync(
         IEnumerable<string> guidTexts,
         CancellationToken cancellationToken)
     {
@@ -462,6 +470,24 @@ public sealed class Fee2ContainerService
             .OrderBy(frame => frame.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(frame => frame.Guid)
             .ToArray();
+        var rootTags = new Dictionary<Guid, IReadOnlyDictionary<string, string>>();
+        var explicitOwners = new Dictionary<Guid, HashSet<Guid>>();
+        foreach (var root in roots)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            rootTags[root.Guid] = await ReadOptionalTagsAsync(root.Guid);
+            if (!FeeContainerProvenanceCodec.TryRead(rootTags[root.Guid], out var metadata, out _)) continue;
+            foreach (var item in metadata!.ContainerDocument.Descendants("SimObject"))
+                if (Guid.TryParse(item.Element("Guid")?.Value, out var guid))
+                {
+                    if (!explicitOwners.TryGetValue(guid, out var owners)) explicitOwners[guid] = owners = [];
+                    owners.Add(root.Guid);
+                }
+        }
+        var unscoped = allObjects.Where(item => !explicitOwners.ContainsKey(item.Guid) &&
+            !roots.Any(root => root.Guid == item.Guid || IsWithinRoot(item, root))).ToArray();
+        if (unscoped.Length > 0)
+            roots = roots.Append(new FeeBasicFrame { Guid = Guid.Empty, Name = "Projektobjekte ohne BasicFrame" }).ToArray();
         var variables = allObjects
             .OfType<FeeInterface>()
             .SelectMany(item => item.Signals ?? [])
@@ -494,9 +520,9 @@ public sealed class Fee2ContainerService
             progress?.Report(new Fee2ContainerProgress(
                 roots.Length == 0 ? 90 : 15 + index * 75 / roots.Length,
                 $"Root {index + 1} von {roots.Length} wird rekonstruiert: {root.Name}"));
-            var scoped = allObjects
-                .Where(item => item is not FeeInterface && item.Guid != root.Guid && IsWithinRoot(item, root))
-                .ToArray();
+            var scoped = root.Guid == Guid.Empty ? unscoped : allObjects
+                .Where(item => item.Guid != root.Guid && IsWithinRoot(item, root) &&
+                    (!explicitOwners.TryGetValue(item.Guid, out var owners) || owners.Contains(root.Guid))).ToArray();
             var assignments = scoped
                 .Where(item => item.Slots is not null)
                 .SelectMany(item => item.Slots
@@ -506,9 +532,19 @@ public sealed class Fee2ContainerService
                 .ToArray();
             try
             {
-                var tags = await ReadOptionalTagsAsync(root.Guid);
+                var tags = rootTags.GetValueOrDefault(root.Guid) ?? new Dictionary<string, string>();
                 if (FeeContainerProvenanceCodec.TryRead(tags, out var provenance, out var provenanceError))
                 {
+                    var explicitGuids = provenance!.ContainerDocument.Descendants("SimObject")
+                        .Select(item => Guid.TryParse(item.Element("Guid")?.Value, out var guid) ? guid : Guid.Empty).ToHashSet();
+                    var names = provenance.ContainerDocument.Descendants("Container")
+                        .Select(item => item.Element("Component")?.Value ?? "").Where(name => name.Length > 0)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    scoped = scoped.Concat(allObjects.Where(item => !roots.Any(frame => frame.Guid == item.Guid) &&
+                        (explicitGuids.Contains(item.Guid) || names.Contains(item.Name ?? "")))).DistinctBy(item => item.Guid).ToArray();
+                    assignments = scoped.Where(item => item.Slots is not null).SelectMany(item => item.Slots
+                        .Where(slot => variableGuids.Contains(slot.Value))
+                        .Select(slot => new FeeContainerLiveAssignment(slot.Value, item.Guid, slot.Key))).Distinct().ToArray();
                     var exactObjectProperties = await ReadContainerObjectPropertiesAsync(scoped, cancellationToken);
                     var exactLiveObjects = scoped
                         .Select(item => ToLiveObject(item, exactObjectProperties.GetValueOrDefault(item.Guid)))
@@ -521,6 +557,12 @@ public sealed class Fee2ContainerService
                         assignments);
                     var slots = ResolveSlotsFromSnapshot(provenance!, assignments);
                     var projection = FeeContainerVariableProjector.Apply(provenance!, variableStates, slots);
+                    var associations = FeeContainerAssociationProjection.Apply(projection.Snapshot, classification, scoped);
+                    AttachInventory(projection.Snapshot, scoped, liveVariables);
+                    var assignedGuids = associations.Select(item => item.ObjectGuid).ToHashSet();
+                    var unmapped = scoped.Where(item => !assignedGuids.Contains(item.Guid)).Select(item =>
+                        new FeeContainerUnmappedObject(item.Guid, item.Name, item.FeeType,
+                            "Keine eindeutige Containerzuordnung; manuelle Zuordnung möglich")).ToArray();
                     resultRoots.Add(new Fee2ContainerRoot(
                         root.Guid,
                         root.Name,
@@ -533,8 +575,8 @@ public sealed class Fee2ContainerService
                         scoped.Length,
                         0,
                         [],
-                        classification.UnmappedObjects,
-                        classification.ObjectAssociations));
+                        unmapped,
+                        associations));
                     continue;
                 }
 
@@ -563,6 +605,8 @@ public sealed class Fee2ContainerService
                     liveObjects,
                     liveVariables,
                     assignments);
+                FeeContainerAssociationProjection.Apply(reconstructed.Snapshot, reconstructed, scoped);
+                AttachInventory(reconstructed.Snapshot, scoped, liveVariables);
                 resultRoots.Add(new Fee2ContainerRoot(
                     root.Guid,
                     root.Name,
@@ -646,6 +690,25 @@ public sealed class Fee2ContainerService
         return result;
     }
 
+    private static void AttachInventory(FeeContainerProvenanceSnapshot snapshot, IReadOnlyList<FeeAbstractObject> objects,
+        IReadOnlyList<FeeContainerLiveVariable> variables)
+    {
+        foreach (var binding in snapshot.SignalBindings)
+        {
+            var container = snapshot.ContainerDocument.Descendants("Container").ElementAtOrDefault(binding.ContainerIndex);
+            var entry = container?.Descendants("Entry").ElementAtOrDefault(binding.EntryIndex);
+            entry?.SetAttributeValue("feeGuid", binding.VariableGuid.ToString("D"));
+        }
+        snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Remove();
+        snapshot.ContainerDocument.Root?.Add(new XElement("FeeInventory",
+            new XElement("SimObjects", objects.Select(item => ContainerFileXml.Object(item.GuidString,
+                item.Name ?? "", item.FeeType ?? "", "Available", "", item.TypeName))),
+            new XElement("Signals", variables.Select(item => new XElement("Signal",
+                new XElement("Guid", item.VariableGuid.ToString("D")), new XElement("InterfaceGuid", ""),
+                new XElement("InterfaceName", ""), new XElement("Tag", item.Signal),
+                new XElement("Address", item.Address), new XElement("Path", item.Path), new XElement("DataType", item.DataType))))));
+    }
+
     private static bool CanCarryContainerProvenance(FeeAbstractObject item) => item is
         FeeLogic or
         FeeCabinetElement or
@@ -657,7 +720,7 @@ public sealed class Fee2ContainerService
         FeeSurface or
         FeePickAndPlace or
         FeeSimpleNot or
-        FeeSimpleMove;
+        FeeSimpleMove or FeeSimpleAnd or FeeSimpleOr;
 
     private static FeeContainerLiveObject ToLiveObject(
         FeeAbstractObject item,

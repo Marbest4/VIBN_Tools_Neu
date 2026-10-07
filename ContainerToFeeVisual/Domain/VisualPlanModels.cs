@@ -195,6 +195,7 @@ public enum VisualFeeContainerObjectKind
     Logic,
     Cabinet,
     CabinetElement,
+    TechnicalHelper,
 }
 
 /// <summary>
@@ -205,7 +206,8 @@ public sealed record VisualFeeContainerObject(
     string GuidString,
     string Name,
     VisualFeeContainerObjectKind Kind,
-    string Definition);
+    string Definition,
+    string? ProvenanceContainerId = null);
 
 public enum VisualFeeNodePresenceKind
 {

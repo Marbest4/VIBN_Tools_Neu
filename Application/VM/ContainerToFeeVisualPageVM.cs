@@ -24,7 +24,7 @@ namespace VIBN_Tools.Application.VM;
 /// keeps assignments, sidecars and undo/redo consistent with the unchanged
 /// legacy generation executor.
 /// </summary>
-public sealed class ContainerToFeeVisualPageVM : MvvmBase
+public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
 {
     private const string LogArea = "Container2FEE Visual";
     private const string FeeSdkAbortedMessage =
@@ -68,7 +68,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private string _generationProgressText = string.Empty;
     private bool _isProgressIndeterminate;
     private string _feeRefreshHint =
-        "Nach Änderungen im FEE-Projekt zuerst 'FEE aktualisieren'. Fehlen danach erwartete Objekte, einmal Model Validation ausführen und anschließend erneut aktualisieren.";
+        "Nach jeder FEE-Verbindung zuerst ModelValidation → Update Objects ausführen, anschließend 'FEE aktualisieren'.";
     private readonly HashSet<string> _verifiedContainerIds = new(StringComparer.Ordinal);
     private readonly GenerationManifestStore _manifestStore = new();
     private readonly GenerationManifestBuilder _manifestBuilder = new();
@@ -107,10 +107,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         LoadPlanCommand = new AsyncRelayCommand(LoadPlanAsync, () => !IsBusy);
         SavePlanCommand = new AsyncRelayCommand(SavePlanAsync, () => HasPlan && !IsBusy);
         SaveContainerXmlCommand = new AsyncRelayCommand(SaveContainerXmlAsync, () => HasPlan && !IsBusy);
+        CompareContainerFilesCommand = new RelayCommand(OpenContainerFileComparison, () => !IsBusy);
         OpenDocumentationCommand = new RelayCommand(OpenDocumentation);
         RefreshFeeObjectsCommand = new AsyncRelayCommand(
             RefreshFeeObjectsAsync,
-            () => HasPlan && CanUseFeeFeatures && !IsBusy);
+            () => IsFeeObjectDiscoveryAvailable);
         AutoAssignCommand = new RelayCommand(
             AutoAssignMatches,
             () => HasPlan && AvailableFeeObjects.Count > 0 && !IsBusy);
@@ -174,6 +175,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         _planService.PlanChanged += OnPlanChanged;
         _connection.PropertyChanged += OnConnectionPropertyChanged;
+        _connection.Disconnected += OnFeeDisconnected;
 
         if (_planService.CurrentPlan is not null)
         {
@@ -293,7 +295,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     public bool HasValidationErrors => Issues.Any(issue => issue.Severity == VisualIssueSeverity.Error);
 
-    public bool IsFeeObjectDiscoveryAvailable => CanUseFeeFeatures && HasPlan && !IsBusy;
+    public bool IsFeeObjectDiscoveryAvailable => CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent && HasPlan && !IsBusy;
 
     public bool CanStartGeneration => HasPlan && CanUseFeeFeatures && !IsBusy &&
                                       SelectedContainerCount > 0;
@@ -340,7 +342,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             ? "Zuerst eine Container-XML oder einen gespeicherten Plan laden."
             : !CanUseFeeFeatures
                 ? FeeUnavailableReason
-                : string.Empty;
+                : Connection.ModelValidationUnavailableReason ?? string.Empty;
 
     public string StartGenerationUnavailableReason => GetExecutionUnavailableReason(linkOnly: false);
 
@@ -716,7 +718,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null || !SynchronizeRelatedSelections)
                 return;
-            SelectRelatedTreeNode(FindTreeNode(value.PrimaryNodeId), preferredSignalSlot: value);
+            SelectRelatedTreeNode(FindTreeNode(value.PrimaryNodeId) ?? FindTreeNode(value.ContainerId), preferredSignalSlot: value);
         }
     }
 
@@ -877,9 +879,9 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
     private async Task RefreshFeeObjectsAsync()
     {
-        if (!CanUseFeeFeatures)
+        if (!IsFeeObjectDiscoveryAvailable)
         {
-            Reject(FeeUnavailableReason);
+            Reject(RefreshFeeObjectsUnavailableReason);
             return;
         }
 
@@ -1829,6 +1831,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
 
         CancelOperation();
         await EnterFeeSdkAbortedStateAsync("FEE-SDK-Aufruf hart getrennt");
+        Connection.RequestIntentionalDisconnect();
         try
         {
             var disconnectTask = Task.Run(() => Services.ApiInstance?.Disconnect());
@@ -1973,6 +1976,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
 
         CancellationTokenSource? cancellation = new CancellationTokenSource();
+        var connectionRevision = Connection.ConnectionRevision;
         _operationCancellation = cancellation;
         IsBusy = true;
         StatusText = status;
@@ -1989,7 +1993,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         catch (OperationCanceledException)
         {
             measurement.MarkFailed();
-            if (usesFeeSdk)
+            if (usesFeeSdk && connectionRevision == Connection.ConnectionRevision)
                 await EnterFeeSdkAbortedStateAsync("FEE-SDK-Aufruf abgebrochen");
             else
             {
@@ -2012,6 +2016,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
         finally
         {
+            if (usesFeeSdk && connectionRevision != Connection.ConnectionRevision)
+                ClearLiveFeeData();
             if (ReferenceEquals(_operationCancellation, cancellation))
                 _operationCancellation = null;
             cancellation?.Dispose();
@@ -2438,6 +2444,21 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
         RefreshAggregateTreeStates();
         RefreshSelectionProjection();
+        ApplyDiscoveredTechnicalHelperStates();
+    }
+
+    private void ApplyDiscoveredTechnicalHelperStates()
+    {
+        foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants())
+            .Where(node => node.Kind == VisualNodeKind.TechnicalHelper && node.ContainerId is not null))
+        {
+            var helpers = _planService.FindTechnicalHelpers(node.ContainerId!, node.Name);
+            if (helpers.Count == 0)
+                continue;
+            node.ApplyExecutionState(ContainerToFeeVisualNodeState.Verified,
+                $"Vorhandenes Hilfsobjekt: {string.Join(", ", helpers.Select(item => $"{item.Definition} · {item.GuidString}"))}");
+        }
+        RefreshAggregateTreeStates();
     }
 
     private void ApplyDiscoveredContainerObjectStates(
@@ -2539,7 +2560,8 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         VisibleEdges.Clear();
 
         VisualPlan? plan = _planService.CurrentPlan;
-        string? containerId = SelectedTreeNode?.ContainerId;
+        string? containerId = SelectedTreeNode?.ContainerId ?? SelectedTreeNode?.SelfAndDescendants()
+            .FirstOrDefault(node => node.Kind == VisualNodeKind.Container)?.Id;
         if (plan is null || string.IsNullOrWhiteSpace(containerId))
         {
             _selectedTarget = null;
@@ -2869,9 +2891,51 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
     private void OnConnectionPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is not nameof(FeeConnectionService.IsConnected) and
+            not nameof(FeeConnectionService.AreModelValidationObjectsCurrent) and
+            not nameof(FeeConnectionService.ModelValidationUnavailableReason) and
             not nameof(FeeConnectionService.CanUseFeeFeatures))
             return;
 
+        NotifyFeeAvailabilityChanged();
+    }
+
+    private async void OnFeeDisconnected(bool intentional)
+    {
+        _operationCancellation?.Cancel();
+        ClearLiveFeeData();
+        if (intentional || !HasPlan)
+            return;
+        try
+        {
+            await _planService.SaveSidecarAsync(cancellationToken: CancellationToken.None);
+            OnPropertyChanged(nameof(SidecarPath));
+            StatusText = $"FEE-Verbindung abgebrochen. Plan automatisch gesichert: {SidecarPath}";
+            _log.Warning(LogArea, StatusText);
+            AddOperationDetail("Verbindungsabbruch", StatusText);
+        }
+        catch (Exception exception)
+        {
+            StatusText = "FEE-Verbindung abgebrochen. Der Plan konnte nicht automatisch gesichert werden; Details stehen im Protokoll.";
+            _log.Error(LogArea, StatusText, exception);
+        }
+    }
+
+    private void ClearLiveFeeData()
+    {
+        _planService.ClearFeeDiscovery();
+        _verifiedContainerIds.Clear();
+        _selectedInterfaceGuids.Clear();
+        AvailableFeeObjects.Clear();
+        AvailableFeeSignals.Clear();
+        AvailableFeeInterfaces.Clear();
+        _selectedFeeObject = null;
+        _selectedFeeSignal = null;
+        _selectedExistingInterface = null;
+        OnPropertyChanged(nameof(SelectedFeeObject));
+        OnPropertyChanged(nameof(SelectedFeeSignal));
+        OnPropertyChanged(nameof(SelectedExistingInterface));
+        FeeRefreshHint = "FEE verbinden, ModelValidation → Update Objects ausführen und FEE aktualisieren.";
+        NotifyExistingInterfaceSelectionChanged();
         NotifyFeeAvailabilityChanged();
     }
 
@@ -3027,10 +3091,12 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         {
             ClearSynchronizationMatches();
             var plan = _planService.CurrentPlan;
-            var scopeRoot = node.Kind == VisualNodeKind.SimObject && node.ParentId is not null
-                ? FindTreeNode(node.ParentId) ?? node
-                : node;
-            var scope = scopeRoot.Kind is VisualNodeKind.Container or VisualNodeKind.Group or VisualNodeKind.SimObjectTarget
+            // The container is the common scope for its logic, SimObjects and
+            // signals. A signal-only scope previously cleared both object
+            // lists, while an object-only scope never reached the signals.
+            var scopeRoot = node.Kind is VisualNodeKind.Root or VisualNodeKind.Group or VisualNodeKind.Container
+                ? node : FindTreeNode(node.ContainerId) ?? node;
+            var scope = scopeRoot.Kind is VisualNodeKind.Root or VisualNodeKind.Container or VisualNodeKind.Group or VisualNodeKind.SimObjectTarget
                 ? scopeRoot.SelfAndDescendants().ToArray()
                 : [scopeRoot];
             foreach (var item in scope)
@@ -3098,38 +3164,61 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
                 item.IsSynchronizationMatch = feeSignalGuids.Contains(item.GuidString) ||
                                               item.AssignedNodeIds.Any(signalNodeIds.Contains);
             foreach (var item in SignalSlots)
-                item.IsSynchronizationMatch = item.Assignments.Any(assignment => signalNodeIds.Contains(assignment.NodeId));
+                item.IsSynchronizationMatch = nodeIds.Contains(item.ContainerId) ||
+                    item.Assignments.Any(assignment => signalNodeIds.Contains(assignment.NodeId));
 
-            EnsureSynchronizedAnchorsAreVisible();
+            // The detail lists were rebuilt when tree selection changed.
+            // Resolve their preferred anchors by identity rather than retaining
+            // a detached view-model instance from the previous projection.
+            var revealFeeObject = preferredFeeObject is null;
+            var revealFeeSignal = preferredFeeSignal is null;
+            var revealTarget = preferredTarget is null;
+            var revealSignalSlot = preferredSignalSlot is null;
+            preferredFeeObject ??= AvailableFeeObjects.FirstOrDefault(item => item.Id == node.FeeObjectId);
+            if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
+                preferredFeeSignal ??= AvailableFeeSignals.FirstOrDefault(item =>
+                    item.AssignedNodeIds.Contains(node.Id) ||
+                    string.Equals(item.Tag, node.Name, StringComparison.OrdinalIgnoreCase) &&
+                    (string.IsNullOrWhiteSpace(node.SourceLocation) ||
+                     string.Equals(item.Location, node.SourceLocation, StringComparison.OrdinalIgnoreCase)));
+            preferredTarget = Targets.FirstOrDefault(item => item.Id == preferredTarget?.Id) ??
+                Targets.FirstOrDefault(item => item.Id == (node.Kind == VisualNodeKind.SimObject ? node.ParentId : node.Id));
+            preferredSignalSlot = SignalSlots.FirstOrDefault(item =>
+                item.ContainerId == preferredSignalSlot?.ContainerId && item.Slot == preferredSignalSlot?.Slot) ??
+                SignalSlots.FirstOrDefault(item => item.Assignments.Any(assignment => assignment.NodeId == node.Id));
+
+            EnsureSynchronizedAnchorsAreVisible(preferredFeeObject, preferredFeeSignal);
             SetSelectionAnchor(ref _selectedFeeObject,
                 preferredFeeObject?.IsSynchronizationMatch == true
                     ? preferredFeeObject
                     : AvailableFeeObjects.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedFeeObject),
-                forceReveal: preferredFeeObject is null);
+                forceReveal: revealFeeObject);
             SetSelectionAnchor(ref _selectedTarget,
                 preferredTarget?.IsSynchronizationMatch == true
                     ? preferredTarget
                     : Targets.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedTarget),
-                forceReveal: preferredTarget is null);
+                forceReveal: revealTarget);
             SetSelectionAnchor(ref _selectedFeeSignal,
                 preferredFeeSignal?.IsSynchronizationMatch == true
                     ? preferredFeeSignal
                     : AvailableFeeSignals.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedFeeSignal),
-                forceReveal: preferredFeeSignal is null);
+                forceReveal: revealFeeSignal);
             SetSelectionAnchor(ref _selectedSignalSlot,
                 preferredSignalSlot?.IsSynchronizationMatch == true
                     ? preferredSignalSlot
                     : SignalSlots.FirstOrDefault(item => item.IsSynchronizationMatch),
                 nameof(SelectedSignalSlot),
-                forceReveal: preferredSignalSlot is null);
+                forceReveal: revealSignalSlot);
 
-            var relatedIssue = preferredIssue ?? Issues.FirstOrDefault(issue =>
+            var relatedIssue = preferredIssue ?? Issues.FirstOrDefault(issue => issue.NodeId == node.Id) ?? Issues.FirstOrDefault(issue =>
                 issue.NodeId is not null &&
                 (nodeIds.Contains(issue.NodeId) ||
                  scope.Any(item => string.Equals(item.ContainerId, issue.NodeId, StringComparison.Ordinal))));
+            relatedIssue ??= Issues.FirstOrDefault(issue => scope.Any(item =>
+                item.FeeObjectId is not null && string.Equals(item.FeeObjectId, issue.NodeId, StringComparison.OrdinalIgnoreCase)));
             SetSelectionAnchor(
                 ref _selectedIssue,
                 relatedIssue,
@@ -3142,9 +3231,11 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
         }
     }
 
-    private void EnsureSynchronizedAnchorsAreVisible()
+    private void EnsureSynchronizedAnchorsAreVisible(
+        ContainerToFeeVisualFeeObjectVM? preferredFeeObject,
+        ContainerToFeeVisualFeeSignalVM? preferredFeeSignal)
     {
-        var feeObjectAnchor = AvailableFeeObjects.FirstOrDefault(item => item.IsSynchronizationMatch);
+        var feeObjectAnchor = preferredFeeObject ?? AvailableFeeObjects.FirstOrDefault(item => item.IsSynchronizationMatch);
         if (feeObjectAnchor is not null && !FeeObjectsView.Contains(feeObjectAnchor))
         {
             _feeObjectFilter = string.Empty;
@@ -3156,7 +3247,7 @@ public sealed class ContainerToFeeVisualPageVM : MvvmBase
             FeeObjectsView.Refresh();
         }
 
-        var feeSignalAnchor = AvailableFeeSignals.FirstOrDefault(item => item.IsSynchronizationMatch);
+        var feeSignalAnchor = preferredFeeSignal ?? AvailableFeeSignals.FirstOrDefault(item => item.IsSynchronizationMatch);
         if (feeSignalAnchor is not null && !FeeSignalsView.Contains(feeSignalAnchor))
         {
             _feeSignalFilter = string.Empty;

@@ -635,7 +635,7 @@ namespace VIBN_Tools.Application.VM
 
                 if (_connectionService.IsConnected)
                 {
-                    Services.ApiInstance.Disconnect();
+                    _connectionService.DisconnectIntentionally();
                     if (!await _connectionService.WaitForDisconnectedAsync(TimeSpan.FromSeconds(3)))
                     {
                         stopwatch.Stop();
@@ -704,7 +704,7 @@ namespace VIBN_Tools.Application.VM
 
         private Task Disconnect_FromFee(object parameter)
         {
-            Services.ApiInstance.Disconnect();
+            _connectionService.DisconnectIntentionally();
 
             ConnectedServer = "---";
             _connectionService.ClearConnectionContext();
@@ -987,7 +987,7 @@ namespace VIBN_Tools.Application.VM
 
             try
             {
-                Services.ApiInstance.Disconnect();
+                _connectionService.DisconnectIntentionally();
                 await _connectionService.WaitForDisconnectedAsync(TimeSpan.FromSeconds(2));
             }
             catch
