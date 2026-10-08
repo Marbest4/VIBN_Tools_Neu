@@ -45,7 +45,7 @@ internal static class ContainerFileChangeApplier
         {
             foreach (var obj in Services.FeeObjects.AllFeeObjects ?? [])
                 foreach (var issue in obj.PlausibilityIssues.Where(issue =>
-                    issue.Severity == VIBN_Tools.ModelValidation.Severity.Error && !issue.IsAcknowledged))
+                    issue.Severity == VIBN_Tools.GlobalClasses.Severity.Error && !issue.IsAcknowledged))
                     diagnostics.Add(new XElement("Issue", new XAttribute("root", obj.Name ?? "FEE"),
                         new XAttribute("objectGuid", obj.GuidString), issue.Message));
         }

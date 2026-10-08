@@ -10,6 +10,7 @@ using VIBN_Tools.Application.View;
 using VIBN_Tools.Application.VM;
 using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerToFeeVisual;
+using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 using VIBN_Tools.ModelValidation;
 
