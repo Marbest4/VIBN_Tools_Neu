@@ -49,7 +49,7 @@ namespace VIBN_Tools.Application.View
             if (args.PropertyName is nameof(ContainerEntry.IsChangeAcknowledged) or nameof(ContainerEntry.HasUnconfirmedChange))
             { args.Cancel = true; return; }
             if (args.PropertyName != nameof(ContainerEntry.ReviewMessage)) return;
-            args.Column.SetBinding(DataGridColumn.VisibilityProperty,
+            BindingOperations.SetBinding(args.Column, DataGridColumn.VisibilityProperty,
                 new Binding("DataContext.IsReimportDetailsVisible")
                 { Source = this, Converter = new BooleanToVisibilityConverter() });
         }
