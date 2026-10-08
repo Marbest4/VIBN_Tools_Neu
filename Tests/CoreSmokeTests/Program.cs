@@ -10,6 +10,7 @@ using System.Net.Http;
 using System.Text.Json;
 using VIBN_Tools.Core.Diagnostics;
 using VIBN_Tools.Quality;
+using VIBN_Tools.Application.VM;
 
 var temporaryRoot = Path.Combine(Path.GetTempPath(), $"vibn-vico-tests-{Guid.NewGuid():N}");
 
@@ -34,8 +35,12 @@ try
     await VerifyAutoRefreshPreferencesAsync(temporaryRoot);
     Console.WriteLine("Running ViCo last-active snapshot smoke test...");
     await VerifyLastActiveSnapshotStoreAsync(temporaryRoot);
+    Console.WriteLine("Running ViCo startup snapshot smoke test...");
+    await VerifyWorkstationStartupSnapshotAsync(temporaryRoot);
     Console.WriteLine("Running ViCo project identity and path smoke test...");
     VerifyProjectIdentityAndPaths(temporaryRoot);
+    Console.WriteLine("Running project documents and selection race checks...");
+    await ProjectDocumentsSmokeTests.VerifyAsync(temporaryRoot);
     Console.WriteLine("Running Remote Desktop profile smoke test...");
     VerifyRemoteDesktopProfile();
     Console.WriteLine("Running Level9 role policy smoke test...");
@@ -74,6 +79,8 @@ try
     VerifyPerformanceMeasurement(temporaryRoot);
     Console.WriteLine("Running project quality automation smoke test...");
     await VerifyProjectQualityAutomationAsync(temporaryRoot);
+    Console.WriteLine("Running HMI/FEE closed-loop orchestration smoke test...");
+    await VerifyHmiClosedLoopAsync();
     Console.WriteLine("Running IBN Remote fixed in-work filter smoke test...");
     IbnRemoteSelectionSmokeTests.Verify();
     Console.WriteLine("All ViCo core smoke tests passed.");
@@ -191,8 +198,14 @@ static async Task VerifyLegacyWorkstationCatalogAsync(string temporaryRoot)
             }
         }));
 
+    var cacheUpdatedAt = new DateTime(2026, 9, 28, 8, 30, 0, DateTimeKind.Utc);
+    foreach (var path in Directory.EnumerateFiles(cache))
+        File.SetLastWriteTimeUtc(path, cacheUpdatedAt);
+
     var snapshot = await new LegacyWorkstationCatalog(cache).LoadAsync();
     Assert(snapshot.Workstations.Count == 1, "Legacy workstation catalog should contain one workstation.");
+    Assert(snapshot.SourceUpdatedAt?.UtcDateTime == cacheUpdatedAt,
+        "The workstation snapshot must retain the actual Kanbanize cache update time.");
     var workstation = snapshot.Workstations[0];
     Assert(workstation.PcName == "GM12345", "Workstation name parsing failed.");
     Assert(workstation.UserName == "zkds-config-priority", "The KONFIGURATION USER must take precedence over older card text.");
@@ -412,6 +425,21 @@ static async Task VerifyAutoRefreshPreferencesAsync(string temporaryRoot)
         "The optional ViCo column preference was not persisted.");
     Assert(normalized.VisibleColumns?.SequenceEqual(["pc", "planning", "projectIp"]) == true,
         "The per-column ViCo visibility preference was not persisted.");
+
+    Assert(ViCoAutoRefreshSettings.Default.IntervalMinutes == 60 && ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes == 5,
+        "General/online refresh defaults must be 60/5 minutes.");
+    await store.SaveAsync(new ViCoAutoRefreshSettings(60, true, ["pc"], true, 12, ColumnLayoutVersion: 1));
+    var separate = await store.LoadAsync();
+    Assert(separate.IntervalMinutes == 60 && separate.OnlineIntervalMinutes == 12 && separate.SearchVisibleColumnsOnly && separate.ColumnLayoutVersion == 1,
+        "Saving separate online preferences lost another per-user setting.");
+    await File.WriteAllTextAsync(file, "{\"intervalMinutes\":20,\"showExtendedInformation\":true}");
+    var legacy = await store.LoadAsync();
+    Assert(legacy.IntervalMinutes == 20 && legacy.OnlineIntervalMinutes == 5,
+        "Legacy preferences must retain the user's interval and add the online default.");
+    var today = new DateTime(2026, 10, 8);
+    Assert(WorkingEndColorPolicy.GetBackground("07.10.2026 | 20.10.2026", today) == "#FFFFC7CE", "An overdue working deadline must win over future dates.");
+    Assert(WorkingEndColorPolicy.GetBackground("15.10.2026", today) == "#FFFFEB9C", "A seven-day deadline must warn.");
+    Assert(WorkingEndColorPolicy.GetBackground("16.10.2026", today) == "#00FFFFFF", "A later deadline must not warn.");
 
     await File.WriteAllTextAsync(file, "not-json");
     var recovered = await store.LoadAsync();
@@ -986,12 +1014,91 @@ static async Task VerifyLastActiveSnapshotStoreAsync(string temporaryRoot)
     Assert(loaded!.UpdatedAt == updatedAt, "The last-active snapshot timestamp changed during persistence.");
     Assert(loaded.Workstations.Count == 1 && loaded.Workstations[0].PcName == "GM17128",
         "The last-active workstation snapshot did not restore the workstation list.");
+    Assert(!ViCoLastActiveSnapshotPolicy.IsStale(updatedAt, updatedAt.AddMinutes(30)) &&
+           ViCoLastActiveSnapshotPolicy.IsStale(updatedAt, updatedAt.AddMinutes(30).AddTicks(1)),
+        "The workstation freshness warning must begin only after the documented 30-minute boundary.");
 
     await store.SaveAsync(new ViCoLastActiveSnapshot(updatedAt.AddMinutes(5), Array.Empty<ViCoWorkstation>()));
     loaded = await store.LoadAsync();
     Assert(loaded!.Workstations.Count == 1,
         "An empty refresh must not overwrite the last non-empty workstation snapshot.");
 }
+
+static async Task VerifyWorkstationStartupSnapshotAsync(string temporaryRoot)
+{
+    var path = Path.Combine(temporaryRoot, "vico-startup", "last-active.json");
+    var store = new JsonViCoLastActiveSnapshotStore(path);
+    var staleWorkstation = CreateSnapshotWorkstation("GM17000", "Alter Stand");
+    var staleUpdatedAt = DateTimeOffset.Now.Subtract(TimeSpan.FromHours(1));
+    await store.SaveAsync(new ViCoLastActiveSnapshot(staleUpdatedAt, [staleWorkstation]));
+
+    var liveWorkstation = CreateSnapshotWorkstation("GM18000", "Aktueller Stand");
+    var liveUpdatedAt = DateTimeOffset.Now;
+    var onlineRefresh = new ControlledOnlineRefreshService();
+    using var viewModel = new ViCoSearchPageVM(
+        new TimestampedSnapshotCatalog(liveUpdatedAt, liveWorkstation),
+        new ViCoWorkstationSearch(),
+        _ => Task.FromResult<IViCoRelatedPathResolver>(new NullPathResolver()),
+        new OfflineNetworkAvailabilityService(),
+        new NullRemoteDesktopService(),
+        new NullRemoteSessionService(),
+        new NullExternalPathLauncher(),
+        onlineRefresh,
+        new NullWorkstationConfigurationService(),
+        new DefaultAutoRefreshSettingsStore(),
+        store,
+        new ViCoWorkspaceContext(),
+        _ => { });
+
+    var initializeTask = viewModel.InitializeAsync();
+    await onlineRefresh.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+    Assert(viewModel.Results.Count == 1 && viewModel.Results[0].PcName == "GM17000",
+        "The last workstation snapshot must be visible before the online refresh completes.");
+    Assert(viewModel.IsDisplayedDataStale &&
+           viewModel.DisplayedDataAgeNotice.Contains("älter als 30 Minuten", StringComparison.Ordinal),
+        "A startup snapshot older than 30 minutes must show the freshness warning.");
+
+    onlineRefresh.Complete();
+    await initializeTask.WaitAsync(TimeSpan.FromSeconds(2));
+    Assert(viewModel.Results.Count == 1 && viewModel.Results[0].PcName == "GM18000",
+        "A successful live refresh must replace the startup snapshot.");
+    Assert(!viewModel.IsDisplayedDataStale && viewModel.DisplayedDataAgeNotice.Length == 0,
+        "A successful live refresh must clear the stale-data warning.");
+
+    var olderCachePath = Path.Combine(temporaryRoot, "vico-startup", "older-cache.json");
+    var olderCacheStore = new JsonViCoLastActiveSnapshotStore(olderCachePath);
+    var newerPersistedAt = DateTimeOffset.Now.Subtract(TimeSpan.FromMinutes(5));
+    await olderCacheStore.SaveAsync(new ViCoLastActiveSnapshot(newerPersistedAt, [liveWorkstation]));
+    using var offlineViewModel = new ViCoSearchPageVM(
+        new TimestampedSnapshotCatalog(
+            newerPersistedAt.Subtract(TimeSpan.FromHours(1)),
+            staleWorkstation),
+        new ViCoWorkstationSearch(),
+        _ => Task.FromResult<IViCoRelatedPathResolver>(new NullPathResolver()),
+        new OfflineNetworkAvailabilityService(),
+        new NullRemoteDesktopService(),
+        new NullRemoteSessionService(),
+        new NullExternalPathLauncher(),
+        new DisabledOnlineRefreshService(),
+        new NullWorkstationConfigurationService(),
+        new DefaultAutoRefreshSettingsStore(),
+        olderCacheStore,
+        new ViCoWorkspaceContext(),
+        _ => { });
+    await offlineViewModel.InitializeAsync().WaitAsync(TimeSpan.FromSeconds(2));
+    Assert(offlineViewModel.Results.Count == 1 && offlineViewModel.Results[0].PcName == "GM18000",
+        "An older transport cache must not replace a newer durable workstation snapshot.");
+}
+
+static ViCoWorkstation CreateSnapshotWorkstation(string pcName, string project) => new(
+    $"{pcName} Tool PC",
+    pcName,
+    "test-user",
+    "TIA V20",
+    string.Empty,
+    string.Empty,
+    [$"[W] {project}"],
+    [$"[W] {project}"]);
 
 static async Task VerifyKanbanizeInvalidRefreshProtectionAsync(string temporaryRoot)
 {
@@ -1436,6 +1543,48 @@ static async Task VerifyProjectQualityAutomationAsync(string temporaryRoot)
         "The latest matching generation manifest must be resumable.");
 }
 
+static async Task VerifyHmiClosedLoopAsync()
+{
+    var outputGuid = Guid.NewGuid();
+    var feedbackGuid = Guid.NewGuid();
+    var triggered = false;
+    var hmi = new FakeHmiRuntimeAdapter("0", value => triggered = value == "1");
+    var fee = new FakeFeeSignalMonitor(guid => triggered
+        ? guid == outputGuid ? "1" : "true"
+        : "0");
+    var service = new HmiClosedLoopTestService(hmi, fee);
+    var result = await service.RunAsync(new HmiClosedLoopTestDefinition(
+        "HMI.Start",
+        "1",
+        outputGuid,
+        "1",
+        feedbackGuid,
+        "true",
+        TimeSpan.FromSeconds(1),
+        TimeSpan.FromMilliseconds(5)));
+    Assert(result.Success, "Closed-loop test should confirm both configured FEE reactions.");
+    Assert(result.HmiValueRestored && hmi.Value == "0",
+        "Closed-loop test must restore and verify the original HMI value.");
+    Assert(result.Observations.Any(item => item.Step == "FEE-Ausgang nach Trigger" && item.Successful) &&
+           result.Observations.Any(item => item.Step == "FEE-Rückmeldung nach Trigger" && item.Successful),
+        "Closed-loop observations must contain output and feedback evidence.");
+
+    var unchangedHmi = new FakeHmiRuntimeAdapter("false", _ => { });
+    var unchangedFee = new FakeFeeSignalMonitor(_ => "0");
+    var timeoutResult = await new HmiClosedLoopTestService(unchangedHmi, unchangedFee).RunAsync(
+        new HmiClosedLoopTestDefinition(
+            "HMI.Start",
+            "true",
+            outputGuid,
+            null,
+            null,
+            null,
+            TimeSpan.FromMilliseconds(25),
+            TimeSpan.FromMilliseconds(5)));
+    Assert(!timeoutResult.Success && timeoutResult.HmiValueRestored && unchangedHmi.Value == "false",
+        "A missing FEE transition must fail without skipping HMI restoration.");
+}
+
 static async Task VerifyTypedTiaPipeTimeoutDiagnosticAsync()
 {
     var pipeName = $"vibn-tia-timeout-test-{Guid.NewGuid():N}";
@@ -1490,6 +1639,108 @@ sealed class SnapshotCatalog(params ViCoWorkstation[] workstations) : IViCoWorks
 {
     public Task<ViCoWorkstationSnapshot> LoadAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(new ViCoWorkstationSnapshot(workstations, Array.Empty<string>()));
+}
+
+sealed class TimestampedSnapshotCatalog(
+    DateTimeOffset updatedAt,
+    params ViCoWorkstation[] workstations) : IViCoWorkstationCatalog
+{
+    public Task<ViCoWorkstationSnapshot> LoadAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ViCoWorkstationSnapshot(workstations, Array.Empty<string>(), updatedAt));
+}
+
+sealed class ControlledOnlineRefreshService : IViCoOnlineRefreshService
+{
+    private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public bool IsConfigured => true;
+
+    public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        Started.TrySetResult();
+        return _completion.Task.WaitAsync(cancellationToken);
+    }
+
+    public void Complete() => _completion.TrySetResult();
+}
+
+sealed class DisabledOnlineRefreshService : IViCoOnlineRefreshService
+{
+    public bool IsConfigured => false;
+
+    public Task RefreshAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
+sealed class NullPathResolver : IViCoRelatedPathResolver
+{
+    public string? Resolve(ViCoWorkstation workstation, string project, ViCoRelatedPathKind kind) => null;
+}
+
+sealed class OfflineNetworkAvailabilityService : INetworkAvailabilityService
+{
+    public Task<bool> PingAsync(string hostName, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+}
+
+sealed class NullRemoteDesktopService : IRemoteDesktopService
+{
+    public IReadOnlyList<int> MonitorIds { get; } = [0];
+
+    public int MonitorCount => MonitorIds.Count;
+
+    public void Connect(string hostName, string userName, IReadOnlyCollection<int> monitorIndexes)
+    {
+    }
+
+    public void ConnectWithCredentialPrompt(
+        string hostName,
+        string userName,
+        IReadOnlyCollection<int> monitorIndexes)
+    {
+    }
+}
+
+sealed class NullRemoteSessionService : IRemoteSessionService
+{
+    public Task<ViCoRemoteSessionInfo> GetSessionInfoAsync(
+        string hostName,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(ViCoRemoteSessionInfo.NotAvailable);
+}
+
+sealed class NullExternalPathLauncher : IExternalPathLauncher
+{
+    public void Open(string path)
+    {
+    }
+}
+
+sealed class NullWorkstationConfigurationService : IViCoWorkstationConfigurationService
+{
+    public bool IsConfigured => false;
+
+    public Task SaveFieldsAsync(
+        int configurationCardId,
+        IReadOnlyCollection<ViCoConfigurationField> fields,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+    public Task<int> CreateStandardAsync(
+        int laneId,
+        int columnId,
+        IReadOnlyCollection<ViCoConfigurationField> fields,
+        CancellationToken cancellationToken = default) => Task.FromResult(0);
+}
+
+sealed class DefaultAutoRefreshSettingsStore : IViCoAutoRefreshSettingsStore
+{
+    public Task<ViCoAutoRefreshSettings> LoadAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ViCoAutoRefreshSettings.Default);
+
+    public Task SaveAsync(
+        ViCoAutoRefreshSettings settings,
+        CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 sealed record CapturedHttpRequest(HttpMethod Method, string RelativeUrl, string ApiKey, string Body);
@@ -1719,6 +1970,42 @@ sealed class NoOpPathLauncher : IExternalPathLauncher
     public void Open(string path)
     {
     }
+}
+
+sealed class FakeHmiRuntimeAdapter : IHmiRuntimeAdapter
+{
+    private readonly Action<string?> _onWrite;
+
+    public FakeHmiRuntimeAdapter(string? initialValue, Action<string?> onWrite)
+    {
+        Value = initialValue;
+        _onWrite = onWrite;
+    }
+
+    public string? Value { get; private set; }
+
+    public Task<(bool Success, string Message)> ProbeAsync(CancellationToken cancellationToken) =>
+        Task.FromResult((true, "Fake runtime ready"));
+
+    public Task<string?> ReadTagAsync(string tag, CancellationToken cancellationToken) =>
+        Task.FromResult(Value);
+
+    public Task WriteTagAsync(string tag, string? value, CancellationToken cancellationToken)
+    {
+        Value = value;
+        _onWrite(value);
+        return Task.CompletedTask;
+    }
+}
+
+sealed class FakeFeeSignalMonitor : IFeeSignalMonitor
+{
+    private readonly Func<Guid, string?> _read;
+
+    public FakeFeeSignalMonitor(Func<Guid, string?> read) => _read = read;
+
+    public Task<string?> ReadAsync(Guid signalGuid, CancellationToken cancellationToken) =>
+        Task.FromResult(_read(signalGuid));
 }
 
 sealed class MemoryUserSecretStore : IUserSecretStore

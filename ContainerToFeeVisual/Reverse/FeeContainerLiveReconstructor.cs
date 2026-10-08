@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using VIBN_Tools.ContainerGeneration.Models;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
 
@@ -10,7 +11,9 @@ public sealed record FeeContainerLiveObject(
     string? CabinetDefinition = null,
     string? Label = null,
     string? ProvenanceContainerId = null,
-    string? ProvenanceContainerType = null);
+    string? ProvenanceContainerType = null,
+    Guid? ParentGuid = null,
+    IReadOnlyList<Guid>? LinkedObjectGuids = null);
 
 public sealed record FeeContainerLiveVariable(
     Guid VariableGuid,
@@ -41,7 +44,10 @@ public sealed record FeeContainerObjectAssociation(
     string ObjectType,
     Guid ContainerObjectGuid,
     string ContainerId,
-    string Reason);
+    string Reason,
+    string Role = "SimObject",
+    string ProvenanceContainerId = "",
+    bool IsManual = false);
 
 public sealed record FeeContainerReconstructionResult(
     FeeContainerProvenanceSnapshot Snapshot,
@@ -53,8 +59,8 @@ public sealed record FeeContainerReconstructionResult(
 
 /// <summary>
 /// Reconstructs the container schema from a bounded FEE subtree. Exact
-/// Container2FEE provenance remains preferable; this mapper only emits
-/// container types and signal slots that the forward generator understands.
+/// Current definitions, names and endpoints are authoritative. Provenance only
+/// disambiguates compatible type aliases; it cannot resurrect old signals.
 /// </summary>
 public static class FeeContainerLiveReconstructor
 {
@@ -77,7 +83,8 @@ public static class FeeContainerLiveReconstructor
         ArgumentNullException.ThrowIfNull(variables);
         ArgumentNullException.ThrowIfNull(assignments);
 
-        var sourceObjects = objects.Where(item => item.Guid != Guid.Empty).ToArray();
+        var sourceObjects = objects.Where(item => item.Guid != Guid.Empty && !EndsWithType(item.FeeType, "Decoration"))
+            .DistinctBy(item => item.Guid).ToArray();
         var variableByGuid = variables
             .Where(item => item.VariableGuid != Guid.Empty)
             .GroupBy(item => item.VariableGuid)
@@ -100,26 +107,13 @@ public static class FeeContainerLiveReconstructor
                 issues.Add(new FeeContainerReconstructionIssue(item.Guid, ambiguity));
         }
 
-        // Property provenance is intentionally written to every generated
-        // primary/technical object. Collapse those objects back to one
-        // container and prefer the logic object because PLC variables are
-        // normally assigned there. MotionJoints are not emitted as standalone
-        // containers; they are associated with one compatible container below.
-        var versioned = candidates
-            .Where(item => !string.IsNullOrWhiteSpace(item.Object.ProvenanceContainerId))
-            .GroupBy(item => item.Object.ProvenanceContainerId!, StringComparer.Ordinal)
-            .Select(group => group
-                .OrderBy(item => CandidatePriority(item.Object.FeeType))
-                .ThenBy(item => item.Object.Guid)
-                .First())
-            .ToArray();
-        var unversioned = candidates
-            .Where(item => string.IsNullOrWhiteSpace(item.Object.ProvenanceContainerId))
-            .Where(item => !IsRedundantLegacySimObject(item, candidates))
-            .ToArray();
-        candidates = versioned.Concat(unversioned).ToList();
+        // Historical owner IDs must never collapse primary objects that have
+        // since been renamed or changed type. Live logic/cabinet/button GUIDs
+        // remain distinct; same-name ancillary sensors belong to their logic.
+        candidates = candidates.Where(item => !IsRedundantLegacySimObject(item, candidates)).ToList();
 
-        var objectAssociations = ResolveMotionJointAssociations(sourceObjects, candidates, issues);
+        var objectAssociations = ResolveAllObjectAssociations(sourceObjects, candidates, issues);
+        relevantObjectGuids.Clear();
         relevantObjectGuids.UnionWith(objectAssociations.Select(item => item.ObjectGuid));
 
         var containerElements = new List<XElement>();
@@ -129,8 +123,14 @@ public static class FeeContainerLiveReconstructor
                      .ThenBy(item => item.XmlType, StringComparer.OrdinalIgnoreCase)
                      .ThenBy(item => item.Object.Guid))
         {
-            assignmentsByObject.TryGetValue(candidate.Object.Guid, out var objectAssignments);
-            objectAssignments ??= [];
+            var members = objectAssociations.Where(item => item.ContainerObjectGuid == candidate.Object.Guid).ToArray();
+            // A cabinet's displayed label or a technical helper's name can
+            // differ from the component. They still carry real signal routes,
+            // but that does not authorize a differently named SimObject link.
+            var signalObjects = members.Select(item => item.ObjectGuid).ToHashSet();
+            signalObjects.Add(candidate.Object.Guid);
+            var objectAssignments = signalObjects.SelectMany(guid => assignmentsByObject.GetValueOrDefault(guid) ?? [])
+                .Distinct().ToArray();
             var resolved = objectAssignments
                 .Select(assignment => TryCreateEntry(candidate, assignment, variableByGuid))
                 .Where(item => item is not null)
@@ -183,7 +183,8 @@ public static class FeeContainerLiveReconstructor
                     new XElement("DataType", variable.DataType ?? string.Empty),
                     new XElement("Signal", variable.Signal ?? string.Empty),
                     new XElement("Slot", entry.XmlSlot),
-                    new XElement("Note", $"Aus FEE rekonstruiert; Objekt {candidate.Object.Guid:D}.")));
+                    new XElement("Note", $"Aus FEE rekonstruiert; Objekt {candidate.Object.Guid:D}."),
+                    new XAttribute("feeGuid", variable.VariableGuid.ToString("D"))));
                 bindings.Add(new FeeContainerSignalBinding(
                     containerIndex,
                     dataList.Elements("Entry").Count() - 1,
@@ -194,7 +195,10 @@ public static class FeeContainerLiveReconstructor
                 new XAttribute("id", $"fee:{candidate.Object.Guid:D}"),
                 new XElement("Component", componentName),
                 new XElement("Type", candidate.XmlType),
-                dataList));
+                dataList,
+                new XElement("SimObjects", members.Select(item => ContainerFileXml.Object(
+                    item.ObjectGuid.ToString("D"), item.ObjectName, item.ObjectType,
+                    item.ObjectGuid == candidate.Object.Guid ? "Primary" : IsHelper(item.ObjectType) ? "TechnicalHelper" : "SimObject")))));
         }
 
         var document = new XDocument(
@@ -218,7 +222,7 @@ public static class FeeContainerLiveReconstructor
                 item.Guid,
                 item.Name,
                 item.FeeType,
-                "Kein eindeutiger Containerbezug aus Typ, Logikdefinition oder Provenienz erkennbar."))
+                "Kein eindeutig gleichnamiger Container erkennbar; manuelle Zuordnung möglich."))
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.FeeType, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -231,47 +235,57 @@ public static class FeeContainerLiveReconstructor
             objectAssociations);
     }
 
-    private static IReadOnlyList<FeeContainerObjectAssociation> ResolveMotionJointAssociations(
-        IReadOnlyList<FeeContainerLiveObject> objects,
-        IReadOnlyList<ContainerCandidate> candidates,
+    private static FeeContainerObjectAssociation[] ResolveAllObjectAssociations(
+        IReadOnlyList<FeeContainerLiveObject> objects, IReadOnlyList<ContainerCandidate> candidates,
         ICollection<FeeContainerReconstructionIssue> issues)
     {
         var result = new List<FeeContainerObjectAssociation>();
-        foreach (var joint in objects.Where(item => EndsWithType(item.FeeType, "MotionJoint")))
+        foreach (var item in objects)
         {
-            var compatible = candidates.Where(candidate =>
-                    candidate.Descriptor.Targets.Any(target =>
-                        string.Equals(target.AllowedType.Name, "MotionJoint", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(target.AllowedType.Name, "FeeJoint", StringComparison.OrdinalIgnoreCase)) &&
-                    ((!string.IsNullOrWhiteSpace(joint.ProvenanceContainerId) &&
-                      string.Equals(joint.ProvenanceContainerId, candidate.Object.ProvenanceContainerId, StringComparison.Ordinal)) ||
-                     string.Equals(joint.Name, candidate.ComponentName, StringComparison.OrdinalIgnoreCase)))
-                .DistinctBy(candidate => candidate.Object.Guid)
-                .ToArray();
-            if (compatible.Length == 1)
+            var matches = candidates.Where(candidate =>
+                ContainerFileXml.HasMatchingObjectName(item.Name, candidate.ComponentName)).ToArray();
+            // Provenance disambiguates equal names but never invents an automatic
+            // association between differently named physical scene objects.
+            var own = matches.Where(candidate => candidate.Object.Guid == item.Guid).ToArray();
+            if (own.Length == 1) matches = own;
+            else if (matches.Length > 1)
             {
-                var container = compatible[0];
-                result.Add(new FeeContainerObjectAssociation(
-                    joint.Guid,
-                    joint.Name,
-                    joint.FeeType,
-                    container.Object.Guid,
-                    string.IsNullOrWhiteSpace(container.Object.ProvenanceContainerId)
-                        ? $"fee:{container.Object.Guid:D}"
-                        : container.Object.ProvenanceContainerId!,
-                    !string.IsNullOrWhiteSpace(joint.ProvenanceContainerId)
-                        ? "Über Container-Provenienz zugeordnet"
-                        : "Über eindeutigen Komponentenname und kompatiblen MotionJoint-Zieltyp zugeordnet"));
+                var related = matches.Where(candidate => item.LinkedObjectGuids?.Contains(candidate.Object.Guid) == true ||
+                    IsDescendantOf(item, candidate.Object.Guid, objects)).ToArray();
+                if (related.Length == 1) matches = related;
             }
-            else if (compatible.Length > 1)
+            if (matches.Length == 1)
             {
-                issues.Add(new FeeContainerReconstructionIssue(
-                    joint.Guid,
-                    $"MotionJoint '{joint.Name}' passt zu mehreren Containern und bleibt zur Prüfung unzugeordnet."));
+                var container = matches[0];
+                result.Add(new FeeContainerObjectAssociation(item.Guid, item.Name, item.FeeType,
+                    container.Object.Guid, $"fee:{container.Object.Guid:D}",
+                    item.Guid == container.Object.Guid ? "Primäres Containerobjekt" :
+                    IsHelper(item.FeeType) ? "Technisches Hilfsobjekt" : "Automatisch über eindeutigen gleichen Namen zugeordnet",
+                    item.Guid == container.Object.Guid ? "Primary" : IsHelper(item.FeeType) ? "TechnicalHelper" : "SimObject",
+                    container.Object.ProvenanceContainerId ?? ""));
             }
+            else if (matches.Length > 1)
+                issues.Add(new FeeContainerReconstructionIssue(item.Guid,
+                    $"'{item.Name}' ({item.FeeType}) passt zu mehreren Containern und bleibt zur manuellen Zuordnung verfügbar."));
         }
-        return result;
+        return result.ToArray();
     }
+
+    private static bool IsDescendantOf(FeeContainerLiveObject item, Guid candidateGuid,
+        IReadOnlyList<FeeContainerLiveObject> objects)
+    {
+        var byGuid = objects.ToDictionary(value => value.Guid);
+        var visited = new HashSet<Guid>();
+        for (var parent = item.ParentGuid; parent.HasValue && visited.Add(parent.Value);)
+        {
+            if (parent.Value == candidateGuid) return true;
+            parent = byGuid.GetValueOrDefault(parent.Value)?.ParentGuid;
+        }
+        return false;
+    }
+
+    private static bool IsHelper(string type) => new[] { "BoolNot", "MoveBit", "BoolAnd", "BoolOr" }
+        .Any(value => EndsWithType(type, value));
 
     private static bool TryCreateCandidate(
         FeeContainerLiveObject item,
@@ -281,27 +295,25 @@ public static class FeeContainerLiveReconstructor
         candidate = null;
         ambiguity = null;
         var feeType = item.FeeType ?? string.Empty;
-        string? xmlType = string.IsNullOrWhiteSpace(item.ProvenanceContainerType)
-            ? null
-            : item.ProvenanceContainerType;
-        // SDK/FEE versions do not always expose a logic-bearing scene object
-        // under the literal type name LogicObject. The persisted, known logic
-        // definition is the stable discriminator also used by ModelValidation.
+        var hint = item.ProvenanceContainerType switch
+        { "Switch" => "CabinetSwitch", "Fuse" => "CabinetFuse", var type => type };
+        string? xmlType = null;
         var logicMatches = ContainerMetadataCatalog.FindXmlTypesByLogicName(item.LogicDefinitionName);
-        if (xmlType is null && logicMatches.Count > 0)
+        if (logicMatches.Count > 0)
         {
-            xmlType = logicMatches[0];
-            if (logicMatches.Count > 1)
-            {
-                ambiguity = $"Die Logik '{item.LogicDefinitionName}' passt zu {string.Join(" oder ", logicMatches)}. " +
-                            $"Für den Export wird '{xmlType}' verwendet; bitte im Vergleich prüfen.";
-            }
+            xmlType = logicMatches.FirstOrDefault(type => string.Equals(type, hint, StringComparison.OrdinalIgnoreCase)) ?? logicMatches[0];
+            if (logicMatches.Count > 1 && !logicMatches.Contains(hint ?? "", StringComparer.OrdinalIgnoreCase))
+                ambiguity = $"Die aktuelle Logik '{item.LogicDefinitionName}' passt zu {string.Join(" oder ", logicMatches)}; '{xmlType}' bitte prüfen.";
+            else if (!string.IsNullOrWhiteSpace(hint) && !logicMatches.Contains(hint, StringComparer.OrdinalIgnoreCase))
+                ambiguity = $"Veralteter Provenienztyp '{hint}' passt nicht zur aktuellen Logik; '{xmlType}' wird aus FEE rekonstruiert.";
         }
-        else if (xmlType is null && EndsWithType(feeType, "BoolNot"))
+        else if (EndsWithType(feeType, "BoolNot"))
         {
-            xmlType = "ReturnCircuit";
-            ambiguity = "Ein BoolNot kann ohne Provenienz nicht sicher zwischen ReturnCircuit und SafeArea " +
-                        "unterschieden werden. Für den Export wird 'ReturnCircuit' verwendet.";
+            var compatibleHint = new[] { "ReturnCircuit", "SafeArea" }.FirstOrDefault(type =>
+                string.Equals(type, hint, StringComparison.OrdinalIgnoreCase));
+            xmlType = compatibleHint ?? "ReturnCircuit";
+            if (compatibleHint is null)
+                ambiguity = "Ein BoolNot ist ohne passende Typinformation nicht sicher als ReturnCircuit oder SafeArea unterscheidbar; ReturnCircuit bitte prüfen.";
         }
         else if (xmlType is null && EndsWithType(feeType, "Button"))
         {
@@ -351,17 +363,21 @@ public static class FeeContainerLiveReconstructor
     }
 
     private static string? MapSlot(ContainerCandidate candidate, string runtimeSlot)
+        => MapRuntimeSlot(candidate.XmlType, runtimeSlot);
+
+    internal static string? MapRuntimeSlot(string xmlType, string runtimeSlot)
     {
         if (string.IsNullOrWhiteSpace(runtimeSlot))
             return null;
-        var directSlot = candidate.Descriptor.Slots.FirstOrDefault(slot =>
+        if (!ContainerMetadataCatalog.TryGet(xmlType, out var descriptor)) return null;
+        var directSlot = descriptor.Slots.FirstOrDefault(slot =>
             string.Equals(slot, runtimeSlot, StringComparison.OrdinalIgnoreCase));
         if (directSlot is not null)
             return directSlot;
 
         var normalizedSlot = runtimeSlot.Trim().ToUpperInvariant();
 
-        return candidate.XmlType switch
+        return xmlType switch
         {
             "Button" => normalizedSlot switch
             {
@@ -378,13 +394,13 @@ public static class FeeContainerLiveReconstructor
                 "WHITE" => "PLC_NO_White",
                 _ => null,
             },
-            "ReturnCircuit" => normalizedSlot switch
+            "ReturnCircuit" or "SafeArea" => normalizedSlot switch
             {
                 "INPUT 01" => "PLC_OUT_Signal",
                 "OUTPUT 01" => "PLC_IN_Signal",
                 _ => null,
             },
-            "Switch" or "EStop" => normalizedSlot switch
+            "Switch" or "CabinetSwitch" or "EStop" => normalizedSlot switch
             {
                 "NO1" => "PLC_IN_NO1",
                 "NO2" => "PLC_IN_NO2",
@@ -392,7 +408,7 @@ public static class FeeContainerLiveReconstructor
                 "NC2" => "PLC_IN_NC2",
                 _ => null,
             },
-            "Fuse" => normalizedSlot switch
+            "Fuse" or "CabinetFuse" => normalizedSlot switch
             {
                 "NO" => "PLC_IN_NO",
                 "NC" => "PLC_IN_NC",
@@ -409,11 +425,6 @@ public static class FeeContainerLiveReconstructor
         };
     }
 
-    private static int CandidatePriority(string feeType) =>
-        EndsWithType(feeType, "LogicObject") ? 0 :
-        EndsWithType(feeType, "CabinetElement") ? 1 :
-        EndsWithType(feeType, "Button") || EndsWithType(feeType, "SegmentedLamp") ? 2 : 3;
-
     private static bool IsRedundantLegacySimObject(
         ContainerCandidate candidate,
         IEnumerable<ContainerCandidate> allCandidates)
@@ -424,7 +435,7 @@ public static class FeeContainerLiveReconstructor
             return false;
         return allCandidates.Any(other =>
             other.Object.Guid != candidate.Object.Guid &&
-            EndsWithType(other.Object.FeeType, "LogicObject") &&
+            !string.IsNullOrWhiteSpace(other.Object.LogicDefinitionName) &&
             string.Equals(other.ComponentName, candidate.ComponentName, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -434,14 +445,14 @@ public static class FeeContainerLiveReconstructor
         if (normalized.Contains("GROBNOTAUS", StringComparison.Ordinal))
             return "EStop";
         if (normalized.Contains("FUSE", StringComparison.Ordinal))
-            return "Fuse";
+            return "CabinetFuse";
         if (normalized.Contains("LAMP", StringComparison.Ordinal))
             return "CabinetLamp";
         if (normalized.Contains("GROB2POSITIONSWITCH", StringComparison.Ordinal) ||
             normalized.Contains("POSITIONSWITCH2", StringComparison.Ordinal) ||
             normalized.Contains("2POSITIONSWITCH", StringComparison.Ordinal) ||
             normalized.Contains("TWOPOSITIONSWITCH", StringComparison.Ordinal))
-            return "Switch";
+            return "CabinetSwitch";
         return null;
     }
 

@@ -1,4 +1,6 @@
 using FS.SDK.Scene.Objects;
+using FS.SDK.Components;
+using FS.SDK.Utilities;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
@@ -42,6 +44,10 @@ public static class ContainerSlotLinkService
         if (objectGuid == Guid.Empty || variableGuid == Guid.Empty || string.IsNullOrWhiteSpace(slotName))
             throw new ArgumentException("Eine Variablenzuordnung enthält einen ungültigen Endpunkt.");
 
+        cancellationToken.ThrowIfCancellationRequested();
+        var existing = await Services.ApiInstance.Interface.GetAssignedSceneObjectsAsync(variableGuid);
+        if (ContainsVariableEndpoint(existing, objectGuid, slotName)) return;
+
         var sendAccepted = await Services.ApiInstance.Interface.SendSlotVarAssignmentAsync(
             objectGuid,
             slotName,
@@ -52,7 +58,9 @@ public static class ContainerSlotLinkService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var assignments = await Services.ApiInstance.Interface.GetAssignedSceneObjectsAsync(variableGuid);
-            if (ContainsVariableEndpoint(assignments, objectGuid, slotName))
+            var previousPreserved = (existing ?? []).All(endpoint => (endpoint.Item2 ?? []).All(slot =>
+                ContainsVariableEndpoint(assignments, endpoint.Item1, slot)));
+            if (ContainsVariableEndpoint(assignments, objectGuid, slotName) && previousPreserved)
                 return;
 
             if (attempt + 1 < VerificationAttempts)
@@ -76,19 +84,26 @@ public static class ContainerSlotLinkService
         if (endpoints.Any(endpoint => endpoint.ObjectGuid == Guid.Empty || string.IsNullOrWhiteSpace(endpoint.SlotName)))
             throw new ArgumentException("Eine Slotverknüpfung enthält einen ungültigen Endpunkt.", nameof(endpoints));
 
-        var sendAccepted = await Services.ApiInstance.Interface.SendMultipleSlotSlotAssignmentsAsync(
-            endpoints.Select(endpoint => endpoint.ObjectGuid).ToArray(),
-            endpoints.Select(endpoint => endpoint.SlotName).ToArray());
-
         var anchor = endpoints[0];
         var expectedLinks = endpoints.Skip(1).ToArray();
+        cancellationToken.ThrowIfCancellationRequested();
+        var existing = await Services.ApiInstance.Interface.GetSlotSlotAssignmentAsync(anchor.ObjectGuid, anchor.SlotName);
+        var missing = expectedLinks.Where(endpoint => !ContainsAllEndpoints(existing, [endpoint])).ToArray();
+        if (missing.Length == 0) return;
+        var retainedLinks = (existing ?? []).SelectMany(link => Guid.TryParse(link.Item1, out var guid)
+                ? (link.Item2 ?? []).Select(slot => (ObjectGuid: guid, SlotName: slot)) : [])
+            .Where(endpoint => endpoint != anchor).ToArray();
+        var writes = new[] { anchor }.Concat(missing).ToArray();
+        var sendAccepted = await Services.ApiInstance.Interface.SendMultipleSlotSlotAssignmentsAsync(
+            writes.Select(endpoint => endpoint.ObjectGuid).ToArray(),
+            writes.Select(endpoint => endpoint.SlotName).ToArray());
         for (var attempt = 0; attempt < VerificationAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var actualLinks = await Services.ApiInstance.Interface.GetSlotSlotAssignmentAsync(
                 anchor.ObjectGuid,
                 anchor.SlotName);
-            if (ContainsAllEndpoints(actualLinks, expectedLinks))
+            if (ContainsAllEndpoints(actualLinks, expectedLinks) && ContainsAllEndpoints(actualLinks, retainedLinks))
                 return;
 
             if (attempt + 1 < VerificationAttempts)
@@ -139,6 +154,19 @@ public static class ContainerSlotLinkService
 
         throw new InvalidOperationException(
             $"Der Collision-Slot des Floors '{floor.Name}' für '{context}' konnte nicht aktiviert werden.");
+    }
+
+    public static async Task EnsurePositionControlAsync(FeeJoint joint, CancellationToken cancellationToken = default)
+    {
+        if (joint.ControlType == MotionSource.Position) return;
+        cancellationToken.ThrowIfCancellationRequested();
+        Services.ApiInstance.Object.CreateObject(nameof(MotionJoint), joint.Guid);
+        await Services.ApiInstance.Object.SetPropertyAsync(joint.Guid, nameof(JointControllerComponent.MotionSource), MotionSource.Position, "Controller");
+        await Services.ApiInstance.Object.SendAndWait(joint.Guid);
+        var value = await Services.ApiInstance.Object.GetPropertyAsync(joint.Guid, nameof(JointControllerComponent.MotionSource), "Controller");
+        if (!string.Equals(Services.ApiInstance.XmlHelper.ConvertToString(value), "Position", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Positionssteuerung von '{joint.Name}' wurde von FEE nicht bestätigt.");
+        joint.ControlType = MotionSource.Position;
     }
 
     public static bool ContainsAllEndpoints(

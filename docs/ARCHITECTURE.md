@@ -1,5 +1,11 @@
 # Architecture and data sources
 
+## Startup path and lazy tabs
+
+`MainWindow` constructs only the initially visible **Project Settings** page directly. Every other main tab uses `LazyPageHost`, which creates its concrete `UserControl` on the first visible selection and retains that instance afterwards. View-model state therefore survives tab changes while constructors for Container, TIA, Rockwell, AI and FEE analysis no longer burden cold startup. The secondary view inside Rechnerübersicht is lazy as well.
+
+After `ContentRendered`, `MainWindowVM.InitializeAsync` loads roles and the workstation directory. Project Settings performs local automation-installation discovery on a background task and then refreshes reachable FEE computers. The shared FEE `CoreApi` lifecycle in `Services.Initialize` deliberately remains unchanged because the verified connection workflow and selected SDK assemblies depend on it. `App.StartupElapsed` and the **Anwendungsstart** log entry measure the elapsed time including central service initialization up to the first rendered main window.
+
 ## Boundaries
 
 - `Application`: WPF views, view models, composition root and application log.
@@ -17,6 +23,7 @@
 | Data | Source | Rule |
 | --- | --- | --- |
 | Workstations and user assignment | Kanbanize workstation cache | `KONFIGURATION / USER` overrides older card text |
+| Header FEE station | connected computer + Rechnerübersicht cache | `localhost` stays literal; otherwise show distinct projects from the computer's **In Arbeit** cards |
 | Workstation configuration | `KONFIGURATION` card and card-level subtasks endpoint | update existing standard subtasks; explicitly create missing subtask/card |
 | Online state | bounded ICMP ping | offline suppresses remote/path actions |
 | Remote session / last logon | read-only `quser` | lack of permission means “Not available”, not offline |
@@ -40,8 +47,17 @@
 - TIA compile results cross the same typed pipe boundary and are persisted as explicit evidence; compile never implies project save.
 - External simulation adapters must distinguish filesystem readiness from a live manufacturer-API verification.
 - WPF grids use virtualization and deferred tab templates are covered by a UI startup test.
+- Global list/grid/tree scrolling uses pixel units; the main window normalizes wheel input to small vertical or horizontal increments without disabling item virtualization.
 - The main window uses practical minimum dimensions; data grids keep their own virtualization/scrolling and detail panels scroll independently.
 - `MainWindowVM` owns the navigation-width state; only TabItem header text is collapsed, while icons, content and role visibility remain intact.
+
+## Container2FEE visual plan persistence
+
+The original Container XML remains immutable. Slot overrides, extra/removed signals, assignments, generation choices and signal-only container type overrides are stored in the fingerprint-bound visual sidecar. Sidecar schema 10 adds `ContainerTypeOverrides`. `RuntimeVisualPlanBinder` creates the effective document in memory, applies the selected known container type and adds the corresponding logic/technical-helper/SimObject targets to the plan. Export recomputes stable container identities from that effective document so a type change cannot accidentally filter the container out of the exported XML.
+
+The public FEE SDK currently exposes selected-object reads but no public operation to select an object in the FEE tree. UI navigation therefore synchronizes the VIBN lists/tree by stable plan IDs and keeps SDK object GUIDs in technical diagnostics only; it does not claim to control the external FEE selection.
+
+Cancellation is cooperative at every tool-owned boundary. A vendor call that is already blocked inside the shared in-process SDK cannot be terminated safely by killing its thread. The visual page detaches such a task from the UI, bounds the subsequent disconnect attempt to two seconds and prevents another FEE operation until the call returns. Application shutdown uses the same bounded disconnect before process exit. A genuinely killable per-call boundary would require moving ownership of the complete FEE session and all runtime objects into a separately supervised worker process; a thread abort or a second in-process client would risk corrupted shared SDK state.
 
 ## Remote Desktop credential boundary
 

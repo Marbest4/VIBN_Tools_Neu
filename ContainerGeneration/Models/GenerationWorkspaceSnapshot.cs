@@ -27,15 +27,22 @@ public sealed record WorkspaceEntrySnapshot(
     string Note,
     bool WasManuallyEdited,
     ContainerEntryReviewState ReviewState,
-    string ReviewMessage);
+    string ReviewMessage,
+    string FeeGuid = "",
+    bool IsChangeAcknowledged = false);
+
+public sealed record WorkspaceContainerFeeSnapshot(string Id, string Name, string Type, IReadOnlyList<ContainerFeeObject> Objects);
 
 public sealed class GenerationWorkspaceSnapshot
 {
     public IReadOnlyList<WorkspaceEntrySnapshot> Entries { get; }
+    public IReadOnlyList<WorkspaceContainerFeeSnapshot> FeeObjects { get; }
 
-    public GenerationWorkspaceSnapshot(IReadOnlyList<WorkspaceEntrySnapshot> entries)
+    public GenerationWorkspaceSnapshot(IReadOnlyList<WorkspaceEntrySnapshot> entries,
+        IReadOnlyList<WorkspaceContainerFeeSnapshot>? feeObjects = null)
     {
         Entries = entries;
+        FeeObjects = feeObjects ?? [];
     }
 }
 
@@ -132,7 +139,12 @@ public sealed class ReimportDifference : NotifyBase
             AddFieldChange(changes, "ID", previous.Id, detected.Id);
             AddFieldChange(changes, "Adresse", previous.Address, detected.Address);
             AddFieldChange(changes, "Signalname", previous.Signal, detected.Signal);
-            AddFieldChange(changes, "Datentyp", previous.DataType, detected.DataType);
+            AddFieldChange(
+                changes,
+                "Datentyp",
+                previous.DataType,
+                detected.DataType,
+                StringComparison.OrdinalIgnoreCase);
         }
         else
         {
@@ -182,9 +194,10 @@ public sealed class ReimportDifference : NotifyBase
         ICollection<string> changes,
         string field,
         string previous,
-        string detected)
+        string detected,
+        StringComparison comparison = StringComparison.Ordinal)
     {
-        if (string.Equals(previous, detected, StringComparison.Ordinal))
+        if (string.Equals(previous, detected, comparison))
             return;
 
         changes.Add(
@@ -285,8 +298,9 @@ public static class GenerationWorkspaceReconciler
         IEnumerable<ContainerEntry> filtered)
     {
         var entries = new List<WorkspaceEntrySnapshot>();
+        var sourceContainers = containers.ToArray();
 
-        foreach (var container in containers)
+        foreach (var container in sourceContainers)
         {
             entries.AddRange(container.DataList.Select(entry =>
                 CreateSnapshot(entry, WorkspaceEntryLocation.Container, container)));
@@ -307,7 +321,9 @@ public static class GenerationWorkspaceReconciler
                         ContainerEntryReviewState.ManuallyEdited)
                     .ThenBy(entry => entry.Location)
                     .First())
-                .ToList());
+                .ToList(), sourceContainers.Where(container => container.SimObjects.Count > 0)
+                    .Select(container => new WorkspaceContainerFeeSnapshot(container.Id, container.Component, container.Type,
+                        container.SimObjects.Select(item => item.Clone()).ToArray())).ToArray());
     }
 
     public static ReimportSummary Reconcile(
@@ -404,6 +420,7 @@ public static class GenerationWorkspaceReconciler
                     filtered);
 
                 current.Entry.Slot = previous.Slot;
+                current.Entry.FeeGuid = previous.FeeGuid;
                 if (!string.IsNullOrWhiteSpace(previous.Note))
                     current.Entry.Note = previous.Note;
 
@@ -569,6 +586,19 @@ public static class GenerationWorkspaceReconciler
                 targetEntry: restoredEntry));
         }
 
+        foreach (var previous in snapshot.FeeObjects)
+        {
+            var matches = containers.Where(container => container.Component == previous.Name && container.Type == previous.Type).ToArray();
+            if (matches.Length > 1) continue;
+            var container = matches.SingleOrDefault();
+            if (container is null)
+            {
+                container = new ContainerData { Id = previous.Id, Component = previous.Name, Type = previous.Type };
+                containers.Add(container);
+            }
+            foreach (var item in previous.Objects)
+                if (!container.SimObjects.Any(existing => existing.Guid == item.Guid)) container.SimObjects.Add(item.Clone());
+        }
         return new ReimportSummary(
             preserved,
             recognized,
@@ -769,7 +799,7 @@ public static class GenerationWorkspaceReconciler
             entry.Note,
             entry.IsManuallyEdited,
             entry.ReviewState,
-            entry.ReviewMessage);
+            entry.ReviewMessage, entry.FeeGuid, entry.IsChangeAcknowledged);
     }
 
     private static IEnumerable<CurrentEntry> EnumerateCurrentEntries(
@@ -821,6 +851,7 @@ public static class GenerationWorkspaceReconciler
         var entry = new ContainerEntry
         {
             SignalId = snapshot.SignalId,
+            FeeGuid = snapshot.FeeGuid,
             ID = snapshot.Id,
             Address = snapshot.Address,
             Signal = snapshot.Signal,
@@ -829,7 +860,8 @@ public static class GenerationWorkspaceReconciler
             Note = snapshot.Note,
             IsManuallyEdited = snapshot.WasManuallyEdited,
             ReviewState = snapshot.ReviewState,
-            ReviewMessage = snapshot.ReviewMessage
+            ReviewMessage = snapshot.ReviewMessage,
+            IsChangeAcknowledged = snapshot.IsChangeAcknowledged
         };
 
         MoveToSnapshotLocation(entry, snapshot, containers, unassigned, filtered);
@@ -963,7 +995,7 @@ public static class GenerationWorkspaceReconciler
         !string.Equals(previous.Id, current.ID, StringComparison.Ordinal) ||
         !string.Equals(previous.Address, current.Address, StringComparison.Ordinal) ||
         !string.Equals(previous.Signal, current.Signal, StringComparison.Ordinal) ||
-        !string.Equals(previous.DataType, current.DataType, StringComparison.Ordinal);
+        !string.Equals(previous.DataType, current.DataType, StringComparison.OrdinalIgnoreCase);
 
     private static string DescribePreviousAssignment(WorkspaceEntrySnapshot entry) =>
         entry.Location switch
@@ -1009,6 +1041,8 @@ public static class GenerationWorkspaceReconciler
         string message)
     {
         entry.ReviewState = state;
+        if (state is not ContainerEntryReviewState.None and not ContainerEntryReviewState.Preserved)
+            entry.IsChangeAcknowledged = false;
         entry.ReviewMessage = message;
     }
 

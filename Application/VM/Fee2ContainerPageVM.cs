@@ -5,6 +5,8 @@ using System.Windows.Data;
 using System.Windows.Threading;
 using System.Xml.Linq;
 using Microsoft.Win32;
+using VIBN_Tools.Application.Behaviors;
+using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.Core.Collections;
 using VIBN_Tools.GlobalClasses;
@@ -21,6 +23,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private Fee2ContainerRootSelectionVM? _selectedRoot;
     private CancellationTokenSource? _operationCancellation;
     private bool _isBusy;
+    private bool _isIssuesExpanded;
     private int _progressValue;
     private string _statusText = "FEE verbinden und Hauptknoten einlesen.";
     private Fee2ContainerFoundContainerVM? _selectedFoundContainer;
@@ -30,7 +33,6 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private string _containerSearchText = string.Empty;
     private string _signalSearchText = string.Empty;
     private string _objectSearchText = string.Empty;
-    private bool _suppressCrossListReveal;
     private long _selectionRevision;
     private long _crossSelectionRevision;
 
@@ -53,6 +55,20 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         AddObjectAsContainerCommand = new RelayCommand<Fee2ContainerUnmappedObjectVM>(
             AddObjectAsContainer,
             item => item is { CanAdd: true } && !IsBusy);
+        AssignObjectToContainerCommand = new RelayCommand<ContainerToFeeVisualDropRequest>(
+            AssignObjectToContainer,
+            request => request?.Target is Fee2ContainerFoundContainerVM &&
+                GetDraggedObjects(request.Source).Count > 0 && !IsBusy);
+        RemoveObjectAssociationCommand = new RelayCommand<FeeContainerObjectAssociation>(
+            RemoveObjectAssociation,
+            association => association is not null && !IsBusy);
+        EditContainersCommand = new RelayCommand(EditContainers, () => SelectedRoot is not null && !IsBusy);
+        ConfigureDetailViews();
+        _connection.PropertyChanged += OnConnectionPropertyChanged;
+    }
+
+    private void ConfigureDetailViews()
+    {
         FoundContainersView = CollectionViewSource.GetDefaultView(FoundContainers);
         FoundSignalsView = CollectionViewSource.GetDefaultView(FoundSignals);
         NonContainerObjectsView = CollectionViewSource.GetDefaultView(NonContainerObjects);
@@ -65,23 +81,25 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         NonContainerObjectsView.Filter = item => item is Fee2ContainerUnmappedObjectVM feeObject &&
             Matches(ObjectSearchText, feeObject.Name, feeObject.FeeType, feeObject.Reason,
                 feeObject.TargetComponent, feeObject.TargetContainerType);
-        _connection.PropertyChanged += OnConnectionPropertyChanged;
     }
 
-    public ObservableCollection<Fee2ContainerRootSelectionVM> Roots { get; } = new();
-    public ObservableCollection<string> Issues { get; } = new();
-    public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; } = new();
-    public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; } = new();
-    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new();
-    public ICollectionView FoundContainersView { get; }
-    public ICollectionView FoundSignalsView { get; }
-    public ICollectionView NonContainerObjectsView { get; }
+    public ObservableCollection<Fee2ContainerRootSelectionVM> Roots { get; } = new RangeObservableCollection<Fee2ContainerRootSelectionVM>();
+    public ObservableCollection<string> Issues { get; } = new RangeObservableCollection<string>();
+    public ObservableCollection<Fee2ContainerFoundContainerVM> FoundContainers { get; private set; } = new RangeObservableCollection<Fee2ContainerFoundContainerVM>();
+    public ObservableCollection<Fee2ContainerFoundSignalVM> FoundSignals { get; private set; } = new RangeObservableCollection<Fee2ContainerFoundSignalVM>();
+    public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; private set; } = new RangeObservableCollection<Fee2ContainerUnmappedObjectVM>();
+    public ICollectionView FoundContainersView { get; private set; } = null!;
+    public ICollectionView FoundSignalsView { get; private set; } = null!;
+    public ICollectionView NonContainerObjectsView { get; private set; } = null!;
     public ICommand RefreshCommand { get; }
     public ICommand ExportCommand { get; }
     public ICommand CancelCommand { get; }
     public ICommand RemoveContainerCommand { get; }
     public ICommand RemoveSignalCommand { get; }
     public ICommand AddObjectAsContainerCommand { get; }
+    public ICommand AssignObjectToContainerCommand { get; }
+    public ICommand RemoveObjectAssociationCommand { get; }
+    public ICommand EditContainersCommand { get; }
     public FeeConnectionService Connection => _connection;
 
     public IReadOnlyList<string> SupportedContainerTypes =>
@@ -157,7 +175,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null)
                 return;
-            QueueCrossListSelection(value, revealTarget: !_suppressCrossListReveal);
+            QueueCrossListSelection(value, revealTarget: true);
         }
     }
 
@@ -172,7 +190,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             if (value is null)
                 return;
-            QueueCrossListSelection(value, revealTarget: !_suppressCrossListReveal);
+            QueueCrossListSelection(value, revealTarget: true);
         }
     }
 
@@ -185,7 +203,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             ApplyCrossListSelectionSafely(selection, revealTarget, revision);
             return;
         }
-        _ = dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        _ = dispatcher.BeginInvoke(DispatcherPriority.DataBind, new Action(() =>
             ApplyCrossListSelectionSafely(selection, revealTarget, revision)));
     }
 
@@ -210,8 +228,10 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     signal.IsRelatedToSelection = string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal);
                 if (revealTarget)
                 {
-                    SignalRevealTarget = FoundSignalsView.Cast<Fee2ContainerFoundSignalVM>()
+                    var target = FoundSignals
                         .FirstOrDefault(signal => string.Equals(signal.ContainerId, container.Id, StringComparison.Ordinal));
+                    EnsureSignalVisible(target);
+                    RequestSignalReveal(target);
                 }
             }
             else if (selection is Fee2ContainerFoundSignalVM signal)
@@ -229,8 +249,10 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                     relatedContainer.IsRelatedToSelection = string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal);
                 if (revealTarget)
                 {
-                    ContainerRevealTarget = FoundContainersView.Cast<Fee2ContainerFoundContainerVM>()
+                    var target = FoundContainers
                         .FirstOrDefault(relatedContainer => string.Equals(relatedContainer.Id, signal.ContainerId, StringComparison.Ordinal));
+                    EnsureContainerVisible(target);
+                    RequestContainerReveal(target);
                 }
             }
         }
@@ -246,6 +268,44 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         }
     }
 
+    private void EnsureContainerVisible(Fee2ContainerFoundContainerVM? target)
+    {
+        if (target is null || FoundContainersView.Contains(target))
+            return;
+        _containerSearchText = string.Empty;
+        OnPropertyChanged(nameof(ContainerSearchText));
+        FoundContainersView.Refresh();
+    }
+
+    private void EnsureSignalVisible(Fee2ContainerFoundSignalVM? target)
+    {
+        if (target is null || FoundSignalsView.Contains(target))
+            return;
+        _signalSearchText = string.Empty;
+        OnPropertyChanged(nameof(SignalSearchText));
+        FoundSignalsView.Refresh();
+    }
+
+    private void RequestContainerReveal(Fee2ContainerFoundContainerVM? target)
+    {
+        if (ReferenceEquals(_containerRevealTarget, target) && target is not null)
+        {
+            _containerRevealTarget = null;
+            OnPropertyChanged(nameof(ContainerRevealTarget));
+        }
+        ContainerRevealTarget = target;
+    }
+
+    private void RequestSignalReveal(Fee2ContainerFoundSignalVM? target)
+    {
+        if (ReferenceEquals(_signalRevealTarget, target) && target is not null)
+        {
+            _signalRevealTarget = null;
+            OnPropertyChanged(nameof(SignalRevealTarget));
+        }
+        SignalRevealTarget = target;
+    }
+
     public Fee2ContainerRootSelectionVM? SelectedRoot
     {
         get => _selectedRoot;
@@ -256,6 +316,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectionSummary));
             QueueSelectionDetails(value);
+            CommandManager.InvalidateRequerySuggested();
         }
     }
 
@@ -287,10 +348,16 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         private set { _statusText = value; OnPropertyChanged(); }
     }
 
-    public bool CanRefresh => !IsBusy && Connection.CanUseFeeFeatures;
+    public bool IsIssuesExpanded
+    {
+        get => _isIssuesExpanded;
+        set { if (_isIssuesExpanded == value) return; _isIssuesExpanded = value; OnPropertyChanged(); }
+    }
+
+    public bool CanRefresh => !IsBusy && Connection.CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent;
     public bool CanExport => !IsBusy && Roots.Any(root => root.IsSelected);
     public string RefreshUnavailableReason => Connection.CanUseFeeFeatures
-        ? (IsBusy ? "Ein FEE2Container-Vorgang läuft bereits." : string.Empty)
+        ? (IsBusy ? "Ein FEE2Container-Vorgang läuft bereits." : Connection.ModelValidationUnavailableReason ?? string.Empty)
         : Connection.UnavailableReason;
     public string ExportUnavailableReason => !Roots.Any(root => root.IsSelected)
         ? "Mindestens einen BasicFrame über die Checkbox auswählen."
@@ -298,8 +365,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
 
     public string SelectionSummary => SelectedRoot is null
         ? "Kein Root für die Detailansicht ausgewählt."
-        : $"{SelectedRoot.Root.SourceKind}; {SelectedRoot.Root.ContainerCount} Container, " +
-          $"{SelectedRoot.Root.SignalCount} Signale; " +
+        : $"{SelectedRoot.Root.SourceKind}; {SelectedRoot.ContainerCount} Container, " +
+          $"{SelectedRoot.SignalCount} Signale; " +
           (SelectedRoot.Root.HasProvenance
               ? $"{SelectedRoot.Root.UpdatedSignalCount} aktuell, {SelectedRoot.Root.MissingSignalCount} fehlend; " +
                 $"{SelectedRoot.Root.UpdatedSlotCount} Slotrouten, {SelectedRoot.Root.UnresolvedSlotCount} ungeklärt; " +
@@ -312,17 +379,25 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     {
         if (!CanRefresh) { StatusText = RefreshUnavailableReason; return; }
         BeginOperation();
+        var operationCancellation = _operationCancellation!;
         try
         {
+            ClearDiscoveredRoots();
             var progress = new Progress<Fee2ContainerProgress>(update =>
             {
+                if (!IsBusy || !ReferenceEquals(_operationCancellation, operationCancellation) ||
+                    operationCancellation.IsCancellationRequested)
+                    return;
                 ProgressValue = update.Percent;
                 StatusText = update.Message;
             });
             var result = await _service.DiscoverAsync(
-                _operationCancellation!.Token,
+                operationCancellation.Token,
                 reconstructLegacyRoots: true,
                 progress);
+            SelectedRoot = null;
+            foreach (var existingRoot in Roots)
+                existingRoot.PropertyChanged -= OnRootSelectionChanged;
             Roots.Clear();
             foreach (var root in result.Roots)
             {
@@ -333,24 +408,24 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             Issues.Clear();
             foreach (var issue in result.Issues)
                 Issues.Add($"{issue.RootName}: {issue.Message}".TrimStart(':', ' '));
+            IsIssuesExpanded = Issues.Count > 0;
             SelectedRoot = Roots.FirstOrDefault();
             if (SelectedRoot is not null) SelectedRoot.IsSelected = true;
             StatusText = result.Roots.Count == 0
                 ? "Keine obersten BasicFrames im geöffneten FEE-Projekt gefunden."
                 : $"{result.Roots.Count} oberste BasicFrame(s) gefunden; " +
-                  $"{result.IgnoredWithoutProvenance} ohne Provenienz live rekonstruiert; " +
+                  $"{result.Roots.Count} aus aktueller FEE-Struktur rekonstruiert; " +
                   $"{result.Issues.Count} Hinweis(e).";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
         {
-            StatusText = "Einlesen der FEE-Roots wurde abgebrochen.";
+            StatusText = "Einlesen der FEE-Roots wurde durch den Benutzer abgebrochen.";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
         catch (Exception exception)
         {
-            StatusText = $"FEE-Roots konnten nicht gelesen werden: {exception.Message}";
-            ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
+            ReportOperationFailure("FEE-Roots konnten nicht gelesen werden", exception);
         }
         finally { EndOperation(); }
     }
@@ -372,6 +447,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         if (dialog.ShowDialog() != true) return;
 
         BeginOperation();
+        var operationCancellation = _operationCancellation!;
         try
         {
             StatusText = "Ausgewählte FEE-Teilbäume, Logiken, Slots und Signale werden zusammengeführt …";
@@ -379,6 +455,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             Issues.Clear();
             foreach (var issue in export.Issues)
                 Issues.Add($"{(issue.ObjectGuid is Guid guid ? $"{guid:D}: " : string.Empty)}{issue.Message}");
+            IsIssuesExpanded = Issues.Count > 0;
             if (export.Snapshot.ContainerCount == 0)
             {
                 StatusText = "In den ausgewählten Hauptknoten wurden keine sicher unterstützten Container erkannt. Es wurde keine Datei geschrieben.";
@@ -392,17 +469,36 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                          $"{export.Issues.Count} Prüfhinweis(e). Datei: {dialog.FileName}";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
         {
             StatusText = "ContainerFile-Export wurde abgebrochen; es wurde keine Datei geschrieben.";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
         catch (Exception exception)
         {
-            StatusText = $"ContainerFile konnte nicht exportiert werden: {exception.Message}";
-            ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
+            ReportOperationFailure("ContainerFile konnte nicht exportiert werden", exception);
         }
         finally { EndOperation(); }
+    }
+
+    private void ReportOperationFailure(string operation, Exception exception)
+    {
+        StatusText = $"{operation}: {Fee2ContainerReadPhase.Describe(exception)}";
+        Issues.Add(StatusText);
+        Issues.Add(exception.ToString());
+        IsIssuesExpanded = true;
+        ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
+    }
+
+    private void ClearDiscoveredRoots()
+    {
+        _selectionRevision++;
+        SelectedRoot = null;
+        foreach (var root in Roots) root.PropertyChanged -= OnRootSelectionChanged;
+        Roots.Clear();
+        Issues.Clear();
+        IsIssuesExpanded = false;
+        RefreshSelectionDetails(null);
     }
 
     private void BeginOperation()
@@ -436,6 +532,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private void OnConnectionPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is not nameof(FeeConnectionService.CanUseFeeFeatures) and
+            not nameof(FeeConnectionService.AreModelValidationObjectsCurrent) and
+            not nameof(FeeConnectionService.ModelValidationUnavailableReason) and
             not nameof(FeeConnectionService.UnavailableReason)) return;
         OnPropertyChanged(nameof(CanRefresh));
         OnPropertyChanged(nameof(RefreshUnavailableReason));
@@ -478,38 +576,36 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             StatusText = "Die Detailansicht dieses FEE-Roots konnte wegen eines veralteten Tabellenindex nicht aktualisiert werden. Bitte den Root erneut auswählen.";
             ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
         }
+        catch (InvalidOperationException exception)
+        {
+            StatusText = "Die FEE2Container-Detailansicht wurde während des Root-Wechsels erneuert. Bitte den Root erneut auswählen.";
+            ApplicationLogService.Instance.Warning(LogArea, StatusText, exception.ToString());
+        }
     }
 
     private void RefreshSelectionDetails(Fee2ContainerRootSelectionVM? selection)
     {
         _crossSelectionRevision++;
-        FoundContainers.Clear();
-        FoundSignals.Clear();
-        NonContainerObjects.Clear();
-        SelectedFoundContainer = null;
-        SelectedFoundSignal = null;
+        _selectedFoundContainer = null;
+        _selectedFoundSignal = null;
+        OnPropertyChanged(nameof(SelectedFoundContainer));
+        OnPropertyChanged(nameof(SelectedFoundSignal));
         ContainerRevealTarget = null;
         SignalRevealTarget = null;
-        if (selection?.Editor is not { } editor)
-            return;
-        foreach (var container in editor.Containers)
-            FoundContainers.Add(container);
-        foreach (var signal in editor.Signals)
-            FoundSignals.Add(signal);
-        foreach (var item in editor.NonContainerObjects)
-            NonContainerObjects.Add(item);
-        // Selecting the first row after a root switch is useful, but it is not
-        // a user-requested cross-list jump. Suppress automatic viewport work so
-        // rapid root changes cannot queue navigation against a replaced view.
-        _suppressCrossListReveal = true;
-        try
-        {
-            SelectedFoundContainer = FoundContainers.FirstOrDefault(item => item.IsIncluded);
-        }
-        finally
-        {
-            _suppressCrossListReveal = false;
-        }
+        var editor = selection?.Editor;
+        // Keep the old view and its backing data intact while WPF finishes
+        // queued row-generation requests. Mutating a bound collection here can
+        // invalidate a pending index in DataGrid/VirtualizingStackPanel.
+        FoundContainers = new ObservableCollection<Fee2ContainerFoundContainerVM>(editor?.Containers ?? []);
+        FoundSignals = new ObservableCollection<Fee2ContainerFoundSignalVM>(editor?.Signals ?? []);
+        NonContainerObjects = new ObservableCollection<Fee2ContainerUnmappedObjectVM>(editor?.NonContainerObjects ?? []);
+        ConfigureDetailViews();
+        OnPropertyChanged(nameof(FoundContainers));
+        OnPropertyChanged(nameof(FoundSignals));
+        OnPropertyChanged(nameof(NonContainerObjects));
+        OnPropertyChanged(nameof(FoundContainersView));
+        OnPropertyChanged(nameof(FoundSignalsView));
+        OnPropertyChanged(nameof(NonContainerObjectsView));
     }
 
     private static bool Matches(string query, params string?[] values)
@@ -517,6 +613,19 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         if (string.IsNullOrWhiteSpace(query))
             return true;
         return values.Any(value => value?.Contains(query.Trim(), StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private void EditContainers()
+    {
+        if (SelectedRoot is not { } root || IsBusy) return;
+        var viewModel = new Fee2ContainerEditVM(root);
+        var window = new VIBN_Tools.Application.View.Fee2ContainerEditWindow(viewModel);
+        if (System.Windows.Application.Current?.MainWindow is { } owner) window.Owner = owner;
+        if (window.ShowDialog() != true) return;
+        root.ApplyEditor(viewModel.CreateResult());
+        RefreshSelectionDetails(root);
+        StatusText = $"Container und Grouping für '{root.Name}' übernommen. Vor Export die FEE-Objektzuordnungen und Export-Checkboxen prüfen.";
+        OnPropertyChanged(nameof(SelectionSummary));
     }
 
     private void RemoveContainer(Fee2ContainerFoundContainerVM? container)
@@ -548,6 +657,65 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         SelectedFoundContainer = container;
         StatusText = $"FEE-Objekt '{item.Name}' wurde als prüfbarer Container '{item.TargetContainerType}' ergänzt. Slot- und Signalzuordnungen müssen manuell vervollständigt werden.";
     }
+
+    private void AssignObjectToContainer(ContainerToFeeVisualDropRequest? request)
+    {
+        if (request?.Target is not Fee2ContainerFoundContainerVM container ||
+            SelectedRoot?.Editor is not { } editor)
+        {
+            return;
+        }
+
+        var items = GetDraggedObjects(request.Source);
+        if (items.Count == 0 || !editor.Containers.Contains(container))
+            return;
+        var availableGuids = editor.NonContainerObjects.Select(item => item.Guid)
+            .Concat(editor.CreateObjectAssociations().Select(item => item.ObjectGuid)).ToHashSet();
+        if (items.Any(item => !availableGuids.Contains(item.Guid)))
+        {
+            StatusText = "Die Auswahl gehört nicht mehr zum aktiven FEE-Root. Bitte erneut auswählen.";
+            return;
+        }
+        foreach (var item in items)
+        {
+            editor.AssignObjectToContainer(item, container);
+            var existing = editor.NonContainerObjects.FirstOrDefault(value => value.Guid == item.Guid);
+            if (existing is not null)
+            {
+                editor.NonContainerObjects.Remove(existing);
+                NonContainerObjects.Remove(existing);
+            }
+        }
+        SelectedFoundContainer = container;
+        StatusText = $"{items.Count} FEE-Objekt(e) wurden dem Container '{container.Component}' zugeordnet. " +
+                     "Die Zuordnung wird im bearbeiteten FEE2Container-Arbeitsstand mitgeführt.";
+    }
+
+    private static IReadOnlyList<Fee2ContainerUnmappedObjectVM> GetDraggedObjects(object source)
+    {
+        object[] sources = source is object[] batch ? batch : [source];
+        if (sources.Any(item => item is not (Fee2ContainerUnmappedObjectVM or FeeContainerObjectAssociation)))
+            return [];
+        return sources.Select(item => item is Fee2ContainerUnmappedObjectVM unmapped
+                ? unmapped
+                : new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(
+                    ((FeeContainerObjectAssociation)item).ObjectGuid,
+                    ((FeeContainerObjectAssociation)item).ObjectName,
+                    ((FeeContainerObjectAssociation)item).ObjectType,
+                    "Manuelle Zuordnung")))
+            .DistinctBy(item => item.Guid).ToArray();
+    }
+
+    private void RemoveObjectAssociation(FeeContainerObjectAssociation? association)
+    {
+        if (association is null || SelectedRoot?.Editor is not { } editor)
+            return;
+        var restored = editor.RemoveObjectAssociation(association);
+        if (restored is null)
+            return;
+        NonContainerObjects.Add(restored);
+        StatusText = $"Zuordnung von '{association.ObjectName}' entfernt. Das FEE-Objekt steht wieder für die Zuordnung bereit.";
+    }
 }
 
 public sealed class Fee2ContainerRootSelectionVM : NotifyBase
@@ -559,50 +727,87 @@ public sealed class Fee2ContainerRootSelectionVM : NotifyBase
         Editor = new Fee2ContainerRootEditor(root);
     }
     public Fee2ContainerRoot Root { get; }
-    public Fee2ContainerRootEditor Editor { get; }
+    public Fee2ContainerRootEditor Editor { get; private set; }
+    public void ApplyEditor(Fee2ContainerRootEditor editor)
+    {
+        Editor = editor;
+        OnPropertyChanged(nameof(Editor));
+        OnPropertyChanged(nameof(ContainerCount));
+        OnPropertyChanged(nameof(SignalCount));
+    }
     public bool IsSelected { get => _isSelected; set => SetPropertyChange(ref _isSelected, value); }
     public Guid Guid => Root.Guid;
     public string Name => Root.Name;
     public string SourceKind => Root.SourceKind;
-    public int ContainerCount => Root.ContainerCount;
-    public int SignalCount => Root.SignalCount;
+    public int ContainerCount => Editor.Containers.Count(item => item.IsIncluded);
+    public int SignalCount => Editor.Signals.Count(item => item.IsIncluded && !string.IsNullOrWhiteSpace(item.Signal) && Editor.Containers.Any(container => container.Id == item.ContainerId && container.IsIncluded));
     public int UpdatedSignalCount => Root.UpdatedSignalCount;
     public int MissingSignalCount => Root.MissingSignalCount;
     public int UpdatedSlotCount => Root.UpdatedSlotCount;
     public int UnresolvedSlotCount => Root.UnresolvedSlotCount;
     public FeeContainerProvenanceSnapshot? Provenance => Root.Provenance;
-    public Fee2ContainerRoot CreateEditedRoot() => Root with { Provenance = Editor.CreateSnapshot() };
+    public Fee2ContainerRoot CreateEditedRoot() => Root with
+    {
+        Provenance = Editor.CreateSnapshot(),
+        NonContainerObjects = Editor.NonContainerObjects.Select(item => item.Model).ToArray(),
+        ObjectAssociations = Editor.CreateObjectAssociations(),
+    };
 }
 
 public sealed class Fee2ContainerRootEditor
 {
     private readonly Fee2ContainerRoot _root;
+    private readonly Dictionary<Guid, XElement> _sourceObjects = [];
+
+    public static Fee2ContainerRootEditor FromDocument(Fee2ContainerRoot source, XDocument document)
+    {
+        var bindings = new List<FeeContainerSignalBinding>();
+        var containers = document.Descendants("Container").ToArray();
+        foreach (var (container, containerIndex) in containers.Select((item, index) => (item, index)))
+            foreach (var (entry, entryIndex) in (container.Element("DataList")?.Elements("Entry") ?? []).Select((item, index) => (item, index)))
+                if (Guid.TryParse(entry.Attribute("feeGuid")?.Value, out var guid) && guid != Guid.Empty)
+                    bindings.Add(new FeeContainerSignalBinding(containerIndex, entryIndex, guid));
+        var snapshot = new FeeContainerProvenanceSnapshot(new Dictionary<string, string>(), new XDocument(document), bindings,
+            containers.Length, containers.Sum(item => item.Descendants("Entry").Count(entry => !string.IsNullOrWhiteSpace(entry.Element("Signal")?.Value))),
+            source.Provenance?.SourceFingerprint ?? "");
+        var retainedGuids = document.Descendants("Container").SelectMany(VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects)
+            .Select(item => Guid.TryParse(item.Element("Guid")?.Value, out var guid) ? guid : Guid.Empty).ToHashSet();
+        var unmapped = (source.NonContainerObjects ?? []).Concat((source.ObjectAssociations ?? [])
+            .Where(item => !retainedGuids.Contains(item.ObjectGuid))
+            .Select(item => new FeeContainerUnmappedObject(item.ObjectGuid, item.ObjectName, item.ObjectType, "Zuordnung im Editor entfernt")))
+            .DistinctBy(item => item.Guid).ToArray();
+        return new Fee2ContainerRootEditor(source with { Provenance = snapshot, ObjectAssociations = null, NonContainerObjects = unmapped });
+    }
 
     public Fee2ContainerRootEditor(Fee2ContainerRoot root)
     {
         _root = root;
-        var document = root.Provenance?.ContainerDocument;
+        // Work on a copy: normalizing legacy IDs must not alter saved root
+        // provenance or another edit session.
+        var document = root.Provenance is { } provenance ? new XDocument(provenance.ContainerDocument) : null;
+        var sourceContainers = document?.Descendants("Container").ToArray() ?? [];
+        var sourceIds = sourceContainers.ToDictionary(item => item, item => item.Attribute("id")?.Value ?? "");
+        var containerRows = new Dictionary<XElement, Fee2ContainerFoundContainerVM>();
+        if (document is not null) ContainerFileXml.EnsureUniqueContainerIds(document);
+        foreach (var element in document?.Descendants("SimObject") ?? [])
+            if (Guid.TryParse(element.Element("Guid")?.Value, out var guid)) _sourceObjects.TryAdd(guid, new XElement(element));
         if (document is not null)
         {
             var bindings = root.Provenance!.SignalBindings
                 .ToDictionary(item => (item.ContainerIndex, item.EntryIndex), item => item.VariableGuid);
-            foreach (var (container, containerIndex) in document.Descendants("Container").Select((item, index) => (item, index)))
+            foreach (var (container, containerIndex) in sourceContainers.Select((item, index) => (item, index)))
             {
-                var id = container.Attribute("id")?.Value ?? $"container-{containerIndex}";
+                var id = container.Attribute("id")!.Value;
                 var component = container.Element("Component")?.Value ?? string.Empty;
-                var type = container.Element("Type")?.Value ?? string.Empty;
+                var type = CanonicalizeContainerType(container.Element("Type")?.Value);
                 var entries = container.Descendants("Entry").ToArray();
-                var associatedObjects = (root.ObjectAssociations ?? [])
-                    .Where(item => string.Equals(item.ContainerId, id, StringComparison.Ordinal))
-                    .Select(item => $"{item.ObjectName} ({item.ObjectType})")
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                Containers.Add(new Fee2ContainerFoundContainerVM(
+                var row = new Fee2ContainerFoundContainerVM(
                     id,
                     component,
                     type,
-                    entries.Length,
-                    string.Join(", ", associatedObjects)));
+                    entries.Length) { IsIncluded = container.Attribute("export")?.Value != "false" };
+                Containers.Add(row);
+                containerRows[container] = row;
                 foreach (var (entry, entryIndex) in entries.Select((item, index) => (item, index)))
                 {
                     bindings.TryGetValue((containerIndex, entryIndex), out var variableGuid);
@@ -616,17 +821,73 @@ public sealed class Fee2ContainerRootEditor
                         entry.Element("DataType")?.Value ?? string.Empty,
                         entry.Element("ID")?.Value ?? string.Empty,
                         entry.Element("Note")?.Value ?? string.Empty,
-                        variableGuid == Guid.Empty ? null : variableGuid));
+                        variableGuid == Guid.Empty ? null : variableGuid) { IsIncluded = entry.Attribute("export")?.Value != "false" });
                 }
             }
         }
         foreach (var item in root.NonContainerObjects ?? [])
             NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
+        var proposals = new List<FeeContainerObjectAssociation>();
+        foreach (var association in root.ObjectAssociations ?? [])
+        {
+            if (association.ObjectGuid == Guid.Empty) continue;
+            var matches = sourceContainers.Where(item =>
+                (sourceIds[item] == association.ContainerId || containerRows[item].Id == association.ContainerId) &&
+                (association.IsManual || ContainerFileXml.HasMatchingObjectName(association.ObjectName, containerRows[item].Component))).ToArray();
+            if (matches.Length > 1)
+                matches = matches.Where(container => ContainerFileXml.Objects(container)
+                    .Any(item => Guid.TryParse(item.Element("Guid")?.Value, out var guid) && guid == association.ObjectGuid)).ToArray();
+            if (matches.Length == 1)
+                proposals.Add(association with { ContainerId = containerRows[matches[0]].Id });
+            else RestoreUnmatched(association.ObjectGuid, association.ObjectName, association.ObjectType);
+        }
+        foreach (var container in sourceContainers)
+            foreach (var item in ContainerFileXml.Objects(container))
+            {
+                if (!Guid.TryParse(item.Element("Guid")?.Value, out var guid) || guid == Guid.Empty) continue;
+                var name = item.Element("Name")?.Value ?? ""; var type = item.Element("FeeType")?.Value ?? "";
+                if (ContainerFileXml.CanRetainObjectAssociation(item, name, container.Element("Component")?.Value ?? ""))
+                    proposals.Add(new FeeContainerObjectAssociation(guid, name, type, Guid.Empty, containerRows[container].Id,
+                        "Gespeicherte Zuordnung aus ContainerFile", item.Element("Role")?.Value ?? "SimObject",
+                        IsManual: item.Attribute("assignment")?.Value == "Manual"));
+                else RestoreUnmatched(guid, name, type);
+            }
+        foreach (var group in proposals.GroupBy(item => item.ObjectGuid))
+        {
+            if (group.Select(item => item.ContainerId).Distinct(StringComparer.Ordinal).Count() == 1)
+                ObjectAssociations.Add(group.FirstOrDefault(item => item.IsManual) ?? group.First());
+            else
+                RestoreUnmatched(group.Key, group.First().ObjectName, group.First().ObjectType);
+        }
+        void RestoreUnmatched(Guid guid, string name, string type)
+        {
+            if (!NonContainerObjects.Any(item => item.Guid == guid))
+                NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(guid, name, type,
+                    "Automatische Zuordnung verworfen: Name oder Containerbezug ist nicht eindeutig; manuelle Zuordnung möglich")));
+        }
+        var assignedGuids = ObjectAssociations.Select(item => item.ObjectGuid).ToHashSet();
+        foreach (var item in NonContainerObjects.Where(item => assignedGuids.Contains(item.Guid)).ToArray()) NonContainerObjects.Remove(item);
+        RefreshObjectAssociations();
+        foreach (var container in Containers)
+            container.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is not (nameof(Fee2ContainerFoundContainerVM.Component) or nameof(Fee2ContainerFoundContainerVM.Type))) return;
+                foreach (var signal in Signals.Where(item => item.ContainerId == container.Id))
+                { signal.Container = container.Component; signal.ContainerType = container.Type; }
+                for (var index = 0; index < ObjectAssociations.Count; index++)
+                {
+                    var association = ObjectAssociations[index];
+                    if (association.ContainerId == container.Id && !ContainerFileXml.HasMatchingObjectName(association.ObjectName, container.Component))
+                        ObjectAssociations[index] = association with { IsManual = true, Reason = "Manuelle Änderung des Containernamens" };
+                }
+                RefreshObjectAssociations();
+            };
     }
 
     public ObservableCollection<Fee2ContainerFoundContainerVM> Containers { get; } = new();
     public ObservableCollection<Fee2ContainerFoundSignalVM> Signals { get; } = new();
     public ObservableCollection<Fee2ContainerUnmappedObjectVM> NonContainerObjects { get; } = new();
+    private List<FeeContainerObjectAssociation> ObjectAssociations { get; } = [];
 
     public Fee2ContainerFoundContainerVM AddObjectAsContainer(Fee2ContainerUnmappedObjectVM item)
     {
@@ -638,6 +899,7 @@ public sealed class Fee2ContainerRootEditor
             existing.IsIncluded = true;
             existing.Component = item.TargetComponent;
             existing.Type = item.TargetContainerType;
+            AssignObjectToContainer(item, existing);
             return existing;
         }
         var added = new Fee2ContainerFoundContainerVM(
@@ -646,30 +908,88 @@ public sealed class Fee2ContainerRootEditor
             item.TargetContainerType,
             0);
         Containers.Add(added);
+        AssignObjectToContainer(item, added);
         return added;
     }
 
-    public FeeContainerProvenanceSnapshot CreateSnapshot()
+    public void AssignObjectToContainer(
+        Fee2ContainerUnmappedObjectVM item,
+        Fee2ContainerFoundContainerVM container)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(container);
+        ObjectAssociations.RemoveAll(association => association.ObjectGuid == item.Guid);
+        ObjectAssociations.Add(new FeeContainerObjectAssociation(
+            item.Guid,
+            item.Name,
+            item.FeeType,
+            Guid.TryParse(container.Id.Replace("fee:", string.Empty, StringComparison.OrdinalIgnoreCase), out var containerGuid)
+                ? containerGuid
+                : Guid.Empty,
+            container.Id,
+            "Manuell per Drag-and-drop in FEE2Container zugeordnet", IsManual: true));
+        RefreshObjectAssociations();
+    }
+
+    public static bool HasMatchingName(Fee2ContainerUnmappedObjectVM item, Fee2ContainerFoundContainerVM container) =>
+        ContainerFileXml.HasMatchingObjectName(item.Name, container.Component);
+
+    private void RefreshObjectAssociations()
+    {
+        foreach (var container in Containers)
+            container.SetAssociatedObjects(ObjectAssociations.Where(item => item.ContainerId == container.Id));
+    }
+
+    public Fee2ContainerUnmappedObjectVM? RemoveObjectAssociation(FeeContainerObjectAssociation association)
+    {
+        if (!ObjectAssociations.Remove(association))
+            return null;
+        RefreshObjectAssociations();
+        var restored = new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(
+            association.ObjectGuid, association.ObjectName, association.ObjectType,
+            "Containerzuordnung wurde manuell entfernt"));
+        NonContainerObjects.Add(restored);
+        return restored;
+    }
+
+    public IReadOnlyList<FeeContainerObjectAssociation> CreateObjectAssociations() =>
+        ObjectAssociations.ToArray();
+
+    private XElement CreateObjectElement(FeeContainerObjectAssociation association)
+    {
+        var element = _sourceObjects.TryGetValue(association.ObjectGuid, out var source)
+            ? new XElement(source) : VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Object(
+                association.ObjectGuid.ToString("D"), association.ObjectName, association.ObjectType, association.Role);
+        element.SetElementValue("Name", association.ObjectName);
+        element.SetElementValue("FeeType", association.ObjectType);
+        element.SetElementValue("Role", association.Role);
+        element.SetAttributeValue("assignment", association.IsManual ? "Manual" : "Automatic");
+        return element;
+    }
+
+    public FeeContainerProvenanceSnapshot CreateSnapshot(bool includeExcluded = false)
     {
         var containerElements = new List<XElement>();
         var bindings = new List<FeeContainerSignalBinding>();
         var signalCount = 0;
-        foreach (var container in Containers.Where(item => item.IsIncluded))
+        foreach (var container in Containers.Where(item => includeExcluded || item.IsIncluded))
         {
             var dataList = new XElement("DataList");
             var containerIndex = containerElements.Count;
-            var includedSignals = Signals.Where(item => item.IsIncluded &&
+            var includedSignals = Signals.Where(item => (includeExcluded || item.IsIncluded) &&
                 string.Equals(item.ContainerId, container.Id, StringComparison.Ordinal)).ToArray();
             foreach (var signal in includedSignals)
             {
                 var entryIndex = dataList.Elements("Entry").Count();
                 dataList.Add(new XElement("Entry",
+                    includeExcluded && !signal.IsIncluded ? new XAttribute("export", "false") : null,
                     new XElement("ID", signal.SignalId),
                     new XElement("Address", signal.Address),
                     new XElement("DataType", signal.DataType),
                     new XElement("Signal", signal.Signal),
                     new XElement("Slot", signal.Slot),
-                    new XElement("Note", signal.Note)));
+                    new XElement("Note", signal.Note),
+                    signal.VariableGuid is Guid guid ? new XAttribute("feeGuid", guid.ToString("D")) : null));
                 if (signal.VariableGuid is Guid variableGuid)
                     bindings.Add(new FeeContainerSignalBinding(containerIndex, entryIndex, variableGuid));
                 if (!string.IsNullOrWhiteSpace(signal.Signal))
@@ -687,9 +1007,13 @@ public sealed class Fee2ContainerRootEditor
             }
             containerElements.Add(new XElement("Container",
                 new XAttribute("id", container.Id),
+                includeExcluded && !container.IsIncluded ? new XAttribute("export", "false") : null,
                 new XElement("Component", container.Component),
-                new XElement("Type", container.Type),
-                dataList));
+                new XElement("Type", CanonicalizeContainerType(container.Type)),
+                dataList,
+                new XElement("SimObjects", ObjectAssociations.Where(item => item.ContainerId == container.Id)
+                    .Select(item => CreateObjectElement(item)))));
+
         }
 
         var document = new XDocument(
@@ -699,7 +1023,8 @@ public sealed class Fee2ContainerRootEditor
                 new XAttribute("createdAt", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")),
                 new XAttribute("autoCreateFile", string.Empty),
                 new XAttribute("zuli", string.Empty),
-                new XElement("ContainerList", containerElements)));
+                new XElement("ContainerList", containerElements),
+                _root.Provenance?.ContainerDocument.Root?.Element("FeeInventory") is { } inventory ? new XElement(inventory) : null));
         return new FeeContainerProvenanceSnapshot(
             new Dictionary<string, string>(StringComparer.Ordinal),
             document,
@@ -707,6 +1032,16 @@ public sealed class Fee2ContainerRootEditor
             containerElements.Count,
             signalCount,
             _root.Provenance?.SourceFingerprint ?? string.Empty);
+    }
+
+    private static string CanonicalizeContainerType(string? type)
+    {
+        var value = type?.Trim() ?? string.Empty;
+        if (string.Equals(value, "Switch", StringComparison.OrdinalIgnoreCase))
+            return "CabinetSwitch";
+        if (string.Equals(value, "Fuse", StringComparison.OrdinalIgnoreCase))
+            return "CabinetFuse";
+        return value;
     }
 }
 
@@ -716,6 +1051,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     private string _type;
     private bool _isIncluded = true;
     private bool _isRelatedToSelection;
+    private string _associatedObjects;
 
     public Fee2ContainerFoundContainerVM(
         string id,
@@ -728,19 +1064,30 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
         _component = component;
         _type = type;
         OriginalSignalCount = originalSignalCount;
-        AssociatedObjects = associatedObjects;
+        _associatedObjects = associatedObjects;
     }
 
     public string Id { get; }
     public string Component { get => _component; set => SetPropertyChange(ref _component, value); }
     public string Type { get => _type; set => SetPropertyChange(ref _type, value); }
     public int OriginalSignalCount { get; }
-    public string AssociatedObjects { get; }
+    public string AssociatedObjects => _associatedObjects;
+    public int AssociatedObjectCount => AssociatedObjectItems.Count;
+    public ObservableCollection<FeeContainerObjectAssociation> AssociatedObjectItems { get; } = new();
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
     public bool IsRelatedToSelection
     {
         get => _isRelatedToSelection;
         set => SetPropertyChange(ref _isRelatedToSelection, value);
+    }
+
+
+    public void SetAssociatedObjects(IEnumerable<FeeContainerObjectAssociation> associations)
+    {
+        AssociatedObjectItems.ReplaceWith(associations.ToArray());
+        _associatedObjects = string.Join(", ", AssociatedObjectItems.Select(item => $"{item.ObjectName} ({item.ObjectType})"));
+        OnPropertyChanged(nameof(AssociatedObjects));
+        OnPropertyChanged(nameof(AssociatedObjectCount));
     }
 }
 

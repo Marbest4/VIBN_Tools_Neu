@@ -23,14 +23,30 @@ internal static class RuntimeVisualPlanBinder
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlySet<string>? excludedContainerIds = null,
-        bool omitInvalidSlotEntries = false)
+        bool omitInvalidSlotEntries = false,
+        bool omitInvalidObjectAssignments = false,
+        IReadOnlySet<string>? includedContainerIds = null,
+        bool bindSimObjects = true,
+        bool includeSignals = true)
     {
         var effectiveDocument = CreateEffectiveDocument(plan, omitInvalidSlotEntries);
+        if (includedContainerIds is not null)
+        {
+            var elements = effectiveDocument.Descendants("Container").ToArray();
+            var nodes = plan.Nodes.Where(node => node.Kind == VisualNodeKind.Container).ToArray();
+            if (elements.Length != nodes.Length)
+                return Failure("Containerdatei und Plan stimmen nicht überein.", "LEGACY_CONTAINER_COUNT_MISMATCH", []);
+            for (var index = 0; index < elements.Length; index++)
+                if (!includedContainerIds.Contains(nodes[index].Id)) elements[index].Remove();
+        }
+        if (!includeSignals)
+            foreach (var dataList in effectiveDocument.Descendants("DataList")) dataList.RemoveNodes();
         var (containers, unknownSignals) =
             ContainerToFeeService.ReadInContainerXmlData(effectiveDocument);
         var containerNodes = plan.Nodes
             .Where(node => node.Kind == VisualNodeKind.Container &&
-                           ContainerMetadataCatalog.TryGet(node.TypeName, out _))
+                           ContainerMetadataCatalog.TryGet(node.TypeName, out _) &&
+                           (includedContainerIds is null || includedContainerIds.Contains(node.Id)))
             .ToArray();
         if (containerNodes.Length != containers.Count)
         {
@@ -41,8 +57,14 @@ internal static class RuntimeVisualPlanBinder
                 unknownSignals);
         }
 
-        foreach (var runtimeObject in runtimeObjects.Values.OfType<IAssignableSimObject>())
-            runtimeObject.AssignedContainer = null!;
+        if (bindSimObjects)
+        {
+            var selectedObjectIds = plan.Assignments.Where(item => includedContainerIds is null ||
+                    includedContainerIds.Contains(plan.FindTarget(item.TargetId)?.ContainerId ?? ""))
+                .Select(item => item.FeeObjectId).ToHashSet(StringComparer.Ordinal);
+            foreach (var pair in runtimeObjects.Where(item => includedContainerIds is null || selectedObjectIds.Contains(item.Key)))
+                if (pair.Value is IAssignableSimObject assignable) assignable.AssignedContainer = null!;
+        }
 
         var bound = new List<BoundVisualContainer>(containers.Count);
         for (var index = 0; index < containers.Count; index++)
@@ -59,7 +81,7 @@ internal static class RuntimeVisualPlanBinder
             if (container is ICreatableContainer creatable)
                 creatable.IsCreationRequested = plan.IsCreationRequested(node.Id);
 
-            if (container is not ISimObjectFindOrSelect selectable)
+            if (!bindSimObjects || container is not ISimObjectFindOrSelect selectable)
                 continue;
 
             var runtimeTargets = selectable.GetSimObjectTargets().ToArray();
@@ -84,6 +106,8 @@ internal static class RuntimeVisualPlanBinder
                 {
                     if (!runtimeObjects.TryGetValue(assignment.FeeObjectId, out var runtimeObject))
                     {
+                        if (omitInvalidObjectAssignments)
+                            continue;
                         return Failure(
                             $"FEE-Objekt '{assignment.FeeObjectName}' ist nicht mehr vorhanden.",
                             "ASSIGNED_FEE_OBJECT_MISSING",
@@ -92,6 +116,8 @@ internal static class RuntimeVisualPlanBinder
                     }
                     if (!runtimeTarget.AllowedType.IsInstanceOfType(runtimeObject))
                     {
+                        if (omitInvalidObjectAssignments)
+                            continue;
                         return Failure(
                             $"FEE-Objekt '{assignment.FeeObjectName}' ist für " +
                             $"'{visualTarget.DisplayName}' nicht kompatibel.",
@@ -111,12 +137,35 @@ internal static class RuntimeVisualPlanBinder
         return new RuntimeVisualPlanBindingResult(true, bound, unknownSignals, null);
     }
 
+    internal static IReadOnlySet<string> SelectedContainerIds(VisualPlan plan) => plan.Nodes
+        .Where(node => node.Kind == VisualNodeKind.Container && plan.IsGenerationSelected(node.Id) &&
+                       ContainerMetadataCatalog.TryGet(node.TypeName, out _))
+        .Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
+
     internal static XDocument CreateEffectiveDocument(
         VisualPlan plan,
         bool omitInvalidSlotEntries = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var document = XDocument.Load(plan.SourceXmlPath, LoadOptions.None);
+        var allSourceContainers = document.Descendants("Container").ToArray();
+        var allPlanContainers = plan.Nodes.Where(node => node.Kind == VisualNodeKind.Container).ToArray();
+        if (allSourceContainers.Length == allPlanContainers.Length)
+        {
+            for (var index = 0; index < allSourceContainers.Length; index++)
+            {
+                if (!plan.ContainerTypeOverrides.Any(item => string.Equals(
+                        item.ContainerId,
+                        allPlanContainers[index].Id,
+                        StringComparison.Ordinal)))
+                    continue;
+                var typeElement = allSourceContainers[index].Element("Type");
+                if (typeElement is null)
+                    allSourceContainers[index].AddFirst(new XElement("Type", allPlanContainers[index].TypeName));
+                else
+                    typeElement.Value = allPlanContainers[index].TypeName;
+            }
+        }
         var supportedContainers = document.Descendants("Container")
             .Where(element => ContainerMetadataCatalog.TryGet(
                 element.Element("Type")?.Value ?? string.Empty,
@@ -147,6 +196,8 @@ internal static class RuntimeVisualPlanBinder
                 var slotElement = entries[entryIndex].Element("Slot");
                 if (slotElement is not null)
                     slotElement.Value = plan.GetEffectiveSlot(sourceSignalNodes[entryIndex]);
+                var assignment = plan.SignalAssignments.LastOrDefault(item => item.SignalNodeId == sourceSignalNodes[entryIndex].Id);
+                if (assignment is not null) entries[entryIndex].SetAttributeValue("feeGuid", assignment.FeeSignalGuid);
             }
             for (var entryIndex = entries.Length - 1; entryIndex >= 0; entryIndex--)
             {
@@ -169,6 +220,7 @@ internal static class RuntimeVisualPlanBinder
                 if (addedNode is null)
                     continue;
                 dataList.Add(new XElement("Entry",
+                    new XAttribute("feeGuid", added.FeeSignalGuid),
                     new XElement("ID", "Manuell in Container2FEE Visual ergänzt"),
                     new XElement("Address", string.IsNullOrWhiteSpace(added.Path) ? added.Address : added.Path),
                     new XElement("DataType", added.DataType),
@@ -193,6 +245,54 @@ internal static class RuntimeVisualPlanBinder
         }
 
         return document;
+    }
+
+    internal static void AddRuntimeObjectIdentities(XDocument document, VisualPlan plan,
+        IReadOnlyList<BoundVisualContainer> bindings)
+    {
+        var source = document.Descendants("Container").ToArray();
+        var nodes = plan.Nodes.Where(node => node.Kind == VisualNodeKind.Container).ToArray();
+        foreach (var binding in bindings)
+        {
+            var index = Array.FindIndex(nodes, node => node.Id == binding.PlanNode.Id);
+            if (index < 0 || index >= source.Length) continue;
+            var objects = source[index].Element("SimObjects") ?? new XElement("SimObjects");
+            if (objects.Parent is null) source[index].Add(objects);
+            var assignmentKinds = objects.Elements("SimObject")
+                .Where(item => Guid.TryParse(item.Element("Guid")?.Value, out _))
+                .GroupBy(item => Guid.Parse(item.Element("Guid")!.Value))
+                .ToDictionary(group => group.Key, group => group.First().Attribute("assignment")?.Value ?? "Automatic");
+            foreach (var generated in objects.Elements("SimObject").Where(item =>
+                         item.Element("Role")?.Value is "Primary" or "TechnicalHelper").ToArray()) generated.Remove();
+            var runtime = binding.RuntimeContainer;
+            var logic = ContainerExistingObjectReuse.GetAssignedLogic(runtime);
+            var cabinet = ContainerExistingObjectReuse.GetAssignedCabinetElement(runtime);
+            var primary = (FeeAbstractObject?)logic ?? cabinet;
+            var targets = runtime is ISimObjectFindOrSelect selectable ? selectable.GetSimObjectTargets().ToArray() : [];
+            if (primary is null && runtime is ISimObjectOwner)
+                primary = targets.SelectMany(target => target.GetObjects()).FirstOrDefault() ??
+                    runtime.GetType().GetProperties().Where(property => property.CanRead && property.GetIndexParameters().Length == 0)
+                        .Select(property => property.GetValue(runtime)).OfType<FeeAbstractObject>().FirstOrDefault();
+            var identities = new Dictionary<Guid, XElement>();
+            void Add(FeeAbstractObject item, string role, string target = "")
+            {
+                if (item.Guid == Guid.Empty) return;
+                identities[item.Guid] = VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Object(item.GuidString,
+                    item.Name ?? binding.PlanNode.Name, item.FeeType ?? "", role, target,
+                    item.GetType().FullName ?? item.GetType().Name,
+                    assignmentKind: assignmentKinds.GetValueOrDefault(item.Guid) ??
+                        (role == "SimObject" && !string.Equals(item.Name, binding.PlanNode.Name, StringComparison.OrdinalIgnoreCase) ? "Manual" : "Automatic"));
+            }
+            foreach (var target in targets)
+                foreach (var item in target.GetObjects()) Add(item, ReferenceEquals(primary, item) ? "Primary" : "SimObject", target.DisplayName);
+            if (primary is not null) Add(primary, "Primary", identities.GetValueOrDefault(primary.Guid)?.Element("Target")?.Value ?? "");
+            foreach (var property in runtime.GetType().GetProperties().Where(property => property.CanRead && property.GetIndexParameters().Length == 0))
+                if (property.GetValue(runtime) is FeeAbstractObject item && item is FeeSimpleNot or FeeSimpleMove or FeeSimpleAnd or FeeSimpleOr &&
+                    !identities.ContainsKey(item.Guid)) Add(item, "TechnicalHelper");
+            foreach (var item in objects.Elements("SimObject").Where(item =>
+                         Guid.TryParse(item.Element("Guid")?.Value, out var guid) && identities.ContainsKey(guid)).ToArray()) item.Remove();
+            objects.Add(identities.Values);
+        }
     }
 
     private static RuntimeVisualPlanBindingResult Failure(

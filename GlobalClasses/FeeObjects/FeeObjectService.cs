@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 using System.Xml.Linq;
@@ -9,6 +10,7 @@ using FS.SDK.Extensibility.Interfaces;
 using FS.SDK.Mathematics;
 using FS.SDK.Scene.Objects;
 using ReadingUnitPlugin.SO;
+using VIBN_Tools.Application;
 using VIBN_Tools.ModelValidation;
 using static VIBN_Tools.GlobalClasses.Interfaces;
 
@@ -25,11 +27,13 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         // Debounce Timer for user input
         private readonly Dictionary<(object obj, string property), CancellationTokenSource> _debounceUserInput = new Dictionary<(object obj, string property), CancellationTokenSource>();
 
-        private readonly HashSet<FeeAbstractObject> _subscribedObjects = new HashSet<FeeAbstractObject>();
+        private readonly Dictionary<INotifyPropertyChanged, FeeAbstractObject> _subscribedObjects = new();
+        private long _activeConnectionRevision = -1;
+        private long _snapshotConnectionRevision = -1;
 
-        private readonly List<Task> _debounceTasks = new();
-
-
+        private readonly object _updateSync = new();
+        private readonly SemaphoreSlim _sdkReadGate = new(1, 1);
+        private Task? _activeUpdate;
         private bool _isLoadingFeeData = false;
 
 
@@ -93,46 +97,179 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
 
 
-        public async Task UpdateFeeDataAsync()
+        public Task UpdateFeeDataAsync()
+        {
+            lock (_updateSync)
+            {
+                var revision = Services.Connection.ConnectionRevision;
+                if (_activeUpdate is { IsCompleted: false } active)
+                    return _activeConnectionRevision == revision ? active : UpdateAfterPreviousAsync(active);
+                _activeConnectionRevision = revision;
+                return _activeUpdate = UpdateFeeDataCoreAsync(revision);
+            }
+        }
+
+        private async Task UpdateAfterPreviousAsync(Task previous)
+        {
+            try { await previous; }
+            catch { /* The previous project's failure must not prevent a fresh read. */ }
+            await UpdateFeeDataAsync();
+        }
+
+        private void EnsureCurrentConnection(long revision)
+        {
+            if (!Services.Connection.IsConnected || Services.Connection.ConnectionRevision != revision)
+                throw new OperationCanceledException("Die FEE-Verbindung hat sich während des Einlesens geändert.");
+        }
+
+        private async Task UpdateFeeDataCoreAsync(long connectionRevision)
         {
             var startTime = DateTime.Now;            
+            var snapshotReadTime = TimeSpan.Zero;
+            var validationTime = TimeSpan.Zero;
 
             _isLoadingFeeData = true;
-
-            // Load all FEE objects
-            var oldObjects = AllFeeObjects;
-            var newObjects = await GetAllFeeObjectsAsync();
-
-            // Parent-Mapping
-            FindAndAssignParents(newObjects);
-
-            // Subscripe to PropertyChanged
-            SubscribePropertyChanges(newObjects);
-
-            // Plausibility checks of every object
-            await RunPlausibilityChecks(newObjects);
-
-            // Save Acknowledge status
-            AllFeeObjects = MergeAcknowledgeInformation(oldObjects, newObjects);
-
-            _isLoadingFeeData = false;
-
-            //==================================================================================
-            await Task.WhenAll(_debounceTasks);
-            _debounceTasks.Clear();
-
-
-            var stopTime = DateTime.Now;
-
-            // Inform ViewModels
-            await Task.Yield();       // let UI breath :)
-
-
-            FeeObjectsUpdated?.Invoke(this, new FeeObjectsUpdatedEventargs
+            try
             {
-                ElapsedTime = stopTime - startTime,
+                // A single shared batch is used by Model Validation,
+                // Container2FEE Visual and FEE2Container. Concurrent callers
+                // await this same operation instead of allocating a second
+                // complete project snapshot and racing the vendor client.
+                var oldObjects = _snapshotConnectionRevision == connectionRevision ? AllFeeObjects : null;
+                DetachPropertyChanges();
+                foreach (var cts in _debounceUserInput.Values.ToArray()) cts.Cancel();
+                _debounceUserInput.Clear();
+                AllFeeObjects = Array.Empty<FeeAbstractObject>();
+                EnsureCurrentConnection(connectionRevision);
+                var snapshotWatch = Stopwatch.StartNew();
+                await _sdkReadGate.WaitAsync();
+                List<FeeAbstractObject> newObjects;
+                try
+                {
+                    newObjects = await GetAllFeeObjectsAsync();
+                }
+                finally
+                {
+                    _sdkReadGate.Release();
+                }
+                snapshotReadTime = snapshotWatch.Elapsed;
+
+                EnsureCurrentConnection(connectionRevision);
+                FindAndAssignParents(newObjects);
+                var validationWatch = Stopwatch.StartNew();
+                await RunPlausibilityChecks(newObjects, connectionRevision);
+                validationTime = validationWatch.Elapsed;
+                EnsureCurrentConnection(connectionRevision);
+                AllFeeObjects = MergeAcknowledgeInformation(oldObjects, newObjects);
+                _snapshotConnectionRevision = connectionRevision;
+                SubscribePropertyChanges(AllFeeObjects);
+
+                await Task.Yield();
+                EnsureCurrentConnection(connectionRevision);
+                FeeObjectsUpdated?.Invoke(this, new FeeObjectsUpdatedEventargs
+                {
+                    ElapsedTime = DateTime.Now - startTime,
+                    SnapshotReadTime = snapshotReadTime,
+                    ValidationTime = validationTime,
+                });
+            }
+            finally
+            {
+                _isLoadingFeeData = false;
+                lock (_updateSync)
+                    _activeUpdate = null;
+            }
+
+        }
+
+        /// <summary>
+        /// Reads the scene hierarchy required by Container2FEE Visual without
+        /// loading interfaces, simulation live values or ModelValidation
+        /// issues. The same SDK gate as the full refresh is used because the
+        /// vendor client is stateful and must not receive competing project
+        /// reads from two tabs.
+        /// </summary>
+        public async Task<IReadOnlyList<FeeAbstractObject>> ReadFeeSceneObjectsForDiscoveryAsync(
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var connectionRevision = Services.Connection.ConnectionRevision;
+            await _sdkReadGate.WaitAsync(cancellationToken);
+            try
+            {
+                EnsureCurrentConnection(connectionRevision);
+                var sceneObjects = await GetFeeSceneObjectsForDiscoveryAsync(cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                EnsureCurrentConnection(connectionRevision);
+                FindAndAssignParents(sceneObjects);
+                return sceneObjects;
+            }
+            finally
+            {
+                _sdkReadGate.Release();
+            }
+        }
+
+        private static async Task<List<FeeAbstractObject>> GetFeeSceneObjectsForDiscoveryAsync(CancellationToken cancellationToken)
+        {
+            // The SDK shares request state across its API facades. Read each
+            // response before starting the next request, and bound XML batches
+            // so a large project does not produce one oversized request.
+            var allGuids = await Services.ApiInstance.Object.GetSceneObjectGuidsAsync() ?? [];
+            cancellationToken.ThrowIfCancellationRequested();
+            var ignoredDecorationGuids = await ReadIgnoredDecorationGuidsAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            var guidTexts = allGuids
+                .Where(guid => !ignoredDecorationGuids.Contains(guid))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var logicDefinitions = (IReadOnlyList<ApiLogicDefinition>)(await Services.ApiInstance.Logic
+                .GetAllAvailableLogicDefinitionsAsync() ?? []).ToArray();
+            var xmlTexts = new List<string>(guidTexts.Length);
+            foreach (var batch in guidTexts.Chunk(128))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var first = xmlTexts.Count + 1;
+                try
+                {
+                    var response = (await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(batch) ?? []).ToArray();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (response.Length != batch.Length)
+                        throw new InvalidOperationException($"FEE lieferte {response.Length} statt {batch.Length} XML-Datensätze.");
+                    xmlTexts.AddRange(response);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception exception)
+                {
+                    throw new InvalidOperationException(
+                        $"FEE-Objekte {first} bis {first + batch.Length - 1} von {guidTexts.Length} konnten nicht gelesen werden: {exception.Message}",
+                        exception);
+                }
+            }
+
+            var sceneObjects = new FeeAbstractObject[guidTexts.Length];
+            var count = guidTexts.Length;
+            Parallel.For(0, count, index =>
+            {
+                var xml = XElement.Parse(xmlTexts[index]);
+                var guidText = guidTexts[index];
+                var name = xml.Attribute("Name")?.Value;
+                var type = xml.Attribute("Type")?.Value ?? xml.Name.LocalName;
+                if (FeeSceneObjectReadPolicy.IsIgnoredType(type))
+                    return;
+                var item = FeeObjectFactory.Create(type, name, guidText);
+                if (item is null)
+                    return;
+
+                item.StoreXmlObjectProperties(xml, Guid.Parse(guidText));
+                item.ApplyBatchData(new FeePropertyBatchData
+                {
+                    AllLogicDefinitions = logicDefinitions,
+                });
+                sceneObjects[index] = item;
             });
 
+            return sceneObjects.Where(item => item is not null).ToList();
         }
 
 
@@ -143,6 +280,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         {
             // Create Guid Batch Tasks
             var guidsTask = Services.ApiInstance.Object.GetSceneObjectGuidsAsync();
+            var ignoredDecorationGuidsTask = ReadIgnoredDecorationGuidsAsync();
             var guidsJointsTask = Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(nameof(MotionJoint));
             var guidsSurfacesTask = Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(nameof(Surface));
             var guidsPickPlacesTask = Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync(nameof(PickAndPlace));
@@ -150,9 +288,17 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             var logicDefsTask = Services.ApiInstance.Logic.GetAllAvailableLogicDefinitionsAsync();
 
             // Start Tasks
-            await Task.WhenAll(guidsTask, guidsJointsTask, guidsSurfacesTask, guidsPickPlacesTask);
+            await Task.WhenAll(
+                guidsTask,
+                ignoredDecorationGuidsTask,
+                guidsJointsTask,
+                guidsSurfacesTask,
+                guidsPickPlacesTask);
 
-            string[] stringGuids = (await guidsTask).ToArray();
+            var ignoredDecorationGuids = await ignoredDecorationGuidsTask;
+            string[] stringGuids = (await guidsTask)
+                .Where(guid => !ignoredDecorationGuids.Contains(guid))
+                .ToArray();
             Guid[] guids = stringGuids.Select(x => Guid.Parse(x)).ToArray();
 
             string[] stringGuidsJoints = (await guidsJointsTask).ToArray();
@@ -201,13 +347,16 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
 
             // Store data
-            var xmlList = (await xmlTask).ToList();
-            var xmlElements = xmlList.Select(XElement.Parse).ToList();
+            var xmlList = (await xmlTask).ToArray();
+            var xmlElements = new XElement[xmlList.Length];
+            Parallel.For(0, xmlList.Length, index =>
+                xmlElements[index] = XElement.Parse(xmlList[index]));
 
             var positions = (await posTask).Select(x => Services.ApiInstance.XmlHelper.ConvertToVector3(x)).ToList();
             var rotations = (await rotTask).Select(x => Services.ApiInstance.XmlHelper.ConvertToVector3(x)).ToList();
 
-            var allLogicDefinitions = await logicDefsTask;
+            IReadOnlyList<ApiLogicDefinition> allLogicDefinitions =
+                (await logicDefsTask).ToArray();
 
 
 
@@ -259,7 +408,9 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                     IsPick = pickPlacePickDict.TryGetValue(id, out var isPick) ? isPick : null,
                     IsDrop = pickPlaceDropDict.TryGetValue(id, out var isDrop) ? isDrop : null,
 
-                    AllLogicDefinitions = allLogicDefinitions.ToList(),
+                    // Logic definitions are immutable snapshot data. Sharing
+                    // one array avoids one complete list copy per scene object.
+                    AllLogicDefinitions = allLogicDefinitions,
                 };
             }
 
@@ -267,13 +418,18 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
             var sceneObjects = new FeeAbstractObject[stringGuids.Length];
 
-            await Parallel.ForEachAsync(Enumerable.Range(0, stringGuids.Length), async (i, _) =>
+            Parallel.For(0, stringGuids.Length, i =>
             {
                 var guid = stringGuids[i];
                 var xElmt = xmlElements[i];
 
                 var name = xElmt.Attribute("Name")?.Value;
                 var type = xElmt.Attribute("Type")?.Value ?? xElmt.Name.LocalName;
+
+                // Fallback for SDK versions that do not return every
+                // Decoration from GetSceneObjectGuidsOfTypeAsync.
+                if (FeeSceneObjectReadPolicy.IsIgnoredType(type))
+                    return;
 
                 var obj = FeeObjectFactory.Create(type, name, guid);
                 if (obj == null)
@@ -293,6 +449,28 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             result.AddRange(interfaces);
             return result;
 
+        }
+
+        private static async Task<HashSet<string>> ReadIgnoredDecorationGuidsAsync()
+        {
+            try
+            {
+                return (await Services.ApiInstance.Object
+                        .GetSceneObjectGuidsOfTypeAsync(FeeSceneObjectReadPolicy.DecorationTypeName) ?? [])
+                    .Where(guid => !string.IsNullOrWhiteSpace(guid))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+            catch (Exception exception)
+            {
+                // XML-type filtering still guarantees the functional exclusion;
+                // only the early performance optimization is unavailable.
+                ApplicationLogService.Instance.Warning(
+                    "FEE object read",
+                    "Decoration-GUIDs konnten nicht vorab gelesen werden. " +
+                    "Decoration-Objekte werden nach dem XML-Batch gefiltert.",
+                    exception.Message);
+                return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            }
         }
 
 
@@ -392,44 +570,42 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
 
 
+        private void DetachPropertyChanges()
+        {
+            foreach (var source in _subscribedObjects.Keys)
+                WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.RemoveHandler(
+                    source, nameof(INotifyPropertyChanged.PropertyChanged), OnFeeObjectChanged);
+            _subscribedObjects.Clear();
+        }
+
         private void SubscribePropertyChanges(IEnumerable<FeeAbstractObject> feeObjects)
         {
-            // Subscribe to PropertyChanged of every object
             foreach (var obj in feeObjects)
             {
-                WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(obj, nameof(obj.PropertyChanged), OnFeeObjectChanged);
-
-                foreach(var issue in obj.PlausibilityIssues)
-                {
-                    WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(issue, nameof(issue.PropertyChanged), OnFeeObjectChanged);
-                }
-
-                if(obj is FeeInterface iface)
-                {
-                    foreach(var signal in iface.Signals)
-                    {
-                        WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(signal, nameof(signal.PropertyChanged), OnFeeObjectChanged);
-                    }
-                }
-
+                Subscribe(obj, obj);
+                foreach (var issue in obj.PlausibilityIssues) Subscribe(issue, obj);
+                if (obj is FeeInterface iface)
+                    foreach (var signal in iface.Signals) Subscribe(signal, signal);
+            }
+            void Subscribe(INotifyPropertyChanged source, FeeAbstractObject owner)
+            {
+                if (!_subscribedObjects.TryAdd(source, owner)) return;
+                WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(
+                    source, nameof(INotifyPropertyChanged.PropertyChanged), OnFeeObjectChanged);
             }
         }
 
-
         private async void OnFeeObjectChanged(object sender, PropertyChangedEventArgs e)
         {
-
-            // No validation when loading all Fee objects
-            if (_isLoadingFeeData) return;
-
-
-            var task = HandleFeeObjectChangedAsync(sender, e);
-
-            _debounceTasks.Add(task);
-            _ = task.ContinueWith(t => _debounceTasks.Remove(t));
-
-            _ = task;
-
+            if (_isLoadingFeeData || sender is not INotifyPropertyChanged source ||
+                !_subscribedObjects.TryGetValue(source, out var owner)) return;
+            // Issue changes update acknowledgement/filters; they are not SDK property edits.
+            if (sender is PlausibilityIssue) { owner.NotifyIssueStateChanged(); return; }
+            try { await HandleFeeObjectChangedAsync(owner, e); }
+            catch (Exception exception)
+            {
+                ApplicationLogService.Instance.Error("Model Validation", "Objektänderung konnte nicht geprüft werden.", exception);
+            }
         }
 
         private async Task HandleFeeObjectChangedAsync(object sender, PropertyChangedEventArgs e)
@@ -447,26 +623,30 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             {
                 await Task.Delay(250, cts.Token);
 
-                _debounceUserInput.Remove(key);
-
+                cts.Token.ThrowIfCancellationRequested();
+                if (!_subscribedObjects.ContainsKey((INotifyPropertyChanged)sender) || _isLoadingFeeData) return;
                 var obj = (FeeAbstractObject)sender;
                 await ModelValidationService.Router.HandleChangeAsync(obj, e.PropertyName);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException) { /* Debounced or replaced project. */ }
+            finally
             {
-                // Debounced
+                if (_debounceUserInput.TryGetValue(key, out var current) && ReferenceEquals(current, cts))
+                    _debounceUserInput.Remove(key);
+                cts.Dispose();
             }
         }
 
 
 
 
-        private async Task RunPlausibilityChecks(IEnumerable<FeeAbstractObject> feeObjects)
+        private async Task RunPlausibilityChecks(IEnumerable<FeeAbstractObject> feeObjects, long connectionRevision)
         {
             var basicFrames = feeObjects.Where(x => x.FeeType == nameof(FeeBasicFrame)).OfType<FeeBasicFrame>().ToList();
 
             await Parallel.ForEachAsync(feeObjects, async (obj, token) =>
             {
+                EnsureCurrentConnection(connectionRevision);
                 // Delete all issues before
                 obj.PlausibilityIssues.Clear();
 
@@ -474,6 +654,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 if (obj is IPlausibilityCheck checker)
                 {
                     await checker.CheckObjectIssuesAsync(feeObjects);
+                    EnsureCurrentConnection(connectionRevision);
                 }
 
                 // Special Check (BasicFrames involved)
@@ -490,13 +671,13 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         private void ResetFeeData()
         {
             AllFeeObjects = Array.Empty<FeeAbstractObject>();
-            _subscribedObjects.Clear();
+            DetachPropertyChanges();
+            _snapshotConnectionRevision = -1;
 
             foreach (var cts in _debounceUserInput.Values)
                 cts.Cancel();
 
             _debounceUserInput.Clear();
-            _debounceTasks.Clear();
         }
 
 
@@ -512,6 +693,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
     public class FeeObjectsUpdatedEventargs : EventArgs
     {
         public TimeSpan ElapsedTime { get; set; }
+        public TimeSpan SnapshotReadTime { get; set; }
+        public TimeSpan ValidationTime { get; set; }
     }
 
 
@@ -543,6 +726,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             { nameof(KinematicFrame), (name,guid) => new FeeKinematicFrame { Name = name, GuidString = guid } },
             { "BoolNot", (name,guid) => new FeeSimpleNot { Name = name, GuidString = guid } },
             { "MoveBit", (name,guid) => new FeeSimpleMove { Name = name, GuidString = guid } },
+            { "BoolAnd", (name,guid) => new FeeSimpleAnd { Name = name, GuidString = guid } },
+            { "BoolOr", (name,guid) => new FeeSimpleOr { Name = name, GuidString = guid } },
             { "Cabinet", (name,guid) => new FeeCabinet { Name = name, GuidString = guid } },
             { "CabinetElement", (name,guid) => new FeeCabinetElement { Name = name, GuidString = guid } },
         };
@@ -554,7 +739,9 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 return ctor(name, guid);
             }
 
-            return null;
+            // Keep SDK types without a specialized validation model in the
+            // scene snapshot. Reverse export must never silently lose them.
+            return new FeeAbstractObject { Name = name, GuidString = guid, FeeType = type };
 
             ////Fallback with FeeAbstractObject as object
             //return new FeeAbstractObject()
@@ -581,7 +768,8 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         public float? IsActualPosition { get; set; }
 
         // Logic
-        public List<ApiLogicDefinition> AllLogicDefinitions { get; set; }
+        public IReadOnlyList<ApiLogicDefinition> AllLogicDefinitions { get; set; } =
+            Array.Empty<ApiLogicDefinition>();
 
         // Surface
         public bool? SurfaceManualModeActive { get; set; }

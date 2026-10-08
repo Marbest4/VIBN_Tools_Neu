@@ -37,9 +37,14 @@ internal static class ContainerMetadataCatalog
             ["EStop"] = Describe<CabinetEStop_Container>(technicalHelpers: ["Cabinet EStops", "CabinetElement"]),
             ["Fuse"] = Describe<CabinetFuse_Container>(technicalHelpers: ["Cabinet Fuses", "CabinetElement"]),
             ["Switch"] = Describe<CabinetSwitch_Container>(technicalHelpers: ["Cabinet Switches", "CabinetElement"]),
+            // Canonical reverse-generation names. Legacy ContainerFiles using
+            // Fuse/Switch remain supported by the aliases above.
+            ["CabinetFuse"] = Describe<CabinetFuse_Container>(technicalHelpers: ["Cabinet Fuses", "CabinetElement"]),
+            ["CabinetSwitch"] = Describe<CabinetSwitch_Container>(technicalHelpers: ["Cabinet Switches", "CabinetElement"]),
         };
 
     public static IReadOnlyList<string> SupportedXmlTypes { get; } = Descriptors.Keys
+        .Where(type => type is not ("Switch" or "Fuse"))
         .OrderBy(type => type, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 

@@ -1,4 +1,3 @@
-using FS.SDK.Components;
 using FS.SDK.Scene.Objects;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -28,6 +27,9 @@ public sealed record Fee2SpecialDeviceRoot(
     public int ConnectedInputSignalCount => SignalCoverage?.ConnectedInputSignalCount ?? 0;
     public int OutputSignalCount => SignalCoverage?.OutputSignalCount ?? 0;
     public int ConnectedOutputSignalCount => SignalCoverage?.ConnectedOutputSignalCount ?? 0;
+    public int CurrentSignalCount => SignalCoverage is null
+        ? UpdatedSignalCount
+        : ConnectedInputSignalCount + ConnectedOutputSignalCount;
     public string MissingPlcSlots => SignalCoverage is null || SignalCoverage.MissingSlots.Count == 0
         ? string.Empty
         : string.Join(", ", SignalCoverage.MissingSlots);
@@ -159,10 +161,10 @@ public sealed class Fee2SpecialDevicesService
                     updated++;
                     return signal with
                     {
-                        Tag = variable.Tag ?? signal.Tag,
-                        Address = variable.Address ?? signal.Address,
+                        Tag = variable.Tag ?? string.Empty,
+                        Address = variable.Address ?? string.Empty,
                         DataType = variable.IOType.ToString(),
-                        Comment = variable.Comment ?? signal.Comment
+                        Comment = variable.Comment ?? string.Empty
                     };
                 }).ToArray();
                 var snapshot = source with { Signals = currentSignals };
@@ -218,11 +220,7 @@ public sealed class Fee2SpecialDevicesService
     {
         try
         {
-            var tagsXml = await Services.ApiInstance!.Object.GetPropertyAsync(
-                guid,
-                nameof(TagComponent.TagEntries),
-                nameof(TagComponent));
-            return Services.ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+            return await FeeTagPropertyStore.ReadAsync(guid);
         }
         catch
         {

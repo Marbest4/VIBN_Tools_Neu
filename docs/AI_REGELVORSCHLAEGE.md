@@ -2,13 +2,15 @@
 
 ## Datenbasis
 
+Die Oberfläche zeigt den vollständigen Ablauf standardmäßig direkt über dem Log. **Train (XML)** erwartet eine Container-XML mit `Container`, `Type`, `Entry`, `Signal` und `Slot`; die Datei wird in `vibn_ai_data/training_pool` kopiert. Zusammen mit `vibn_ai_data/actions` und `Corrections.csv` trainiert sie ausschließlich das Modell zur Slotvorhersage. **Check (XML)** bewertet eine Container-XML gegen dieses Modell. Requirements.xml ist keine Trainingsdatei: Sie wird erst nach angenommenen Regelvorschlägen für Vorschau und explizites Anwenden ausgewählt.
+
 ContainerGeneration protokolliert direkte Änderungen als JSONL im Ordner `vibn_ai_data/actions`. Schema 2 enthält mindestens Zeitstempel, Aktionstyp, Eigenschaft, Vorher-/Nachherwert, stabile Signal-ID sowie einen SHA-256-basierten Quellschlüssel. Der Quellschlüssel enthält keine Klartextpfade. Alte Schema-1-Zeilen bleiben lesbar.
 
 Erfasst werden Slotwechsel, Verschieben/Hinzufügen und direkte Änderungen an Signal, ID, Adresse, Datentyp, Notiz sowie Containername/-typ. Das sichtbare Arbeitsbereichsprotokoll bleibt davon getrennt: JSONL ist die strukturierte Auswertungsquelle.
 
 ## Vorschlagslogik
 
-Die erste Stufe ist absichtlich deterministisch und nicht generativ. Sie gruppiert tatsächliche Slotkorrekturen nach:
+Die erste Stufe ist absichtlich deterministisch und nicht generativ. Regel- und Container-Vorschläge trainieren kein zweites ML-Modell, sondern werden reproduzierbar aus strukturierten Benutzeraktionen aggregiert. Die UI zeigt Basis-, Pool-, Log-, Korrektur- und Modellpfad. Fehlende Aktionslogs bedeuten deshalb auch fehlende Vorschläge, selbst wenn bereits viele Trainings-XMLs für die Slotvorhersage vorhanden sind. Die Regelanalyse gruppiert tatsächliche Slotkorrekturen nach:
 
 - Komponententyp,
 - exaktem Signaltext,
@@ -19,7 +21,9 @@ Die erste Stufe ist absichtlich deterministisch und nicht generativ. Sie gruppie
 
 `unterstützende unterschiedliche Fälle / alle unterschiedlichen relevanten Fälle`
 
-Damit führt ein mehrfaches Klicken im selben Fall nicht künstlich zu hoher Sicherheit. Gegensätzliche Zielslots senken die Konfidenz sichtbar. Die exakte Signalregel ist konservativ; Regex-Verallgemeinerungen werden erst dann sinnvoll, wenn genügend fachlich freigegebene Fälle und eine messbare Evaluierung vorliegen.
+Damit führt ein mehrfaches Klicken im selben Fall nicht künstlich zu hoher Sicherheit. Gegensätzliche Zielslots senken die Konfidenz sichtbar. Die exakte Signalregel ist konservativ. Allgemeingültigere Vorschläge sind prinzipiell möglich, aber das aktuelle `Key`-Schema unterstützt produktiv nur `match="literal"` und `match="exact"`, keine regulären Ausdrücke. Deshalb erzeugt das Tool aus einzelnen Korrekturen keine vermeintlich allgemeine XML-Regel. Eine spätere Verallgemeinerung muss mehrere unterschiedliche, widerspruchsfreie und fachlich freigegebene Fälle sowie eine messbare Gegenbeispiel-Evaluierung verlangen. Die Container-Muster sind bereits die allgemeinere, aber nicht schreibende Aggregationsstufe.
+
+Manuell ausgewählt werden nur die exportierte ContainerGeneration-XML für **Train** beziehungsweise **Check** und später die Requirements-/AutoCreate-XML für eine explizite Patch-Vorschau. Interface-Excel und Requirements.xml sind keine Trainingsdateien. ActionLogs werden von ContainerGeneration automatisch unter `vibn_ai_data/actions` geschrieben und bei **Train**, **Vorschläge aktualisieren** sowie **Container-Muster aktualisieren** automatisch aus diesem Ordner gelesen. **Container-Muster aktualisieren** trainiert kein Modell: Der Button aggregiert die vorhandenen Add-/Move-/ContainerAndSlot-Ereignisse erneut und lädt die gespeicherten Annahme-/Ablehnungsstatus dazu.
 
 ## Prüfung
 

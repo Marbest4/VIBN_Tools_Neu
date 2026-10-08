@@ -7,7 +7,8 @@ namespace VIBN_Tools.ContainerGeneration.Models;
 
 public sealed record ContainerFileWorkspace(
     IReadOnlyList<ContainerData> Containers,
-    IReadOnlyList<ContainerEntry> UnassignedSignals);
+    IReadOnlyList<ContainerEntry> UnassignedSignals,
+    System.Xml.XmlElement? FeeInventory = null);
 
 /// <summary>
 /// Reads exported ContainerFiles into the existing generation workspace
@@ -22,7 +23,7 @@ public static class ContainerFileWorkspaceReader
         if (!File.Exists(path))
             throw new FileNotFoundException("ContainerFile wurde nicht gefunden.", path);
 
-        var document = XDocument.Load(path, LoadOptions.SetLineInfo);
+        var document = ContainerFileXml.Load(path);
         var parsed = document.Descendants("Container")
             .Select(ParseContainer)
             .ToList();
@@ -35,7 +36,10 @@ public static class ContainerFileWorkspaceReader
             .Where(container => !IsUnknown(container))
             .Select(container => new ContainerData(container))
             .ToArray();
-        return new ContainerFileWorkspace(containers, unassigned);
+        var xml = new System.Xml.XmlDocument { XmlResolver = null };
+        var inventory = document.Root?.Element("FeeInventory");
+        if (inventory is not null) xml.LoadXml(inventory.ToString());
+        return new ContainerFileWorkspace(containers, unassigned, xml.DocumentElement);
     }
 
     private static ComponentContainer ParseContainer(XElement element)
@@ -48,7 +52,8 @@ public static class ContainerFileWorkspaceReader
                 DataType = Child(entry, "DataType"),
                 Signal = Child(entry, "Signal"),
                 Slot = Child(entry, "Slot"),
-                Note = Child(entry, "Note")
+                Note = Child(entry, "Note"),
+                FeeGuid = entry.Attribute("feeGuid")?.Value ?? string.Empty
             })
             .ToArray();
         return new ComponentContainer
@@ -56,7 +61,19 @@ public static class ContainerFileWorkspaceReader
             Id = element.Attribute("id")?.Value?.Trim() ?? string.Empty,
             Component = Child(element, "Component"),
             Type = Child(element, "Type"),
-            DataList = new ObservableCollection<ContainerEntry>(entries)
+            DataList = new ObservableCollection<ContainerEntry>(entries),
+            SimObjects = new ObservableCollection<ContainerFeeObject>(
+                element.Element("SimObjects")?.Elements("SimObject").Select(item => new ContainerFeeObject
+                {
+                    Guid = Child(item, "Guid"), Name = Child(item, "Name"), FeeType = Child(item, "FeeType"),
+                    Role = Child(item, "Role"), Target = Child(item, "Target"), ClrType = Child(item, "ClrType"),
+                    AssignmentKind = item.Attribute("assignment")?.Value ?? "Automatic",
+                    Slots = item.Element("Slots")?.Elements("Slot").Select(slot => new ContainerFeeSlot
+                    {
+                        Name = slot.Attribute("name")?.Value ?? string.Empty,
+                        AssignedGuid = slot.Attribute("assignedGuid")?.Value ?? string.Empty
+                    }).ToList() ?? []
+                }) ?? [])
         };
     }
 

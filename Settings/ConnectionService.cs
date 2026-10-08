@@ -10,10 +10,104 @@ namespace VIBN_Tools.Settings
         public const string MissingConnectionMessage = "Keine Verbindung zu FEE vorhanden.";
 
         private readonly DispatcherTimer _timer;
+        private readonly Func<(bool Connected, bool Connecting)> _readConnectionState;
 
         public event Action Connected;
 
+        /// <summary>The argument is true only for a disconnect requested by this application.</summary>
+        public event Action<bool>? Disconnected;
+
+        private long _connectionRevision;
+        private bool _disconnectRequested;
+        private bool _areModelValidationObjectsCurrent;
+
+        public long ConnectionRevision => _connectionRevision;
+
+        public bool AreModelValidationObjectsCurrent
+        {
+            get => _areModelValidationObjectsCurrent;
+            private set
+            {
+                if (SetPropertyChange(ref _areModelValidationObjectsCurrent, value))
+                    OnPropertyChanged(nameof(ModelValidationUnavailableReason));
+            }
+        }
+
+        public string? ModelValidationUnavailableReason => !IsConnected
+            ? MissingConnectionMessage
+            : AreModelValidationObjectsCurrent ? null
+                : "Zuerst ModelValidation → Update Objects für diese FEE-Verbindung ausführen.";
+
+        /// <summary>Starts an explicit ModelValidation update in the current connection session.</summary>
+        public long BeginModelValidationUpdate()
+        {
+            CheckConnection();
+            AreModelValidationObjectsCurrent = false;
+            return _connectionRevision;
+        }
+
+        public bool CompleteModelValidationUpdate(long connectionRevision)
+        {
+            CheckConnection();
+            if (!IsConnected || connectionRevision != _connectionRevision || _disconnectRequested)
+                return false;
+            AreModelValidationObjectsCurrent = true;
+            return true;
+        }
+
+        public void RequestIntentionalDisconnect()
+        {
+            _disconnectRequested = true;
+            AreModelValidationObjectsCurrent = false;
+        }
+
+        public void DisconnectIntentionally()
+        {
+            RequestIntentionalDisconnect();
+            try
+            {
+                Services.ApiInstance?.Disconnect();
+                CheckConnection();
+            }
+            catch
+            {
+                _disconnectRequested = false;
+                throw;
+            }
+        }
+
         public bool LoadFeeDataOnConnect { get; set; }
+
+        private string? _connectedServer;
+        private string? _connectedStation;
+
+        public string? ConnectedServer
+        {
+            get => _connectedServer;
+            private set
+            {
+                if (SetPropertyChange(ref _connectedServer, value))
+                    OnPropertyChanged(nameof(ConnectedServerDisplay));
+            }
+        }
+
+        public string? ConnectedStation
+        {
+            get => _connectedStation;
+            private set
+            {
+                if (SetPropertyChange(ref _connectedStation, value))
+                    OnPropertyChanged(nameof(ConnectedStationDisplay));
+            }
+        }
+
+        public string ConnectedServerDisplay => IsConnected && !string.IsNullOrWhiteSpace(ConnectedServer)
+            ? ConnectedServer
+            : "nicht verbunden";
+
+        public string ConnectedStationDisplay => IsConnected && !string.IsNullOrWhiteSpace(ConnectedStation)
+            ? ConnectedStation
+            : "nicht eingelesen";
 
 
         private bool _isConnected;
@@ -26,13 +120,25 @@ namespace VIBN_Tools.Settings
 
                 if (changed)
                 {
+                    _connectionRevision++;
+                    AreModelValidationObjectsCurrent = false;
                     OnPropertyChanged(nameof(CanUseFeeFeatures));
                     OnPropertyChanged(nameof(UnavailableReason));
+                    OnPropertyChanged(nameof(ModelValidationUnavailableReason));
+                    OnPropertyChanged(nameof(ConnectedServerDisplay));
+                    OnPropertyChanged(nameof(ConnectedStationDisplay));
                 }
 
                 if (changed && value)
                 {
+                    _disconnectRequested = false;
                     Connected?.Invoke();
+                }
+                else if (changed)
+                {
+                    var intentional = _disconnectRequested;
+                    _disconnectRequested = false;
+                    Disconnected?.Invoke(intentional);
                 }
             }
         }
@@ -55,11 +161,31 @@ namespace VIBN_Tools.Settings
             private set => SetPropertyChange(ref _isConnecting, value);
         }
 
-        public FeeConnectionService()
+        public FeeConnectionService() : this(ReadSdkConnectionState) { }
+
+        internal FeeConnectionService(Func<(bool Connected, bool Connecting)> readConnectionState)
         {
+            _readConnectionState = readConnectionState;
             _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
             _timer.Tick += (sender, eventargs) => CheckConnection();
             _timer.Start();
+        }
+
+        public void SetConnectionContext(string? server)
+        {
+            ConnectedServer = string.IsNullOrWhiteSpace(server) ? null : server.Trim();
+            ConnectedStation = null;
+        }
+
+        public void SetConnectedStation(string? station)
+        {
+            ConnectedStation = string.IsNullOrWhiteSpace(station) ? null : station.Trim();
+        }
+
+        public void ClearConnectionContext()
+        {
+            ConnectedServer = null;
+            ConnectedStation = null;
         }
 
         /// <summary>
@@ -105,19 +231,28 @@ namespace VIBN_Tools.Settings
 
         private void CheckConnection()
         {
-            if (Services.ApiInstance is null)
+            (bool Connected, bool Connecting) state;
+            try
             {
-                IsConnected = false;
-                IsConnecting = false;
-                return;
+                state = _readConnectionState();
             }
+            catch (Exception exception)
+            {
+                if (IsConnected)
+                    VIBN_Tools.Application.ApplicationLogService.Instance.Warning(
+                        "Project Settings", "FEE-Verbindungsstatus konnte nicht gelesen werden; die Verbindung wird als unterbrochen behandelt.", exception.Message);
+                state = (false, false);
+            }
+            IsConnected = state.Connected;
+            IsConnecting = state.Connecting;
+        }
 
-            // API Call for Connection State
+        private static (bool Connected, bool Connecting) ReadSdkConnectionState()
+        {
+            if (Services.ApiInstance is null)
+                return (false, false);
             var state = Services.ApiInstance.ApiState;
-
-            IsConnected = state == NetworkState.Connected;
-            IsConnecting = state == NetworkState.Connecting;
-
+            return (state == NetworkState.Connected, state == NetworkState.Connecting);
         }
     }
 }

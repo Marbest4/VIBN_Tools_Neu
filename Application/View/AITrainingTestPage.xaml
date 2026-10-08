@@ -27,6 +27,8 @@
             <Setter Property="CanUserAddRows" Value="False"/>
             <Setter Property="CanUserDeleteRows" Value="False"/>
             <Setter Property="CanUserReorderColumns" Value="False"/>
+            <Setter Property="CanUserResizeColumns" Value="True"/>
+            <Setter Property="MinColumnWidth" Value="100"/>
             <Setter Property="EnableRowVirtualization" Value="True"/>
             <Setter Property="GridLinesVisibility" Value="None"/>
             <Setter Property="RowBackground" Value="#FFF9F9F9"/>
@@ -79,6 +81,7 @@
         <Grid Grid.Column="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
@@ -87,9 +90,11 @@
                 <!-- Links: Aktionen -->
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
                     <Button Content="Train (XML)" Width="150"
-                            Command="{Binding TrainCommand}"/>
+                            Command="{Binding TrainCommand}"
+                            ToolTip="Manuell eine exportierte ContainerGeneration-XML auswählen. Die Datei wird dem Trainingspool hinzugefügt; vorhandene ActionLogs und Corrections werden automatisch mit ausgewertet."/>
                     <Button Content="Check (XML)" Width="150"
-                            Command="{Binding CheckCommand}"/>
+                            Command="{Binding CheckCommand}"
+                            ToolTip="Manuell eine exportierte ContainerGeneration-XML auswählen und mit dem bereits trainierten Modell bewerten. Die Datei wird nicht in den Trainingspool kopiert."/>
                 </StackPanel>
 
                 <!-- Rechts: Optionen + Buttons -->
@@ -116,8 +121,19 @@
                 </StackPanel>
             </DockPanel>
 
+            <Expander Grid.Row="1" Margin="0,0,0,8" Header="Welche Daten erzeugen welche Vorschläge?" IsExpanded="True">
+                <Border Padding="9" Background="#FFF3F5F7" CornerRadius="4">
+                    <StackPanel>
+                        <TextBlock Text="{Binding AiWorkflowGuide}" TextWrapping="Wrap"
+                                   ToolTip="{Binding AiWorkflowGuide}" ToolTipService.ShowDuration="60000" />
+                        <TextBlock Margin="0,7,0,0" FontFamily="Consolas" FontSize="11"
+                                   Text="{Binding AiDataLocations}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Expander>
+
             <!-- LOG -->
-            <Border Grid.Row="1" Background="#1E1E1E" CornerRadius="4" BorderBrush="#333" BorderThickness="1">
+            <Border Grid.Row="2" Background="#1E1E1E" CornerRadius="4" BorderBrush="#333" BorderThickness="1">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                     <TextBox Text="{Binding LogText}" FontFamily="Consolas" FontSize="13"
                              Background="#1E1E1E" Foreground="#F0F0F0" BorderThickness="0"
@@ -524,7 +540,8 @@
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Vorschläge aktualisieren" Width="165"
-                                    Command="{Binding RefreshRuleSuggestionsCommand}" />
+                                    Command="{Binding RefreshRuleSuggestionsCommand}"
+                                    ToolTip="Liest die automatisch von ContainerGeneration geschriebenen ActionLogs erneut. Es muss keine XML ausgewählt werden." />
                             <Button Content="Aktionslogs öffnen" Width="145"
                                     Command="{Binding OpenActionLogFolderCommand}" />
                             <Button Content="XML-Vorschau" Width="125"
@@ -537,7 +554,7 @@
                         <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
                                    Text="{Binding RuleSuggestionSummary}" />
                         <TextBlock Margin="0,4,0,0" Foreground="#FF555555" TextWrapping="Wrap"
-                                   Text="Diese erste sichere Stufe schlägt nur exakte Typ-/Signal-/Slot-Regeln vor. Annehmen markiert die Auswahl; XML-Vorschau prüft Schema und Konflikte. Erst XML übernehmen verändert nach Bestätigung die gewählte Datei und legt eine Sicherung an." />
+                                   Text="Diese erste sichere Stufe schlägt nur exakte Typ-/Signal-/Slot-Regeln vor. Allgemeingültigere Regeln sind erst mit mehreren widerspruchsfreien, fachlich bestätigten Fällen belastbar und werden deshalb nicht automatisch geschrieben. Annehmen markiert die Auswahl; XML-Vorschau prüft Schema und Konflikte. Erst XML übernehmen verändert nach Bestätigung die gewählte Datei und legt eine Sicherung an." />
                         <TextBox Margin="0,7,0,0" MinHeight="58" MaxHeight="120"
                                  IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
                                  VerticalScrollBarVisibility="Auto"
@@ -588,7 +605,8 @@
                 <DockPanel Margin="10">
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                         <Button HorizontalAlignment="Left" Content="Container-Muster aktualisieren" Width="210"
-                                Command="{Binding RefreshContainerSuggestionsCommand}" />
+                                Command="{Binding RefreshContainerSuggestionsCommand}"
+                                ToolTip="Liest Add-/Move-/ContainerAndSlot-Aktionen aus allen vorhandenen ActionLogs neu ein und kombiniert sie mit den gespeicherten Annahme-/Ablehnungsstatus. Es wird weder trainiert noch XML geändert." />
                         <TextBlock Margin="0,7,0,0" TextWrapping="Wrap" Text="{Binding ContainerSuggestionSummary}" />
                         <TextBlock Margin="0,4,0,0" Foreground="#FF555555" TextWrapping="Wrap"
                                    Text="Die Auswertung lernt vollständige Ziel-Container und wiederkehrende Slots aus bestätigten Add-/Move-Aktionen. Sie erzeugt bewusst nichts automatisch: Ein Muster muss fachlich geprüft und angenommen werden." />

@@ -13,7 +13,7 @@ public partial class ViCoSearchPage : UserControl
     {
         InitializeComponent();
         _defaultColumns = WorkstationGrid.Columns
-            .Select(column => (column, column.DisplayIndex, column.Width))
+            .Select((column, index) => (column, index, column.Width))
             .ToArray();
         _viewModel = ViCoFeatureBootstrapper.CreateSearchViewModel();
         DataContext = _viewModel;
@@ -43,6 +43,12 @@ public partial class ViCoSearchPage : UserControl
 
     private async void ResetView_Click(object sender, RoutedEventArgs e)
     {
+        RestoreDefaultColumnLayout();
+        await _viewModel.ResetDisplayViewAsync();
+    }
+
+    internal void RestoreDefaultColumnLayout()
+    {
         WorkstationGrid.UnselectAll();
         var frozenColumnCount = WorkstationGrid.FrozenColumnCount;
         WorkstationGrid.FrozenColumnCount = 0;
@@ -50,14 +56,15 @@ public partial class ViCoSearchPage : UserControl
         {
             foreach (var state in _defaultColumns.OrderBy(state => state.DisplayIndex))
             {
+                if (!WorkstationGrid.Columns.Contains(state.Column) || state.DisplayIndex < 0 || state.DisplayIndex >= WorkstationGrid.Columns.Count)
+                    continue;
                 state.Column.DisplayIndex = state.DisplayIndex;
                 state.Column.Width = state.Width;
             }
         }
         finally
         {
-            WorkstationGrid.FrozenColumnCount = frozenColumnCount;
+            WorkstationGrid.FrozenColumnCount = Math.Min(frozenColumnCount, WorkstationGrid.Columns.Count);
         }
-        await _viewModel.ResetDisplayViewAsync();
     }
 }

@@ -118,7 +118,7 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
     public string SelectionSummary => SelectedRoot is null
         ? "Kein Root ausgewählt."
         : $"{SelectedRoot.SourceKind}; {SelectedRoot.Snapshot.Manufacturer} / {SelectedRoot.Snapshot.DeviceType}; " +
-          $"{SelectedRoot.Snapshot.Signals.Count} Signale, {SelectedRoot.UpdatedSignalCount} aktuell, " +
+          $"{SelectedRoot.Snapshot.Signals.Count} Signale im Snapshot, {SelectedRoot.CurrentSignalCount} aktuell verbunden, " +
           $"{SelectedRoot.MissingSignalCount} fehlend.";
 
     private async Task RefreshAsync()

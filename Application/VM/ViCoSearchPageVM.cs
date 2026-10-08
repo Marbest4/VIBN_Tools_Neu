@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
 using System.Collections;
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Input;
 using VIBN_Tools.Core.ViCo;
 using VIBN_Tools.GlobalClasses;
@@ -40,10 +41,16 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private bool _initialized;
     private bool _isSavingConfiguration;
     private DateTimeOffset? _nextAutoRefreshAt;
+    private DateTimeOffset? _nextOnlineRefreshAt;
     private bool? _lastObservedOnlineConfiguration;
     private IReadOnlyList<ViCoWorkstationRowVM> _selectedWorkstations = Array.Empty<ViCoWorkstationRowVM>();
     private bool _columnPreferencesLoaded;
+    private readonly IViCoProjectDocumentsService _documentsService;
+    private CancellationTokenSource? _documentsCancellation;
+    private readonly ConcurrentDictionary<string, (ViCoProjectDocumentsResult Result, DateTimeOffset CheckedAt)> _documentsCache = new(StringComparer.OrdinalIgnoreCase);
+    private bool _disposed;
     private bool _searchVisibleColumnsOnly;
+    private DateTimeOffset? _displayedDataUpdatedAt;
 
     public const string KanbanizeBoardUrl = "https://grobgroup.kanbanize.com/ctrl_board/1541";
 
@@ -61,7 +68,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         IViCoLastActiveSnapshotStore lastActiveSnapshotStore,
         ViCoWorkspaceContext workspaceContext,
         Action<IEnumerable<ViCoWorkstation>> synchronizeWorkstations,
-        IApplicationLog? log = null)
+        IApplicationLog? log = null,
+        IViCoProjectDocumentsService? documentsService = null)
     {
         _catalog = catalog;
         _search = search;
@@ -79,6 +87,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         _workspaceContext = workspaceContext;
         _synchronizeWorkstations = synchronizeWorkstations;
         _log = log ?? NullApplicationLog.Instance;
+        _documentsService = documentsService ?? new VIBN_Tools.Infrastructure.ViCo.FileSystemProjectDocumentsService();
 
         RefreshCommand = GetCommandBindingAsync(RefreshFromBestAvailableSourceAsync);
         ConnectRemoteCommand = GetCommandBinding(ConnectRemote);
@@ -86,6 +95,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         SaveConfigurationCommand = GetCommandBindingAsync(SaveConfigurationAsync);
         CreateConfigurationCommand = GetCommandBindingAsync(CreateConfigurationAsync);
         SaveAutoRefreshIntervalCommand = GetCommandBindingAsync(SaveAutoRefreshIntervalAsync);
+        SaveOnlineRefreshIntervalCommand = GetCommandBindingAsync(SaveOnlineRefreshIntervalAsync);
         SaveDisplayPreferencesCommand = GetCommandBindingAsync(SaveDisplayPreferencesAsync);
         OpenPcProjectsCommand = GetCommandBinding(() => OpenRelated(ViCoRelatedPathKind.WorkstationProjects));
         OpenSimulationCommand = GetCommandBinding(() => OpenRelated(ViCoRelatedPathKind.Simulation));
@@ -106,6 +116,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         OnlineColumn = AddColumn("online", "Online", true);
         PlanningColumn = AddColumn("planning", "Planung", true);
         WorkingColumn = AddColumn("working", "In Arbeit", true);
+        DocumentsColumn = AddColumn("documents", "00_Documents", true);
         PlanningStartColumn = AddColumn("planningStart", "Startdatum Planung", true);
         PlanningEndColumn = AddColumn("planningEnd", "Enddatum Planung", true);
         WorkingStartColumn = AddColumn("workingStart", "Startdatum In Arbeit", true);
@@ -130,6 +141,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public ICommand SaveConfigurationCommand { get; }
     public ICommand CreateConfigurationCommand { get; }
     public ICommand SaveAutoRefreshIntervalCommand { get; }
+    public ICommand SaveOnlineRefreshIntervalCommand { get; }
     public ICommand SaveDisplayPreferencesCommand { get; }
     public ICommand OpenPcProjectsCommand { get; }
     public ICommand OpenSimulationCommand { get; }
@@ -149,6 +161,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public ViCoColumnOptionVM OnlineColumn { get; }
     public ViCoColumnOptionVM PlanningColumn { get; }
     public ViCoColumnOptionVM WorkingColumn { get; }
+    public ViCoColumnOptionVM DocumentsColumn { get; }
     public ViCoColumnOptionVM PlanningStartColumn { get; }
     public ViCoColumnOptionVM PlanningEndColumn { get; }
     public ViCoColumnOptionVM WorkingStartColumn { get; }
@@ -172,6 +185,19 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             _autoRefreshIntervalMinutes = value;
             OnPropertyChanged();
         }
+    }
+
+    private int _onlineRefreshIntervalMinutes = ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes;
+    public int OnlineRefreshIntervalMinutes
+    {
+        get => _onlineRefreshIntervalMinutes;
+        set { _onlineRefreshIntervalMinutes = value; OnPropertyChanged(); }
+    }
+    private string _onlineRefreshCountdown = "Online-Prüfung wird initialisiert …";
+    public string OnlineRefreshCountdown
+    {
+        get => _onlineRefreshCountdown;
+        private set { _onlineRefreshCountdown = value; OnPropertyChanged(); }
     }
 
     private bool _showExtendedInformation;
@@ -251,6 +277,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         set
         {
             _selectedWorkstation = value;
+            ApplicationStatusContext.Instance.SelectedWorkstationName = value?.PcName;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedRemoteUser));
             OnPropertyChanged(nameof(HasSelectedWorkstation));
@@ -286,6 +313,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 SelectedProject = null;
             }
             UpdatePathInformation();
+            RequestDocumentsRefresh();
         }
     }
 
@@ -388,6 +416,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             OnPropertyChanged(nameof(SelectedProjectStart));
             OnPropertyChanged(nameof(SelectedProjectEnd));
             UpdatePathInformation();
+            RequestDocumentsRefresh();
         }
     }
 
@@ -428,12 +457,41 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
+    private bool _isDisplayedDataStale;
+    public bool IsDisplayedDataStale
+    {
+        get => _isDisplayedDataStale;
+        private set
+        {
+            if (_isDisplayedDataStale == value)
+                return;
+            _isDisplayedDataStale = value;
+            OnPropertyChanged();
+        }
+    }
+
+    private string _displayedDataAgeNotice = string.Empty;
+    public string DisplayedDataAgeNotice
+    {
+        get => _displayedDataAgeNotice;
+        private set
+        {
+            if (string.Equals(_displayedDataAgeNotice, value, StringComparison.Ordinal))
+                return;
+            _displayedDataAgeNotice = value;
+            OnPropertyChanged();
+        }
+    }
+
     public async Task InitializeAsync()
     {
         if (_initialized)
             return;
         _initialized = true;
         await LoadAutoRefreshSettingsAsync();
+        await ShowLastActiveSnapshotAsync(
+            "Gespeicherter Kanbanize-Stand wird bis zum Abschluss der Aktualisierung angezeigt",
+            logAsWarning: false);
         // The compact legacy cache does not always contain the current card
         // deadline.  Perform the same online refresh used by the toolbar once
         // during startup so dates are complete before the first view is shown.
@@ -441,10 +499,15 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         // is not configured or temporarily unavailable.
         await RefreshFromBestAvailableSourceAsync();
         _ = RunPeriodicRefreshAsync(_lifetimeCancellation.Token);
+        _ = RunOnlineStatusRefreshAsync(_lifetimeCancellation.Token);
     }
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        _documentsCancellation?.Cancel();
+        _documentsCancellation?.Dispose();
         _availabilityCancellation?.Cancel();
         _availabilityCancellation?.Dispose();
         _searchDebounceCancellation?.Cancel();
@@ -470,6 +533,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         IsBusy = true;
         StatusText = "Kanbanize-Daten werden aktualisiert …";
         var onlineUpdateSucceeded = false;
+        DateTimeOffset? onlineUpdatedAt = null;
         string? onlineFailure = null;
         try
         {
@@ -479,6 +543,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 await ShowLastActiveSnapshotAsync("Die Kanbanize-Aktualisierung dauert länger als 10 Sekunden");
             await refreshTask;
             onlineUpdateSucceeded = true;
+            onlineUpdatedAt = DateTimeOffset.Now;
             _log.Information("Kanbanize", "PC-, Projekt- und Robotikdaten wurden aktualisiert.");
         }
         catch (Exception exception)
@@ -493,12 +558,15 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
         await RefreshCachedDataAsync(onlineUpdateSucceeded
             ? null
-            : "Online-Aktualisierung verworfen; vorhandener Cache wurde geladen. " + onlineFailure);
+            : "Online-Aktualisierung verworfen; vorhandener Cache wurde geladen. " + onlineFailure,
+            onlineUpdatedAt);
         ScheduleNextAutoRefresh();
     }
 
     /// <summary>Reads the existing cache and rebuilds search/path state without a network write.</summary>
-    private async Task RefreshCachedDataAsync(string? completionMessage = null)
+    private async Task RefreshCachedDataAsync(
+        string? completionMessage = null,
+        DateTimeOffset? confirmedUpdatedAt = null)
     {
         if (IsBusy)
             return;
@@ -506,17 +574,21 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         StatusText = "PC- und Projektdaten werden geladen …";
         try
         {
+            var cancellationToken = _lifetimeCancellation.Token;
             var stopwatch = Stopwatch.StartNew();
-            var catalogTask = _catalog.LoadAsync();
-            var resolverTask = _pathResolverFactory(CancellationToken.None);
+            var catalogTask = _catalog.LoadAsync(cancellationToken);
+            var resolverTask = _pathResolverFactory(cancellationToken);
             var combinedTask = Task.WhenAll(catalogTask, resolverTask);
-            var completed = await Task.WhenAny(combinedTask, Task.Delay(TimeSpan.FromSeconds(10)));
+            var completed = await Task.WhenAny(
+                combinedTask,
+                Task.Delay(TimeSpan.FromSeconds(10), cancellationToken));
             if (!ReferenceEquals(completed, combinedTask))
             {
-                var previous = await _lastActiveSnapshotStore.LoadAsync();
+                var previous = await _lastActiveSnapshotStore.LoadAsync(cancellationToken);
                 if (previous is { Workstations.Count: > 0 })
                 {
                     ApplyWorkstations(previous.Workstations);
+                    SetDisplayedDataUpdatedAt(previous.UpdatedAt);
                     StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf dauert länger als 10 Sekunden");
                     _log.Warning("Rechnerübersicht", StatusText);
                 }
@@ -528,10 +600,11 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
             if (snapshot.Workstations.Count == 0)
             {
-                var previous = await _lastActiveSnapshotStore.LoadAsync();
+                var previous = await _lastActiveSnapshotStore.LoadAsync(cancellationToken);
                 if (previous is { Workstations.Count: > 0 })
                 {
                     ApplyWorkstations(previous.Workstations);
+                    SetDisplayedDataUpdatedAt(previous.UpdatedAt);
                     StatusText = BuildFallbackStatus(previous, "Der aktuelle Abruf lieferte 0 Arbeitsstationen");
                     _log.Warning("Rechnerübersicht", StatusText);
                     foreach (var warning in snapshot.Warnings)
@@ -540,12 +613,32 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 }
             }
 
-            ApplyWorkstations(snapshot.Workstations);
             if (snapshot.Workstations.Count > 0)
             {
+                var updatedAt = confirmedUpdatedAt ?? snapshot.SourceUpdatedAt ?? DateTimeOffset.Now;
+                var previous = await _lastActiveSnapshotStore.LoadAsync(cancellationToken);
+                if (confirmedUpdatedAt is null &&
+                    previous is { Workstations.Count: > 0 } &&
+                    previous.UpdatedAt > updatedAt)
+                {
+                    ApplyWorkstations(previous.Workstations);
+                    SetDisplayedDataUpdatedAt(previous.UpdatedAt);
+                    StatusText = BuildFallbackStatus(
+                        previous,
+                        "Der gelesene Kanbanize-Cache ist älter als die gespeicherte Rechnerübersicht");
+                    _log.Warning("Rechnerübersicht", StatusText);
+                    return;
+                }
+
+                ApplyWorkstations(snapshot.Workstations);
                 await _lastActiveSnapshotStore.SaveAsync(new ViCoLastActiveSnapshot(
-                    DateTimeOffset.Now,
-                    snapshot.Workstations));
+                    updatedAt,
+                    snapshot.Workstations), cancellationToken);
+                SetDisplayedDataUpdatedAt(updatedAt);
+            }
+            else
+            {
+                ApplyWorkstations(snapshot.Workstations);
             }
             StatusText = completionMessage ?? BuildWorkstationLoadStatus(snapshot);
             if (stopwatch.Elapsed > TimeSpan.FromSeconds(10))
@@ -553,6 +646,11 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             _log.Information("Rechnerübersicht", StatusText);
             foreach (var warning in snapshot.Warnings)
                 _log.Warning("Rechnerübersicht", "Eine Datenquelle konnte nicht gelesen werden.", warning);
+        }
+        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+        {
+            // The page or application is closing; do not keep network-share
+            // enumeration alive and do not turn an expected shutdown into an error.
         }
         catch (Exception exception)
         {
@@ -570,6 +668,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
     private void ApplyWorkstations(IReadOnlyList<ViCoWorkstation> workstations)
     {
+        _documentsCache.Clear();
         _allWorkstations = workstations;
         _synchronizeWorkstations(_allWorkstations);
         OnPropertyChanged(nameof(CanOpenPcProjects));
@@ -583,15 +682,42 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         $"{reason}. Letzte aktive Übersicht mit {snapshot.Workstations.Count} Arbeitsstation(en) wird angezeigt; " +
         $"Daten zuletzt am {snapshot.UpdatedAt.LocalDateTime:dd.MM.yyyy, HH:mm:ss} aktualisiert.";
 
-    private async Task<bool> ShowLastActiveSnapshotAsync(string reason)
+    private async Task<bool> ShowLastActiveSnapshotAsync(string reason, bool logAsWarning = true)
     {
         var previous = await _lastActiveSnapshotStore.LoadAsync();
         if (previous is not { Workstations.Count: > 0 })
             return false;
         ApplyWorkstations(previous.Workstations);
+        SetDisplayedDataUpdatedAt(previous.UpdatedAt);
         StatusText = BuildFallbackStatus(previous, reason);
-        _log.Warning("Rechnerübersicht", StatusText);
+        if (logAsWarning || IsDisplayedDataStale)
+            _log.Warning("Rechnerübersicht", StatusText);
+        else
+            _log.Information("Rechnerübersicht", StatusText);
         return true;
+    }
+
+    private void SetDisplayedDataUpdatedAt(DateTimeOffset? updatedAt)
+    {
+        _displayedDataUpdatedAt = updatedAt;
+        UpdateDisplayedDataAgeNotice();
+    }
+
+    private void UpdateDisplayedDataAgeNotice()
+    {
+        if (_displayedDataUpdatedAt is not { } updatedAt)
+        {
+            IsDisplayedDataStale = false;
+            DisplayedDataAgeNotice = string.Empty;
+            return;
+        }
+
+        var isStale = ViCoLastActiveSnapshotPolicy.IsStale(updatedAt, DateTimeOffset.Now);
+        IsDisplayedDataStale = isStale;
+        DisplayedDataAgeNotice = isStale
+            ? $"Achtung: Die Rechnerübersicht zeigt den Stand vom {updatedAt.LocalDateTime:dd.MM.yyyy, HH:mm:ss}. " +
+              "Die Daten sind älter als 30 Minuten. Bitte „Daten aktualisieren“ verwenden."
+            : string.Empty;
     }
 
     private async Task RunPeriodicRefreshAsync(CancellationToken cancellationToken)
@@ -601,6 +727,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                UpdateDisplayedDataAgeNotice();
                 var isOnlineConfigured = _onlineRefresh.IsConfigured;
                 if (_lastObservedOnlineConfiguration != isOnlineConfigured)
                 {
@@ -647,6 +774,29 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
+    private async Task RunOnlineStatusRefreshAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                _nextOnlineRefreshAt ??= DateTimeOffset.Now.AddMinutes(OnlineRefreshIntervalMinutes);
+                var onlineRemaining = _nextOnlineRefreshAt.Value - DateTimeOffset.Now;
+                if (onlineRemaining <= TimeSpan.Zero)
+                {
+                    StartAvailabilityRefresh(forceOnline: true, onlineOnly: true);
+                    _nextOnlineRefreshAt = DateTimeOffset.Now.AddMinutes(OnlineRefreshIntervalMinutes);
+                    onlineRemaining = _nextOnlineRefreshAt.Value - DateTimeOffset.Now;
+                }
+                OnlineRefreshCountdown = onlineRemaining <= TimeSpan.Zero
+                    ? "Online-Prüfung läuft …"
+                    : $"Nächste Online-Prüfung: {FormatRemaining(onlineRemaining)}";
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) { /* Application shutdown. */ }
+    }
+
     private void ApplySearch()
     {
         var selected = SelectedWorkstation?.PcName;
@@ -663,6 +813,73 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         SelectedWorkstation = Results.FirstOrDefault(item =>
             string.Equals(item.PcName, selected, StringComparison.OrdinalIgnoreCase)) ?? Results.FirstOrDefault();
         StartAvailabilityRefresh();
+        RequestDocumentsRefresh();
+    }
+
+    private string ProjectForRow(ViCoWorkstationRowVM row) =>
+        ReferenceEquals(row, SelectedWorkstation) && !string.IsNullOrWhiteSpace(SelectedProject)
+            ? SelectedProject!
+            : row.Model.PlanningProjects.Concat(row.Model.WorkingProjects).FirstOrDefault() ?? SearchText;
+
+    private void RequestDocumentsRefresh()
+    {
+        if (_disposed) return;
+        _documentsCancellation?.Cancel();
+        _documentsCancellation?.Dispose();
+        _documentsCancellation = null;
+        if (!DocumentsColumn.IsVisible) return;
+        _documentsCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCancellation.Token);
+        _ = RefreshDocumentsAsync(Results.ToArray(), _pathResolver, _documentsCancellation.Token);
+    }
+
+    private async Task RefreshDocumentsAsync(IReadOnlyList<ViCoWorkstationRowVM> rows,
+        IViCoRelatedPathResolver? resolver, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(150, cancellationToken);
+            var reads = new Dictionary<string, Task<ViCoProjectDocumentsResult>>(StringComparer.OrdinalIgnoreCase);
+            async Task ReadRow(ViCoWorkstationRowVM row)
+            {
+                var project = ProjectForRow(row);
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var path = string.IsNullOrWhiteSpace(project) ? null : resolver?.Resolve(row.Model, project, ViCoRelatedPathKind.Simulation);
+                    if (string.IsNullOrWhiteSpace(path))
+                    {
+                        row.SetDocuments(project, "Projektpfad nicht gefunden");
+                        return;
+                    }
+                    row.SetDocuments(project, "Wird geprüft …", Path.Combine(path, "00_Documents"));
+                    if (!reads.TryGetValue(path, out var read))
+                    {
+                        read = _documentsCache.TryGetValue(path, out var cached) && DateTimeOffset.Now - cached.CheckedAt < TimeSpan.FromMinutes(5)
+                            ? Task.FromResult(cached.Result) : ReadAndCacheDocumentsAsync(path, cancellationToken);
+                        reads[path] = read;
+                    }
+                    var result = await read.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+                    if (!cancellationToken.IsCancellationRequested && Results.Contains(row))
+                        row.SetDocuments(project, result.DisplayText, result.FolderPath, result.Detail);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+                catch (Exception exception)
+                {
+                    if (!cancellationToken.IsCancellationRequested && Results.Contains(row))
+                        row.SetDocuments(project, "Ordner nicht erreichbar", detail: exception is TimeoutException ? "Zeitüberschreitung beim Serverzugriff (8 Sekunden)." : exception.Message);
+                }
+            }
+            await Task.WhenAll(rows.Select(ReadRow));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private async Task<ViCoProjectDocumentsResult> ReadAndCacheDocumentsAsync(string path, CancellationToken cancellationToken)
+    {
+        var result = await _documentsService.ReadAsync(path, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        _documentsCache[path] = (result, DateTimeOffset.Now);
+        return result;
     }
 
     private async Task ApplySearchDebouncedAsync()
@@ -681,17 +898,19 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
-    private void StartAvailabilityRefresh()
+    private void StartAvailabilityRefresh(bool forceOnline = false, bool onlineOnly = false)
     {
         _availabilityCancellation?.Cancel();
         _availabilityCancellation?.Dispose();
-        _availabilityCancellation = new CancellationTokenSource();
-        _ = RefreshAvailabilityAsync(Results.ToArray(), _availabilityCancellation.Token);
+        _availabilityCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCancellation.Token);
+        _ = RefreshAvailabilityAsync(Results.ToArray(), _availabilityCancellation.Token, forceOnline, onlineOnly);
     }
 
     private async Task RefreshAvailabilityAsync(
         IReadOnlyCollection<ViCoWorkstationRowVM> rows,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceOnline = false,
+        bool onlineOnly = false)
     {
         using var pingThrottle = new SemaphoreSlim(8);
         using var sessionThrottle = new SemaphoreSlim(4);
@@ -700,8 +919,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             try
             {
                 bool isOnline;
-                if (_availabilityCache.TryGetValue(row.PcName, out var cached) &&
-                    DateTimeOffset.Now - cached.CheckedAt < TimeSpan.FromSeconds(30))
+                if (!forceOnline && _availabilityCache.TryGetValue(row.PcName, out var cached) &&
+                    DateTimeOffset.Now - cached.CheckedAt < TimeSpan.FromMinutes(OnlineRefreshIntervalMinutes))
                 {
                     isOnline = cached.IsOnline;
                 }
@@ -722,8 +941,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                     }
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 row.SetOnline(isOnline);
-                if (isOnline)
+                if (isOnline && !onlineOnly)
                     await RefreshRemoteSessionAsync(row, sessionThrottle, cancellationToken);
                 NotifySelectedWorkstationAvailabilityChanged(row);
             }
@@ -737,7 +957,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 // hostname or transient network failure must not abort the
                 // refresh for the other workstations.
                 row.SetOnline(false);
-                row.SetRemoteSession(ViCoRemoteSessionInfo.NotAvailable);
+                if (!onlineOnly) row.SetRemoteSession(ViCoRemoteSessionInfo.NotAvailable);
                 NotifySelectedWorkstationAvailabilityChanged(row);
                 _log.Warning("Verfügbarkeit", $"Status für {row.PcName} konnte nicht ermittelt werden.", exception.Message);
             }
@@ -908,6 +1128,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             foreach (var field in ConfigurationFields)
                 field.AcceptSavedValue();
             OnPropertyChanged(nameof(SelectedRemoteUser));
+            await PersistCurrentWorkstationsAsync(DateTimeOffset.Now);
             StatusText = $"{changedFields.Length} KONFIGURATION-Wert(e) wurden in Kanbanize gespeichert.";
             _log.Information("Kanbanize", StatusText);
         }
@@ -926,23 +1147,47 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
+    private async Task PersistCurrentWorkstationsAsync(DateTimeOffset updatedAt)
+    {
+        try
+        {
+            await _lastActiveSnapshotStore.SaveAsync(
+                new ViCoLastActiveSnapshot(updatedAt, _allWorkstations),
+                _lifetimeCancellation.Token);
+            SetDisplayedDataUpdatedAt(updatedAt);
+        }
+        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+        {
+            // The previous durable snapshot remains intact during shutdown.
+        }
+        catch (Exception exception)
+        {
+            _log.Warning(
+                "Rechnerübersicht",
+                "Der aktuelle Rechnerstand konnte lokal nicht als Startansicht gesichert werden.",
+                exception.Message);
+        }
+    }
+
     private async Task LoadAutoRefreshSettingsAsync()
     {
         try
         {
             var settings = await _autoRefreshSettingsStore.LoadAsync(_lifetimeCancellation.Token);
             AutoRefreshIntervalMinutes = ViCoAutoRefreshPolicy.Normalize(settings.IntervalMinutes);
+            OnlineRefreshIntervalMinutes = ViCoAutoRefreshPolicy.Normalize(settings.OnlineIntervalMinutes);
             ApplyColumnPreferences(settings);
             _columnPreferencesLoaded = true;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             AutoRefreshIntervalMinutes = ViCoAutoRefreshSettings.Default.IntervalMinutes;
+            OnlineRefreshIntervalMinutes = ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes;
             ApplyColumnPreferences(ViCoAutoRefreshSettings.Default);
             _columnPreferencesLoaded = true;
             _log.Warning(
                 "Rechnerübersicht AutoUpdate",
-                "Das gespeicherte Aktualisierungsintervall konnte nicht gelesen werden; fünf Minuten werden verwendet.",
+                "Das gespeicherte Aktualisierungsintervall konnte nicht gelesen werden; die Standardintervalle 60 Minuten allgemein und 5 Minuten online werden verwendet.",
                 exception.Message);
         }
     }
@@ -964,6 +1209,22 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         {
             StatusText = "Das Kanbanize-AutoUpdate-Intervall konnte nicht gespeichert werden.";
             _log.Error("Rechnerübersicht AutoUpdate", StatusText, exception);
+        }
+    }
+
+    private async Task SaveOnlineRefreshIntervalAsync()
+    {
+        OnlineRefreshIntervalMinutes = ViCoAutoRefreshPolicy.Normalize(OnlineRefreshIntervalMinutes);
+        try
+        {
+            await _autoRefreshSettingsStore.SaveAsync(BuildDisplaySettings(ViCoAutoRefreshPolicy.Normalize(AutoRefreshIntervalMinutes)), _lifetimeCancellation.Token);
+            _nextOnlineRefreshAt = DateTimeOffset.Now.AddMinutes(OnlineRefreshIntervalMinutes);
+            StatusText = $"Nur der Onlinezustand wird alle {OnlineRefreshIntervalMinutes} Minute(n) geprüft.";
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            StatusText = "Das Online-Prüfintervall konnte nicht gespeichert werden.";
+            _log.Error("Rechnerübersicht", StatusText, exception);
         }
     }
 
@@ -1021,7 +1282,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 _lifetimeCancellation.Token);
             await _onlineRefresh.RefreshAsync(_lifetimeCancellation.Token);
             IsBusy = false;
-            await RefreshCachedDataAsync($"KONFIGURATION-Karte {cardId} wurde angelegt und neu geladen.");
+            await RefreshCachedDataAsync(
+                $"KONFIGURATION-Karte {cardId} wurde angelegt und neu geladen.",
+                DateTimeOffset.Now);
             SelectedWorkstation = Results.FirstOrDefault(row =>
                 string.Equals(row.PcName, pcName, StringComparison.OrdinalIgnoreCase));
             _log.Information("Kanbanize", $"KONFIGURATION-Karte {cardId} für {pcName} wurde angelegt.");
@@ -1077,9 +1340,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         var missing = new List<string>();
         foreach (var row in rows)
         {
-            var project = ReferenceEquals(row, SelectedWorkstation) && !string.IsNullOrWhiteSpace(SelectedProject)
-                ? SelectedProject
-                : row.Model.PlanningProjects.Concat(row.Model.WorkingProjects).FirstOrDefault() ?? SearchText;
+            var project = ProjectForRow(row);
             var path = _pathResolver.Resolve(row.Model, project ?? string.Empty, kind);
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -1240,7 +1501,10 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         if (SearchVisibleColumnsOnly)
             ApplySearch();
         if (_columnPreferencesLoaded)
+        {
             _ = SaveDisplayPreferencesAsync();
+            RequestDocumentsRefresh();
+        }
     }
 
     private void ApplyColumnPreferences(ViCoAutoRefreshSettings settings)
@@ -1264,6 +1528,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             }
             foreach (var column in ColumnOptions)
                 column.Apply(visible.Contains(column.Key));
+            // Existing preferences predate this column. Show it once, then
+            // persist the user's explicit visibility choice with layout v1.
+            if (settings.ColumnLayoutVersion < 1) DocumentsColumn.Apply(true);
         }
         else
         {
@@ -1279,7 +1546,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         intervalMinutes,
         OtherColumn.IsVisible && ProjectIpColumn.IsVisible,
         ColumnOptions.Where(column => column.IsVisible).Select(column => column.Key).ToArray(),
-        SearchVisibleColumnsOnly);
+        SearchVisibleColumnsOnly,
+        ViCoAutoRefreshPolicy.Normalize(OnlineRefreshIntervalMinutes),
+        ColumnLayoutVersion: 1);
 
     private static string BuildWorkstationLoadStatus(ViCoWorkstationSnapshot snapshot)
     {

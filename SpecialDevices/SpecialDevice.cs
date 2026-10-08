@@ -6,6 +6,19 @@ using static VIBN_Tools.SpecialDevices.DeviceCatalog;
 
 namespace VIBN_Tools.SpecialDevices
 {
+    public enum ExistingSpecialDeviceState
+    {
+        Missing,
+        Unchanged,
+        AddressesUpdated,
+        RequiresReview
+    }
+
+    public sealed record ExistingSpecialDeviceSyncResult(
+        ExistingSpecialDeviceState State,
+        int UpdatedSignals,
+        string Message);
+
     public abstract class SpecialDevice
     {
 
@@ -167,11 +180,7 @@ namespace VIBN_Tools.SpecialDevices
                 var rootGuid = Guid.Parse(root.GuidText);
                 try
                 {
-                    var tagsXml = await ApiInstance.Object.GetPropertyAsync(
-                        rootGuid,
-                        nameof(FS.SDK.Components.TagComponent.TagEntries),
-                        nameof(FS.SDK.Components.TagComponent));
-                    var tags = ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+                    var tags = await FeeTagPropertyStore.ReadAsync(rootGuid);
                     if (FeeSpecialDeviceProvenanceCodec.TryRead(tags, out _, out _))
                         return true;
                 }
@@ -214,6 +223,146 @@ namespace VIBN_Tools.SpecialDevices
             return false;
         }
 
+        /// <summary>
+        /// Reuses a generated device with the same root name. Current variables
+        /// are read from FEE, compared by their persisted signal GUID and updated
+        /// in place when only their addresses changed. Ambiguous legacy devices
+        /// are never modified automatically.
+        /// </summary>
+        public async Task<ExistingSpecialDeviceSyncResult> SynchronizeExistingAsync()
+        {
+            LastCreationWarning = string.Empty;
+            var expectedName = DeviceBasicFrame?.Name?.Trim();
+            if (string.IsNullOrWhiteSpace(expectedName))
+                return new ExistingSpecialDeviceSyncResult(ExistingSpecialDeviceState.Missing, 0, string.Empty);
+
+            var guidTexts = (await ApiInstance.Object
+                    .GetSceneObjectGuidsOfTypeAsync(nameof(FS.SDK.Scene.Objects.BasicFrame)))
+                .ToArray();
+            var names = guidTexts.Length == 0
+                ? []
+                : (await ApiInstance.Object.GetPropertiesAsync(guidTexts, nameof(FS.SDK.SceneObject.Name)))
+                    .Select(ApiInstance.XmlHelper.ConvertToString)
+                    .ToArray();
+            var matchingRoots = guidTexts
+                .Zip(names, (guid, name) => (GuidText: guid, Name: name))
+                .Where(item => string.Equals(item.Name?.Trim(), expectedName, StringComparison.OrdinalIgnoreCase))
+                .Where(item => Guid.TryParse(item.GuidText, out _))
+                .ToArray();
+            if (matchingRoots.Length == 0)
+                return new ExistingSpecialDeviceSyncResult(ExistingSpecialDeviceState.Missing, 0, string.Empty);
+            if (matchingRoots.Length > 1)
+            {
+                return new ExistingSpecialDeviceSyncResult(
+                    ExistingSpecialDeviceState.RequiresReview,
+                    0,
+                    $"{matchingRoots.Length} gleichnamige FEE-Geräte wurden gefunden; die Adressen werden nicht automatisch geändert.");
+            }
+
+            var rootGuid = Guid.Parse(matchingRoots[0].GuidText);
+            FeeSpecialDeviceSnapshot? storedSnapshot = null;
+            try
+            {
+                var tags = await FeeTagPropertyStore.ReadAsync(rootGuid);
+                FeeSpecialDeviceProvenanceCodec.TryRead(tags, out storedSnapshot, out _);
+            }
+            catch
+            {
+                // An older device can exist without readable provenance. It is
+                // intentionally left untouched because its variables cannot be
+                // assigned to this device with sufficient certainty.
+            }
+
+            if (storedSnapshot is null)
+            {
+                return new ExistingSpecialDeviceSyncResult(
+                    ExistingSpecialDeviceState.RequiresReview,
+                    0,
+                    "Das gleichnamige Gerät besitzt keine eindeutige SpecialDevices2FEE-Provenienz; " +
+                    "eine automatische Adressänderung wäre unsicher.");
+            }
+
+            var desiredSignals = (DeviceSignals ?? Array.Empty<FeeInterfaceSignal>()).ToArray();
+            var storedByTag = (storedSnapshot.Signals ?? Array.Empty<FeeSpecialDeviceSignalSnapshot>())
+                .Where(signal => !string.IsNullOrWhiteSpace(signal.Tag))
+                .GroupBy(signal => signal.Tag, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() == 1)
+                .ToDictionary(group => group.Key, group => group.Single(), StringComparer.OrdinalIgnoreCase);
+            if (desiredSignals.Any(signal =>
+                    string.IsNullOrWhiteSpace(signal.Tag) ||
+                    !storedByTag.ContainsKey(signal.Tag)))
+            {
+                return new ExistingSpecialDeviceSyncResult(
+                    ExistingSpecialDeviceState.RequiresReview,
+                    0,
+                    "Die aktuelle Gerätedefinition und die gespeicherten FEE-Signale unterscheiden sich. " +
+                    "Fehlende oder mehrdeutige Signale werden nicht automatisch erzeugt.");
+            }
+
+            var interfaces = await FeeInterface.GetAllInterfacesAsync();
+            var currentByGuid = interfaces
+                .SelectMany(feeInterface => (feeInterface.Signals ?? []).Select(signal =>
+                    (Signal: signal, Interface: feeInterface)))
+                .GroupBy(item => item.Signal.Guid)
+                .ToDictionary(group => group.Key, group => group.First());
+
+            var updates = new List<(FeeInterfaceSignal Desired, FeeInterface Interface)>();
+            foreach (var desired in desiredSignals)
+            {
+                var stored = storedByTag[desired.Tag];
+                if (!currentByGuid.TryGetValue(stored.VariableGuid, out var current))
+                {
+                    return new ExistingSpecialDeviceSyncResult(
+                        ExistingSpecialDeviceState.RequiresReview,
+                        updates.Count,
+                        $"Das bestehende Signal '{desired.Tag}' ({stored.VariableGuid}) ist in FEE nicht mehr vorhanden.");
+                }
+
+                desired.Guid = current.Signal.Guid;
+                desired.ParentInterface = current.Interface;
+                var addressChanged = !string.Equals(
+                    current.Signal.Address?.Trim(),
+                    desired.Address?.Trim(),
+                    StringComparison.OrdinalIgnoreCase);
+                if (addressChanged)
+                    updates.Add((desired, current.Interface));
+            }
+
+            foreach (var update in updates)
+            {
+                update.Desired.ReuseExistingWithoutUpdate = false;
+                if (!await update.Desired.CreateSignalAsync(update.Interface))
+                {
+                    return new ExistingSpecialDeviceSyncResult(
+                        ExistingSpecialDeviceState.RequiresReview,
+                        updates.IndexOf(update),
+                        $"FEE hat die Adressänderung für '{update.Desired.Tag}' nicht bestätigt.");
+                }
+            }
+
+            DeviceBasicFrame.Guid = rootGuid;
+            var provenance = FeeSpecialDeviceProvenanceCodec.Encode(FeeSpecialDeviceProvenanceCodec.Create(this));
+            var tagWrite = await FeeTagPropertyStore.TryWriteAndVerifyAsync(
+                rootGuid,
+                provenance,
+                preserveExisting: true,
+                verifyAfterWrite: false);
+            if (!tagWrite.Confirmed)
+                LastCreationWarning = tagWrite.Warning;
+            else
+                ApiInstance.Object.Send(rootGuid);
+
+            return updates.Count == 0
+                ? new ExistingSpecialDeviceSyncResult(
+                    ExistingSpecialDeviceState.Unchanged,
+                    0,
+                    "Gerät und Signaladressen sind bereits aktuell.")
+                : new ExistingSpecialDeviceSyncResult(
+                    ExistingSpecialDeviceState.AddressesUpdated,
+                    updates.Count,
+                    $"{updates.Count} bestehende Signaladresse(n) wurden in FEE aktualisiert.");
+        }
+
         public async Task<bool> CreateAsync()
         {
             LastCreationWarning = string.Empty;
@@ -230,15 +379,13 @@ namespace VIBN_Tools.SpecialDevices
             // SDK transaction remains deliberately ineligible for reverse export.
             var provenance = FeeSpecialDeviceProvenanceCodec.Encode(
                 FeeSpecialDeviceProvenanceCodec.Create(this));
-            if (!await ApiInstance.Object.SetPropertyAsync(
+            var tagWrite = await FeeTagPropertyStore.TryWriteAndVerifyAsync(
                 DeviceBasicFrame.Guid,
-                nameof(FS.SDK.Components.TagComponent.TagEntries),
-                new Dictionary<string, string>(provenance, StringComparer.Ordinal),
-                nameof(FS.SDK.Components.TagComponent)))
-            {
-                LastCreationWarning =
-                    "Das Gerät wurde erzeugt, FEE hat aber das Schreiben der Provenienz abgelehnt.";
-            }
+                provenance,
+                preserveExisting: true,
+                verifyAfterWrite: false);
+            if (!tagWrite.Confirmed)
+                LastCreationWarning = tagWrite.Warning;
 
             // SetPropertyAsync updates the SDK-side object wrapper. Sending the
             // already existing root is required to persist the changed component
@@ -265,11 +412,7 @@ namespace VIBN_Tools.SpecialDevices
             {
                 try
                 {
-                    var tagsXml = await ApiInstance.Object.GetPropertyAsync(
-                        DeviceBasicFrame.Guid,
-                        nameof(FS.SDK.Components.TagComponent.TagEntries),
-                        nameof(FS.SDK.Components.TagComponent));
-                    var actual = ApiInstance.XmlHelper.ConvertToDictionaryStringString(tagsXml);
+                    var actual = await FeeTagPropertyStore.ReadAsync(DeviceBasicFrame.Guid);
                     if (expected.All(item =>
                             actual.TryGetValue(item.Key, out var value) &&
                             string.Equals(value, item.Value, StringComparison.Ordinal)))

@@ -9,6 +9,7 @@
         <xs:element name="Slot" type="xs:string"/>
         <xs:element name="Note" type="xs:string" minOccurs="0"/>
     </xs:sequence>
+    <xs:attribute name="feeGuid" type="xs:string" use="optional"/>
 	</xs:complexType>
 
 	<xs:complexType name="ContainerType">
@@ -18,14 +19,51 @@
 			<xs:element name="DataList">
 				<xs:complexType>
 					<xs:sequence>
-						<xs:element name="Entry" type="EntryType" maxOccurs="unbounded"/>
+						<xs:element name="Entry" type="EntryType" minOccurs="0" maxOccurs="unbounded"/>
 					</xs:sequence>
 				</xs:complexType>
 			</xs:element>
+            <xs:element name="SimObjects" type="SimObjectsType" minOccurs="0"/>
 		</xs:sequence>
 		<xs:attribute name="id" type="xs:string" use="optional"/>
+        <xs:attribute name="feeRootGuid" type="xs:string" use="optional"/>
 	</xs:complexType>
 
+    <xs:complexType name="FeeObjectType">
+        <xs:sequence>
+            <xs:element name="Guid" type="xs:string"/>
+            <xs:element name="Name" type="xs:string"/>
+            <xs:element name="FeeType" type="xs:string"/>
+            <xs:element name="Role" type="xs:string" minOccurs="0"/>
+            <xs:element name="Target" type="xs:string" minOccurs="0"/>
+            <xs:element name="ClrType" type="xs:string" minOccurs="0"/>
+            <xs:element name="Slots" minOccurs="0">
+                <xs:complexType><xs:sequence><xs:element name="Slot" minOccurs="0" maxOccurs="unbounded">
+                    <xs:complexType><xs:attribute name="name" type="xs:string" use="required"/>
+                    <xs:attribute name="assignedGuid" type="xs:string" use="required"/></xs:complexType>
+                </xs:element></xs:sequence></xs:complexType>
+            </xs:element>
+        </xs:sequence>
+        <xs:attribute name="assignment" type="xs:string" use="optional"/>
+    </xs:complexType>
+    <xs:complexType name="SimObjectsType"><xs:sequence>
+        <xs:element name="SimObject" type="FeeObjectType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence></xs:complexType>
+    <xs:complexType name="FeeInventoryType"><xs:sequence>
+        <xs:element name="SimObjects" type="SimObjectsType" minOccurs="0"/>
+        <xs:element name="Signals" minOccurs="0"><xs:complexType><xs:sequence>
+            <xs:element name="Signal" minOccurs="0" maxOccurs="unbounded"><xs:complexType><xs:sequence>
+                <xs:element name="Guid" type="xs:string"/>
+                <xs:element name="InterfaceGuid" type="xs:string"/>
+                <xs:element name="InterfaceName" type="xs:string"/>
+                <xs:element name="Tag" type="xs:string"/>
+                <xs:element name="Address" type="xs:string"/>
+                <xs:element name="Path" type="xs:string"/>
+                <xs:element name="DataType" type="xs:string"/>
+                <xs:element name="Usage" type="xs:string" minOccurs="0"/>
+            </xs:sequence></xs:complexType></xs:element>
+        </xs:sequence></xs:complexType></xs:element>
+    </xs:sequence></xs:complexType>
 	<!-- Define the root element and reference the complex types -->
 	<xs:element name="CAAMergeResult">
 		<xs:complexType>
@@ -33,10 +71,11 @@
 				<xs:element name="ContainerList">
 					<xs:complexType>
 						<xs:sequence>
-							<xs:element name="Container" type="ContainerType" maxOccurs="unbounded"/>
+							<xs:element name="Container" type="ContainerType" minOccurs="0" maxOccurs="unbounded"/>
 						</xs:sequence>
 					</xs:complexType>
 				</xs:element>
+                <xs:element name="FeeInventory" type="FeeInventoryType" minOccurs="0"/>
 			</xs:sequence>
     <xs:attribute name="version" type="xs:string" use="required"/>
     <xs:attribute name="createdAt" type="xs:string" use="required"/>

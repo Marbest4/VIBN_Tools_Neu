@@ -136,13 +136,15 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         }
 
 
-        public async Task CheckObjectIssuesAsync(IEnumerable<FeeAbstractObject> newObjects)
+        public Task CheckObjectIssuesAsync(IEnumerable<FeeAbstractObject> newObjects)
         {
             // Check connected slots
             Guid guid;
-            var slots = await Services.ApiInstance.Object.GetSlotsAsync(Guid);
-            var slotConnectionCh1 = Slots.TryGetValue("Channel1", out guid) && guid != Guid.Empty;
-            var slotConnectionCh2 = Slots.TryGetValue("Channel2", out guid) && guid != Guid.Empty;
+            // Slot assignments were already loaded for every object in the
+            // project-wide XML batch. A second SDK read per sensor made large
+            // ModelValidation projects scale unnecessarily badly.
+            var slotConnectionCh1 = Slots?.TryGetValue("Channel1", out guid) == true && guid != Guid.Empty;
+            var slotConnectionCh2 = Slots?.TryGetValue("Channel2", out guid) == true && guid != Guid.Empty;
 
             int countZero = new[] { Position.X, Position.Y, Position.Z }.Count(x => x == 0f);
             bool maxOneZero = countZero == 1;
@@ -166,6 +168,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             if (SensorType == SafetySensorType.Equivalent)
                 PlausibilityIssues.Add(new PlausibilityIssue($"Sensor ist äquivalent", Severity.Warning));
 
+            return Task.CompletedTask;
         }
 
 

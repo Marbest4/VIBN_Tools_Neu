@@ -8,6 +8,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] `VIBN_Tools.ContainerGeneration` und `VIBN_Tools.SharedWpf` erscheinen als eigene Solution-Projekte; das Hauptprojekt kompiliert deren Ordner nicht zusätzlich über Wildcards.
 - [ ] `Tests/CoreSmokeTests` ist erfolgreich.
 - [ ] `Tests/ContainerGenerationSmokeTests` liest alle sieben bereitgestellten Interface-/Container-Paare, bilanziert jedes Signal, hält die verifizierten Zuordnungs-/Slot-Untergrenzen ein und meldet `SixLabors.Fonts 1.0.1.0`.
+- [ ] `Tests/ContainerGenerationSmokeTests` bestätigt die zentrale Decoration-Ausschlussrichtlinie für Model Validation, Container2FEE Visual und FEE2Container; `SurfaceDecoration` und reguläre `Surface`-Objekte bleiben zulässig.
 - [ ] `Tests/UiStartupSmokeTests` ist erfolgreich und meldet keine Binding-Fehler.
 - [ ] `Tests/Test-TiaHardwareTraversal.ps1` bestätigt Gerätegruppen, Local Session und exakt `E62–73/A62–67` sowie `E74–79/A68–79`.
 - [ ] `Tests/TiaLiveRead` liest aus dem geöffneten `Projekt1.ap20` genau eine PLC, drei Teilnehmer und sechs eindeutige adressführende Modulzeilen, ohne das Projekt zu speichern.
@@ -43,7 +44,9 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Lokale Automatisierungsinstallationen stehen am Seitenende; gleiche Produkt-/Versionsfunde werden unabhängig von Registryquelle und leerem Pfad nur einmal angezeigt.
 - [ ] Im normalen interaktiven Windows-Profil erscheinen die Ziele `GROB/VIBN_Tools/FeeUsername`, `GROB/VIBN_Tools/FeePassword`, `GROB/VIBN_Tools/KanbanizeApiKey` und `GROB/VIBN_Tools/RemoteDesktopPassword` im Credential Manager; App-Neustart liest sie, Löschen entfernt sie. Der Codex-Dienstkontext konnte diesen Live-Test wegen Windows-Fehler 1312 (keine Anmeldesitzung) nicht ausführen.
 - [ ] ViCo-Countdown startet mit dem gespeicherten Intervall neu, pausiert ohne API-Key und führt bei Ablauf genau einen Kanbanize-Abruf aus.
+- [ ] Rechnerübersicht zeigt beim Start vor dem Online-Abruf den zuletzt gespeicherten nicht leeren Stand; ein Stand älter als 30 Minuten erhält den orangefarbenen Hinweis mit unverändertem ursprünglichem Aktualisierungszeitpunkt.
 - [ ] Hauptfenster bleibt auf 1366 × 768 bedienbar; Project Settings und ViCo zeigen bei Bedarf Scrollleisten ohne die DataGrid-Virtualisierung zu verlieren.
+- [ ] Maximieren nutzt auf jedem Monitor nur dessen Arbeitsfläche; Taskleiste und rechter Fensterrand bleiben sichtbar. Manuelles Vergrößern kann die aktuelle Monitorarbeitsfläche nicht überschreiten.
 - [ ] IBN startet kompakt mit ausschließlich PC/Online/Projekte; Details, RDP und Zugangsdaten bleiben über die Expander auf 480 × 340 erreichbar.
 - [ ] Ohne FEE-Verbindung sind alle dokumentierten FEE-Aktionen grau, nicht ausführbar und zeigen den Tooltip „Keine Verbindung zu FEE vorhanden.“.
 - [ ] ViCo-Suche findet PC, Benutzer und Projekt mit demselben Suchfeld.
@@ -110,15 +113,18 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] CAD Wizard, Zuli Converter, Container Generation und Container2Fee funktionieren mit einer bekannten Testvorlage.
 - [ ] Container Generation lädt nach einer Requirements-XML ein bestehendes ContainerFile als aktiven Arbeitsstand; ohne aktiven Stand ist der Vergleich deaktiviert.
 - [ ] **Aktiven Stand vergleichen** fragt nur einen Kandidaten ab und zeigt feldgenaue Unterschiede zum sichtbaren Workspace; **Arbeitsstand laden** lädt weiterhin ausschließlich das interne Workspaceformat.
+- [ ] Gefilterte, ausgeschlossene und mehrfach erkannte Signale nennen in der `ReviewMessage` Requirements-Komponente, Slot beziehungsweise Key sowie XML-Zeile/-Spalte; `Bool` zu `BOOL` erzeugt keinen Reimport-Unterschied.
 - [ ] Der bestehende Container2Fee-Reiter arbeitet unverändert.
-- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 9 einschließlich Mehrfach-Interfaceauswahl, zeigt alle deklarierten Signalslots und erlaubt Signale beziehungsweise SimObjects ausschließlich auf ihren getrennten, kompatiblen Drag-and-drop-Zielen.
+- [ ] Container2FEE Visual lädt dieselbe XML ohne FEE, zeigt Container/Signale/Links, speichert und lädt Sidecar-Schema 10 einschließlich Mehrfach-Interfaceauswahl und Signal-only-Typkorrektur, zeigt alle deklarierten Signalslots und erlaubt Signale beziehungsweise SimObjects ausschließlich auf ihren getrennten, kompatiblen Drag-and-drop-Zielen.
+- [ ] Ein großer Visual-Plan vergrößert die Seite nicht vertikal; die Container-/Objektstruktur scrollt innerhalb ihrer Spalte. Während jedes Vorgangs ist Laufleiste oder echter Generierungsfortschritt sichtbar.
 - [ ] `Entf`, Kontextmenü und die mittlere Signalliste entfernen Signale nur aus dem wirksamen Plan; Rückgängig stellt sie wieder her und **Container.xml speichern** schreibt genau den bearbeiteten Stand.
 - [ ] Auswahl, Aufklappzustand und Scrollposition der Containerstruktur bleiben nach Drag-and-drop erhalten; helllila kennzeichnet gefundene, aber noch nicht bestätigt verknüpfte Elemente.
 - [ ] Gefundene FEE-Signale lassen sich auf Signal-Knoten ziehen; die bestätigte GUID bleibt nach erneutem Öffnen erhalten und löst einen dokumentierten Tag-/Adresskonflikt eindeutig auf.
 - [ ] Rot, Gelb und Grün kennzeichnen fehlende/mehrdeutige, geplante und vollständig gefundene beziehungsweise erfolgreich erzeugte Baumknoten bis hinunter zu Signal und Logikobjekt.
-- [ ] Eine ausdrücklich bestätigte Best-Effort-Generierung kennzeichnet den erzeugten Root und legt pro akzeptiertem Fehler genau einen untergeordneten Fehler-BasicFrame an; der Fortschritt endet mit einer Fertigmeldung.
+- [ ] Eine ausdrücklich bestätigte Best-Effort-Generierung kennzeichnet den erzeugten Root und legt pro akzeptiertem Fehler genau einen untergeordneten Fehler-BasicFrame an; ein erst in der Laufzeitvorprüfung erkannter Konflikt wird im selben Startvorgang bestätigt und benötigt keinen zweiten Klick. SDK-Schreib-/Verbindungsfehler bleiben nicht übersteuerbar.
 - [ ] FEE2Container exportiert einen erkannten älteren Container ohne Signalverknüpfung mit einem `FEE-UNASSIGNED-*`-Prüfeintrag statt ihn auszublenden.
-- [ ] FEE2Container zeigt Container, Signalzuordnungen und nicht containerrelevante Objekte getrennt; Container und Signale markieren ihre Gegenstellen gegenseitig hellblau, während die direkte Auswahl dunkelblau bleibt, und alle Exportkorrekturen wirken auf die gespeicherte Datei.
+- [ ] FEE2Container zeigt Container, Signalzuordnungen und nicht containerrelevante Objekte getrennt; Container und Signale markieren und zentrieren ihre Gegenstellen gegenseitig, PickAndPlace wird bei eindeutiger Provenienz/Namensübereinstimmung einem kompatiblen Gripper zugeordnet, und sonstige Objekte lassen sich per Drag-and-drop einem Container zuordnen.
+- [ ] Nach dem Einlesen und bei schnellem Wechsel mehrerer FEE-Roots bleiben erkannte Container, Signalzuordnungen und sonstige Objekte sichtbar; große Tabellen verwenden Recycling-Virtualisierung und eigene Scrollbereiche.
 - [ ] FEE2SpecialDevices findet bekannte Gerätelogiken auch in verschachtelten BasicFrames und unterdrückt doppelte Treffer desselben Geräts.
 - [ ] SpecialDevices2FEE zeigt den Gerätefortschritt und entfernt ein vollständig vorhandenes, eindeutig erkanntes Gerät ohne erneute Erzeugung aus der Warteschlange.
 - [ ] ViCo liest den Projektstart aus Custom-Field 508, ordnet Start und Deadline mit Kartentitel sowie Karten-ID zu und zeigt Planung/In Arbeit für `Angelegt (Tool)` ausklappbar an.
@@ -128,7 +134,9 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] **Nur SimObjects verknüpfen** verbindet nach Model Validation → Update Objects vorhandene SimObjects mit genau einer gleichnamigen vorhandenen Logik und erzeugt kein Modellobjekt neu.
 - [ ] Container2FEE Visual erzeugt mit denselben Zuordnungen fachlich dasselbe Ergebnis wie der bestehende Executor; Erzeugen und Überspringen sind geprüft.
 - [ ] Die Statusfilter begrenzen Containerbaum, verfügbare SimObjects und FEE-Signale auf den gewählten Zustand; bei Baumtreffern bleiben die benötigten Elternknoten sichtbar.
-- [ ] Ein Abbruch gibt die UI sofort frei und verhindert einen neuen FEE-Vorgang, bis ein bereits laufender nicht abbrechbarer SDK-Aufruf beendet ist.
+- [ ] Ein Abbruch gibt die UI sofort frei und verhindert einen neuen FEE-Vorgang, bis ein bereits laufender nicht abbrechbarer SDK-Aufruf beendet ist; **SDK-Aufruf isolieren** blockiert höchstens zwei Sekunden auf `Disconnect` und nennt die In-Process-Grenze ausdrücklich.
+- [ ] Bei aktiver Auswahl-Synchronisierung markieren Baum, Ziele, Signalslots, SimObjects, Signale und Validierung ihr eindeutig zuordenbares Gegenstück mit einem dunkelblauen 3-Pixel-Rahmen und zentrieren es im jeweiligen Scrollbereich.
+- [ ] FEE2Container erlaubt in allen vier Tabellen das Ändern und Umordnen der Spalten; Trenner ändern Root-/Ergebnisbereich sowie die drei Ergebnislisten in Breite und Höhe.
 - [ ] Ein vorhandenes gleichnamiges Cabinet wird wiederverwendet; mehrere gleichnamige Cabinets blockieren als Mehrdeutigkeit und erzeugen kein weiteres Duplikat.
 - [ ] Ein Stopper-Floor besitzt nach Erzeugung oder Link-only-Aktualisierung einen aktiven `CollisionSlot`; `SIM_Collision` und alle gewählten `Floor/Collision`-Slots sind nach Save/Reload verbunden.
 - [ ] Eine von FEE abgewiesene Variablen- oder Slotverknüpfung wird mit GUID-/Slot-Kontext als Fehler gemeldet und nicht als Erfolg angezeigt.
@@ -138,6 +146,7 @@ Diese Liste auf einem GROB-Desktop mit Netzwerkzugriff, FEE, Kanbanize-Berechtig
 - [ ] Wird eine TagComponent-Property nach bestätigter Best-Effort-Freigabe von FEE nicht zurückbestätigt, läuft die fachliche Generierung weiter und protokolliert die eingeschränkte Provenienz, statt beim Root oder einem erzeugten Unterobjekt abzubrechen.
 - [ ] Eine direkte Slotänderung und eine PLC_IN-Änderung über MoveBit werden nach Save/Reload als eindeutige Route innerhalb des Roots exportiert; externe oder mehrdeutige Routen bleiben unverändert und erscheinen als Diagnose.
 - [ ] Model Validation, Model Control und Interface Operation funktionieren mit dem Testmodell; Update Objects protokolliert Objektzahl und Laufzeit und ist gegenüber dem Referenzmodell nicht langsamer.
+- [ ] Dasselbe große FEE-Modell wird vor und nach dem Update mit Working Set, Private Memory und Laufzeit gemessen. Ein zweiter gleichzeitiger FEE-Refresh verwendet denselben laufenden Snapshot statt einen parallelen Vollsnapshot anzulegen.
 - [ ] Keine bestehende Funktion wurde durch ViCo-/Kanbanize-Aufrufe verändert.
 
 ## Übergabe

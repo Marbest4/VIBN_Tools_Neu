@@ -1,6 +1,8 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
+using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
 using VIBN_Tools.Application.VM;
 
 namespace VIBN_Tools.Application.View
@@ -15,6 +17,7 @@ namespace VIBN_Tools.Application.View
             InitializeComponent();
 
             Loaded += View_Loaded;
+            Unloaded += (_, _) => (DataContext as ContainerGenerationPageVM)?.OnViewUnloaded();
         }
 
         private void View_Loaded(object sender, RoutedEventArgs e)
@@ -27,18 +30,28 @@ namespace VIBN_Tools.Application.View
 
         private void ComboBox_Loaded(object sender, RoutedEventArgs e)
         {
-            ComboBox comboBox = (ComboBox)sender;
+            if (sender is not ComboBox comboBox || comboBox.Template is null) return;
             ToggleButton toggleButton = comboBox.Template.FindName("toggleButton", comboBox) as ToggleButton;
             if (toggleButton != null)
             {
                 toggleButton.BorderThickness = new Thickness(0, 0, 0, 0);
-                Border border = toggleButton.Template.FindName("templateRoot", toggleButton) as Border;
+                Border border = toggleButton.Template?.FindName("templateRoot", toggleButton) as Border;
                 if (border != null)
                 {
                     border.Background = comboBox.Background;
                 }
 
             }
+        }
+
+        private void AuxiliaryGrid_AutoGeneratingColumn(object sender, DataGridAutoGeneratingColumnEventArgs args)
+        {
+            if (args.PropertyName is nameof(ContainerEntry.IsChangeAcknowledged) or nameof(ContainerEntry.HasUnconfirmedChange))
+            { args.Cancel = true; return; }
+            if (args.PropertyName != nameof(ContainerEntry.ReviewMessage)) return;
+            BindingOperations.SetBinding(args.Column, DataGridColumn.VisibilityProperty,
+                new Binding("DataContext.IsReimportDetailsVisible")
+                { Source = this, Converter = new BooleanToVisibilityConverter() });
         }
 
         private void OpenReimportComparisonWindow_Click(object sender, RoutedEventArgs e)
