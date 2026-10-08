@@ -26,7 +26,7 @@ internal static class FeeContainerAssociationProjection
             // Explicit manual associations survive even when names differ.
             foreach (var item in ContainerFileXml.Objects(container))
                 if (Guid.TryParse(item.Element("Guid")?.Value, out var guid) && live.TryGetValue(guid, out var actual) &&
-                    ContainerFileXml.CanRetainObjectAssociation(item, actual.Name, name))
+                    ContainerFileXml.CanRetainObjectAssociation(item, actual.Name, name, actual.FeeType))
                     associations.Add(new FeeContainerObjectAssociation(guid, actual.Name, actual.FeeType,
                         Guid.Empty, id, item.Attribute("assignment")?.Value == "Manual" ? "Manuelle Zuordnung aus Container-Provenienz" : "Gespeicherte Zuordnung mit gleichem Namen",
                         item.Element("Role")?.Value ?? "SimObject", IsManual: item.Attribute("assignment")?.Value == "Manual"));
@@ -43,7 +43,7 @@ internal static class FeeContainerAssociationProjection
             if (matches.Length != 1) continue;
             foreach (var item in group)
                 if (!associations.Any(association => association.ObjectGuid == item.ObjectGuid) &&
-                    (item.Role != "SimObject" || string.Equals(item.ObjectName, matches[0].Element("Component")?.Value, StringComparison.OrdinalIgnoreCase)))
+                    (item.IsManual || ContainerFileXml.IsStructuralObject(item.ObjectType, item.Role) || string.Equals(item.ObjectName?.Trim(), matches[0].Element("Component")?.Value?.Trim(), StringComparison.OrdinalIgnoreCase)))
                     associations.Add(item with { ContainerId = matches[0].Attribute("id")?.Value ?? "" });
         }
         foreach (var container in containers)

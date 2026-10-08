@@ -43,7 +43,8 @@ public sealed class JsonViCoAutoRefreshSettingsStore : IViCoAutoRefreshSettingsS
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray(),
                 settings?.SearchVisibleColumnsOnly ??
-                ViCoAutoRefreshSettings.Default.SearchVisibleColumnsOnly);
+                ViCoAutoRefreshSettings.Default.SearchVisibleColumnsOnly,
+                ViCoAutoRefreshPolicy.Normalize(settings?.OnlineIntervalMinutes ?? ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes));
         }
         catch (JsonException)
         {
@@ -74,7 +75,8 @@ public sealed class JsonViCoAutoRefreshSettingsStore : IViCoAutoRefreshSettingsS
                     .Where(value => !string.IsNullOrWhiteSpace(value))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray(),
-                settings.SearchVisibleColumnsOnly);
+                settings.SearchVisibleColumnsOnly,
+                ViCoAutoRefreshPolicy.Normalize(settings.OnlineIntervalMinutes));
             var temporaryFile = _filePath + ".tmp";
             await using (var stream = new FileStream(
                 temporaryFile,

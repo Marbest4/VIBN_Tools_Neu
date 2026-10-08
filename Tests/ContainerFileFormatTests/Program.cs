@@ -72,6 +72,18 @@ Assert(!ContainerFileXml.CanRetainObjectAssociation(automatic, "Other", "Contain
 Assert(ContainerFileXml.CanRetainObjectAssociation(automatic, "container_a", "Container_A"), "Same-name automatic association was rejected.");
 var manual = ContainerFileXml.Object(firstGuid, "Other", "Surface", assignmentKind: "Manual");
 Assert(ContainerFileXml.CanRetainObjectAssociation(manual, "Other", "Container_A"), "Explicit mixed-name assignment was rejected.");
+foreach (var role in new[] { "Primary", "TechnicalHelper", "SimObject" })
+{
+    var physical = ContainerFileXml.Object(firstGuid, "Other", "Surface", role);
+    Assert(!ContainerFileXml.CanRetainObjectAssociation(physical, "Other", "Container_A"), "A stored role bypassed the physical-object name rule.");
+    physical.Element("FeeType")!.Value = "LogicObject";
+    Assert(!ContainerFileXml.CanRetainObjectAssociation(physical, "Other", "Container_A", "Surface"), "Stored type metadata overrode the live physical type.");
+}
+Assert(ContainerFileXml.CanRetainObjectAssociation(ContainerFileXml.Object(firstGuid, "Logic", "LogicObject", "Primary"), "Logic", "Container_A"), "A structural container identity was dropped.");
+Assert(!ContainerFileXml.CanRetainObjectAssociation(automatic, "", ""), "Empty names authorized an automatic link.");
+var runtimeErrors = ContainerFileXml.Document([Container("Container_A", "Button", automatic)]);
+runtimeErrors.Root!.Add(new XElement("ComparisonDiagnostics", new XElement("Issue", new XAttribute("objectGuid", firstGuid), "Live object validation failed")));
+Assert(ContainerFileComparison.CompareForReview(runtimeErrors, runtimeErrors).Single().HasErrors, "A live FEE error did not mark its container comparison row.");
 var manualModel = new VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData.ContainerFeeObject { AssignmentKind = "Manual" };
 Assert(manualModel.Clone().AssignmentKind == "Manual", "Cloning lost manual association intent.");
 try { ContainerFileXml.ParseContainer("<!DOCTYPE Container [<!ENTITY data SYSTEM 'file:///etc/passwd'>]><Container><Component>&data;</Component><Type>Button</Type><DataList/></Container>"); throw new Exception("DTD was accepted."); }

@@ -73,6 +73,23 @@ namespace VIBN_Tools.Application.VM
         }
 
 
+        public IReadOnlyList<string> ColorFilterOptions { get; } = ["Alle", "Keine Fehler", "Meldung", "Fehler"];
+        private int _selectedColorFilterIndex;
+        public int SelectedColorFilterIndex
+        {
+            get => _selectedColorFilterIndex;
+            set
+            {
+                _selectedColorFilterIndex = Math.Clamp(value, 0, 3);
+                OnPropertyChanged();
+                ApplyFilters();
+            }
+        }
+        private void ApplyFilters()
+        {
+            foreach (var group in ValidationGroups)
+                group.ApplyFilter(FilterText, (ValidationColorFilter)SelectedColorFilterIndex);
+        }
         private string _filterText;
         public string FilterText
         {
@@ -165,8 +182,7 @@ namespace VIBN_Tools.Application.VM
             {
                 _debounceTimer.Stop();
 
-                foreach(var group in ValidationGroups)
-                    group.ApplyFilter(FilterText);
+                ApplyFilters();
             };
         }
 
@@ -186,6 +202,8 @@ namespace VIBN_Tools.Application.VM
             try
             {
                 var connectionRevision = Services.Connection.BeginModelValidationUpdate();
+                ValidationGroups.Clear();
+                SelectedTab = null;
                 await Services.FeeObjects.UpdateFeeDataAsync();
                 if (!Services.Connection.CompleteModelValidationUpdate(connectionRevision))
                     UpdateStatusText = "Die FEE-Verbindung hat sich während Update Objects geändert. Bitte erneut ausführen.";
@@ -216,7 +234,12 @@ namespace VIBN_Tools.Application.VM
                 .ToArray();
 
             if (allFeeObjects == null || allFeeObjects.Length == 0)
+            {
+                ValidationGroups.Clear();
+                SelectedTab = null;
+                UpdateStatusText = "Das aktuelle FEE-Projekt enthält keine auswertbaren Objekte.";
                 return;
+            }
 
             // Store old tab 
             var oldTabName = SelectedTabName;
@@ -262,7 +285,7 @@ namespace VIBN_Tools.Application.VM
                         GroupName = def.GroupName,
                     };
 
-                    group.ApplyFilter(FilterText);
+                    group.ApplyFilter(FilterText, (ValidationColorFilter)SelectedColorFilterIndex);
 
                     ValidationGroups.Add(group);
                 }
@@ -274,7 +297,7 @@ namespace VIBN_Tools.Application.VM
                 GroupName = "Marks",
                 IsMarksGroup = true,
             };
-            groupMarks.ApplyFilter(FilterText);
+            groupMarks.ApplyFilter(FilterText, (ValidationColorFilter)SelectedColorFilterIndex);
             ValidationGroups.Add(groupMarks);
 
 
@@ -302,6 +325,7 @@ namespace VIBN_Tools.Application.VM
                     issue.IsAcknowledged = true;
                     feeObj.NotifyIssueStateChanged();
                 }
+                ApplyFilters();
             }
         }
 

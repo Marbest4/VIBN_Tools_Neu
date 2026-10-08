@@ -40,6 +40,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private bool _initialized;
     private bool _isSavingConfiguration;
     private DateTimeOffset? _nextAutoRefreshAt;
+    private DateTimeOffset? _nextOnlineRefreshAt;
     private bool? _lastObservedOnlineConfiguration;
     private IReadOnlyList<ViCoWorkstationRowVM> _selectedWorkstations = Array.Empty<ViCoWorkstationRowVM>();
     private bool _columnPreferencesLoaded;
@@ -87,6 +88,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         SaveConfigurationCommand = GetCommandBindingAsync(SaveConfigurationAsync);
         CreateConfigurationCommand = GetCommandBindingAsync(CreateConfigurationAsync);
         SaveAutoRefreshIntervalCommand = GetCommandBindingAsync(SaveAutoRefreshIntervalAsync);
+        SaveOnlineRefreshIntervalCommand = GetCommandBindingAsync(SaveOnlineRefreshIntervalAsync);
         SaveDisplayPreferencesCommand = GetCommandBindingAsync(SaveDisplayPreferencesAsync);
         OpenPcProjectsCommand = GetCommandBinding(() => OpenRelated(ViCoRelatedPathKind.WorkstationProjects));
         OpenSimulationCommand = GetCommandBinding(() => OpenRelated(ViCoRelatedPathKind.Simulation));
@@ -131,6 +133,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public ICommand SaveConfigurationCommand { get; }
     public ICommand CreateConfigurationCommand { get; }
     public ICommand SaveAutoRefreshIntervalCommand { get; }
+    public ICommand SaveOnlineRefreshIntervalCommand { get; }
     public ICommand SaveDisplayPreferencesCommand { get; }
     public ICommand OpenPcProjectsCommand { get; }
     public ICommand OpenSimulationCommand { get; }
@@ -173,6 +176,19 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             _autoRefreshIntervalMinutes = value;
             OnPropertyChanged();
         }
+    }
+
+    private int _onlineRefreshIntervalMinutes = ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes;
+    public int OnlineRefreshIntervalMinutes
+    {
+        get => _onlineRefreshIntervalMinutes;
+        set { _onlineRefreshIntervalMinutes = value; OnPropertyChanged(); }
+    }
+    private string _onlineRefreshCountdown = "Online-Prüfung wird initialisiert …";
+    public string OnlineRefreshCountdown
+    {
+        get => _onlineRefreshCountdown;
+        private set { _onlineRefreshCountdown = value; OnPropertyChanged(); }
     }
 
     private bool _showExtendedInformation;
@@ -472,6 +488,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         // is not configured or temporarily unavailable.
         await RefreshFromBestAvailableSourceAsync();
         _ = RunPeriodicRefreshAsync(_lifetimeCancellation.Token);
+        _ = RunOnlineStatusRefreshAsync(_lifetimeCancellation.Token);
     }
 
     public void Dispose()
@@ -741,6 +758,29 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
+    private async Task RunOnlineStatusRefreshAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                _nextOnlineRefreshAt ??= DateTimeOffset.Now.AddMinutes(OnlineRefreshIntervalMinutes);
+                var onlineRemaining = _nextOnlineRefreshAt.Value - DateTimeOffset.Now;
+                if (onlineRemaining <= TimeSpan.Zero)
+                {
+                    StartAvailabilityRefresh(forceOnline: true, onlineOnly: true);
+                    _nextOnlineRefreshAt = DateTimeOffset.Now.AddMinutes(OnlineRefreshIntervalMinutes);
+                    onlineRemaining = _nextOnlineRefreshAt.Value - DateTimeOffset.Now;
+                }
+                OnlineRefreshCountdown = onlineRemaining <= TimeSpan.Zero
+                    ? "Online-Prüfung läuft …"
+                    : $"Nächste Online-Prüfung: {FormatRemaining(onlineRemaining)}";
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) { /* Application shutdown. */ }
+    }
+
     private void ApplySearch()
     {
         var selected = SelectedWorkstation?.PcName;
@@ -775,17 +815,19 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         }
     }
 
-    private void StartAvailabilityRefresh()
+    private void StartAvailabilityRefresh(bool forceOnline = false, bool onlineOnly = false)
     {
         _availabilityCancellation?.Cancel();
         _availabilityCancellation?.Dispose();
-        _availabilityCancellation = new CancellationTokenSource();
-        _ = RefreshAvailabilityAsync(Results.ToArray(), _availabilityCancellation.Token);
+        _availabilityCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCancellation.Token);
+        _ = RefreshAvailabilityAsync(Results.ToArray(), _availabilityCancellation.Token, forceOnline, onlineOnly);
     }
 
     private async Task RefreshAvailabilityAsync(
         IReadOnlyCollection<ViCoWorkstationRowVM> rows,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceOnline = false,
+        bool onlineOnly = false)
     {
         using var pingThrottle = new SemaphoreSlim(8);
         using var sessionThrottle = new SemaphoreSlim(4);
@@ -794,8 +836,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             try
             {
                 bool isOnline;
-                if (_availabilityCache.TryGetValue(row.PcName, out var cached) &&
-                    DateTimeOffset.Now - cached.CheckedAt < TimeSpan.FromSeconds(30))
+                if (!forceOnline && _availabilityCache.TryGetValue(row.PcName, out var cached) &&
+                    DateTimeOffset.Now - cached.CheckedAt < TimeSpan.FromMinutes(OnlineRefreshIntervalMinutes))
                 {
                     isOnline = cached.IsOnline;
                 }
@@ -816,8 +858,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                     }
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 row.SetOnline(isOnline);
-                if (isOnline)
+                if (isOnline && !onlineOnly)
                     await RefreshRemoteSessionAsync(row, sessionThrottle, cancellationToken);
                 NotifySelectedWorkstationAvailabilityChanged(row);
             }
@@ -831,7 +874,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 // hostname or transient network failure must not abort the
                 // refresh for the other workstations.
                 row.SetOnline(false);
-                row.SetRemoteSession(ViCoRemoteSessionInfo.NotAvailable);
+                if (!onlineOnly) row.SetRemoteSession(ViCoRemoteSessionInfo.NotAvailable);
                 NotifySelectedWorkstationAvailabilityChanged(row);
                 _log.Warning("Verfügbarkeit", $"Status für {row.PcName} konnte nicht ermittelt werden.", exception.Message);
             }
@@ -1049,17 +1092,19 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         {
             var settings = await _autoRefreshSettingsStore.LoadAsync(_lifetimeCancellation.Token);
             AutoRefreshIntervalMinutes = ViCoAutoRefreshPolicy.Normalize(settings.IntervalMinutes);
+            OnlineRefreshIntervalMinutes = ViCoAutoRefreshPolicy.Normalize(settings.OnlineIntervalMinutes);
             ApplyColumnPreferences(settings);
             _columnPreferencesLoaded = true;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             AutoRefreshIntervalMinutes = ViCoAutoRefreshSettings.Default.IntervalMinutes;
+            OnlineRefreshIntervalMinutes = ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes;
             ApplyColumnPreferences(ViCoAutoRefreshSettings.Default);
             _columnPreferencesLoaded = true;
             _log.Warning(
                 "Rechnerübersicht AutoUpdate",
-                "Das gespeicherte Aktualisierungsintervall konnte nicht gelesen werden; fünf Minuten werden verwendet.",
+                "Das gespeicherte Aktualisierungsintervall konnte nicht gelesen werden; die Standardintervalle 60 Minuten allgemein und 5 Minuten online werden verwendet.",
                 exception.Message);
         }
     }
@@ -1081,6 +1126,22 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         {
             StatusText = "Das Kanbanize-AutoUpdate-Intervall konnte nicht gespeichert werden.";
             _log.Error("Rechnerübersicht AutoUpdate", StatusText, exception);
+        }
+    }
+
+    private async Task SaveOnlineRefreshIntervalAsync()
+    {
+        OnlineRefreshIntervalMinutes = ViCoAutoRefreshPolicy.Normalize(OnlineRefreshIntervalMinutes);
+        try
+        {
+            await _autoRefreshSettingsStore.SaveAsync(BuildDisplaySettings(ViCoAutoRefreshPolicy.Normalize(AutoRefreshIntervalMinutes)), _lifetimeCancellation.Token);
+            _nextOnlineRefreshAt = DateTimeOffset.Now.AddMinutes(OnlineRefreshIntervalMinutes);
+            StatusText = $"Nur der Onlinezustand wird alle {OnlineRefreshIntervalMinutes} Minute(n) geprüft.";
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            StatusText = "Das Online-Prüfintervall konnte nicht gespeichert werden.";
+            _log.Error("Rechnerübersicht", StatusText, exception);
         }
     }
 
@@ -1398,7 +1459,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         intervalMinutes,
         OtherColumn.IsVisible && ProjectIpColumn.IsVisible,
         ColumnOptions.Where(column => column.IsVisible).Select(column => column.Key).ToArray(),
-        SearchVisibleColumnsOnly);
+        SearchVisibleColumnsOnly,
+        ViCoAutoRefreshPolicy.Normalize(OnlineRefreshIntervalMinutes));
 
     private static string BuildWorkstationLoadStatus(ViCoWorkstationSnapshot snapshot)
     {

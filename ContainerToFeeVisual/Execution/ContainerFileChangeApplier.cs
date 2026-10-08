@@ -41,6 +41,14 @@ internal static class ContainerFileChangeApplier
                 diagnostics.Add(new XElement("Issue", new XAttribute("root", root.Name), "Root konnte nicht vollständig gelesen werden: " + exception.Message));
             }
         }
+        if (allowIncomplete)
+        {
+            foreach (var obj in Services.FeeObjects.AllFeeObjects ?? [])
+                foreach (var issue in obj.PlausibilityIssues.Where(issue =>
+                    issue.Severity == VIBN_Tools.ModelValidation.Severity.Error && !issue.IsAcknowledged))
+                    diagnostics.Add(new XElement("Issue", new XAttribute("root", obj.Name ?? "FEE"),
+                        new XAttribute("objectGuid", obj.GuidString), issue.Message));
+        }
         var result = ContainerFileXml.Document(containers, new XElement("FeeInventory",
             new XElement("SimObjects", inventoryObjects.DistinctBy(item => item.Element("Guid")?.Value).Select(item => new XElement(item))),
             new XElement("Signals", inventorySignals.DistinctBy(item => item.Element("Guid")?.Value).Select(item => new XElement(item)))));

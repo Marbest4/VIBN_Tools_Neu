@@ -16,7 +16,14 @@ public sealed partial class ContainerToFeeVisualPageVM
     {
         try
         {
-            var current = HasPlan ? _planService.CreateEffectiveContainerDocument() : ContainerFileXml.Document([]);
+            XDocument current;
+            try { current = HasPlan ? _planService.CreateEffectiveContainerDocument() : ContainerFileXml.Document([]); }
+            catch (Exception exception) when (HasPlan && File.Exists(SourceXmlPath))
+            {
+                current = ContainerFileXml.Load(SourceXmlPath);
+                current.Root?.Add(new XElement("ComparisonDiagnostics", new XElement("Issue",
+                    new XAttribute("root", "Visueller Plan"), "Plan konnte nicht vollständig aufgelöst werden: " + exception.Message)));
+            }
             var vm = new ContainerFileComparisonVM(current,
                 HasPlan ? "Aktueller visueller Plan: " + SourceXmlPath : "Alte Datei oder aktuellen FEE-Stand auswählen",
                 ReadComparisonFeeAsync, ApplyComparisonAsync,

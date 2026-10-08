@@ -424,6 +424,21 @@ static async Task VerifyAutoRefreshPreferencesAsync(string temporaryRoot)
     Assert(normalized.VisibleColumns?.SequenceEqual(["pc", "planning", "projectIp"]) == true,
         "The per-column ViCo visibility preference was not persisted.");
 
+    Assert(ViCoAutoRefreshSettings.Default.IntervalMinutes == 60 && ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes == 5,
+        "General/online refresh defaults must be 60/5 minutes.");
+    await store.SaveAsync(new ViCoAutoRefreshSettings(60, true, ["pc"], true, 12));
+    var separate = await store.LoadAsync();
+    Assert(separate.IntervalMinutes == 60 && separate.OnlineIntervalMinutes == 12 && separate.SearchVisibleColumnsOnly,
+        "Saving separate online preferences lost another per-user setting.");
+    await File.WriteAllTextAsync(file, "{\"intervalMinutes\":20,\"showExtendedInformation\":true}");
+    var legacy = await store.LoadAsync();
+    Assert(legacy.IntervalMinutes == 20 && legacy.OnlineIntervalMinutes == 5,
+        "Legacy preferences must retain the user's interval and add the online default.");
+    var today = new DateTime(2026, 10, 8);
+    Assert(WorkingEndColorPolicy.GetBackground("07.10.2026 | 20.10.2026", today) == "#FFFFC7CE", "An overdue working deadline must win over future dates.");
+    Assert(WorkingEndColorPolicy.GetBackground("15.10.2026", today) == "#FFFFEB9C", "A seven-day deadline must warn.");
+    Assert(WorkingEndColorPolicy.GetBackground("16.10.2026", today) == "#00FFFFFF", "A later deadline must not warn.");
+
     await File.WriteAllTextAsync(file, "not-json");
     var recovered = await store.LoadAsync();
     Assert(recovered == ViCoAutoRefreshSettings.Default,

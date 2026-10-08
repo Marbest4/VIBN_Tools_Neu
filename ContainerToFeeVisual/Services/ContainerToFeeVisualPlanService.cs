@@ -1586,9 +1586,7 @@ public sealed partial class ContainerToFeeVisualPlanService
                          .Where(item => item.HasExactDuplicate)
                          .GroupBy(item => string.Join("\u001f",
                              item.Name.Trim(),
-                             item.TypeName,
-                             item.FeeType.Trim(),
-                             item.ParentGuidString.Trim()),
+                             item.ParentName.Trim()),
                              StringComparer.OrdinalIgnoreCase))
             {
                 var sample = duplicateGroup.First();
@@ -1609,12 +1607,11 @@ public sealed partial class ContainerToFeeVisualPlanService
                 foreach (var nodeId in nodeIds)
                 {
                     issues.Add(new VisualIssue(
-                        isConfirmed || isMotionJoint
-                            ? VisualIssueSeverity.Warning
-                            : VisualIssueSeverity.Error,
+                        VisualIssueSeverity.Warning,
                         "DUPLICATE_FEE_SIMOBJECT_IDENTITY",
-                        $"{duplicateGroup.Count()} identische FEE-SimObjects '{sample.Name}' vom Typ " +
-                        $"'{sample.FeeType}' wurden unter demselben Parent '{sample.ParentName}' gefunden. " +
+                        $"{duplicateGroup.Count()} gleichnamige FEE-SimObjects '{sample.Name}' " +
+                        $"wurden unter demselben Parent '{sample.ParentName}' gefunden " +
+                        $"(Typen: {string.Join(", ", duplicateGroup.Select(item => item.FeeType).Distinct())}). " +
                         (isConfirmed
                             ? "Der Mehrfachfund wurde für diese Sitzung ausdrücklich bestätigt."
                             : isMotionJoint
@@ -2102,9 +2099,7 @@ public sealed partial class ContainerToFeeVisualPlanService
     private static string CreateDuplicateIdentity(VisualFeeObject item) => string.Join(
         "\u001f",
         item.Name.Trim(),
-        item.TypeName,
-        item.FeeType.Trim(),
-        item.ParentGuidString.Trim());
+        item.ParentName.Trim());
 
     private VisualFeeSignal? ResolveSignalForNode(
         VisualPlan plan,

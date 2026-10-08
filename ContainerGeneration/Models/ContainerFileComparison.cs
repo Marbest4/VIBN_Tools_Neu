@@ -102,7 +102,15 @@ public static class ContainerFileComparison
             }
         }
         foreach (var issue in document.Root?.Element("ComparisonDiagnostics")?.Elements("Issue") ?? [])
-            result.Add(new(source, issue.Attribute("root")?.Value ?? "FEE", issue.Value));
+        {
+            var objectGuid = issue.Attribute("objectGuid")?.Value;
+            XElement[] affected = string.IsNullOrWhiteSpace(objectGuid) ? [] : containers.Where(container =>
+                ContainerFileXml.Objects(container).Any(item => string.Equals(item.Element("Guid")?.Value, objectGuid, StringComparison.OrdinalIgnoreCase)) ||
+                container.Descendants("Entry").Any(item => string.Equals(item.Attribute("feeGuid")?.Value, objectGuid, StringComparison.OrdinalIgnoreCase))).ToArray();
+            if (affected.Length == 0) result.Add(new(source, issue.Attribute("root")?.Value ?? "FEE", issue.Value));
+            else foreach (var container in affected)
+                result.Add(new(source, container.Element("Component")?.Value ?? "FEE", issue.Value, container));
+        }
         return result;
     }
 

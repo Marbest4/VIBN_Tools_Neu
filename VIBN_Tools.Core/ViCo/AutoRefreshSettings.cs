@@ -5,9 +5,10 @@ public sealed record ViCoAutoRefreshSettings(
     int IntervalMinutes,
     bool ShowExtendedInformation = false,
     IReadOnlyList<string>? VisibleColumns = null,
-    bool SearchVisibleColumnsOnly = false)
+    bool SearchVisibleColumnsOnly = false,
+    int OnlineIntervalMinutes = 5)
 {
-    public static ViCoAutoRefreshSettings Default { get; } = new(5, false, null, false);
+    public static ViCoAutoRefreshSettings Default { get; } = new(60, false, null, false, 5);
 }
 
 public static class ViCoAutoRefreshPolicy

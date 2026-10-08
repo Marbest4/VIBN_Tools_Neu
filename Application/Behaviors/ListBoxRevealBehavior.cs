@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Collections.Specialized;
 using System.Runtime.CompilerServices;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -22,6 +23,7 @@ public static class ListBoxRevealBehavior
     {
         if (element is not ListBox list)
             return;
+        AttachCollectionViewport(list);
         if ((bool)args.NewValue)
             list.PreviewMouseLeftButtonDown += PreserveInputViewport;
         else
@@ -63,11 +65,32 @@ public static class ListBoxRevealBehavior
     public static object? GetRevealItem(DependencyObject element) => element.GetValue(RevealItemProperty);
     public static void SetRevealItem(DependencyObject element, object? value) => element.SetValue(RevealItemProperty, value);
 
+    private static readonly ConditionalWeakTable<ListBox, object> CollectionSubscriptions = new();
+    private static void AttachCollectionViewport(ListBox list)
+    {
+        if (CollectionSubscriptions.TryGetValue(list, out _)) return;
+        CollectionSubscriptions.Add(list, new object());
+        ((INotifyCollectionChanged)list.Items).CollectionChanged += (_, _) =>
+        {
+            if (FindVisualChild<ScrollViewer>(list) is not { } viewer) return;
+            var vertical = viewer.VerticalOffset;
+            var horizontal = viewer.HorizontalOffset;
+            var revision = (long)list.GetValue(RevealRevisionProperty);
+            list.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
+            {
+                if (GetIsEnabled(list) && (long)list.GetValue(RevealRevisionProperty) != revision) return;
+                viewer.ScrollToVerticalOffset(vertical);
+                viewer.ScrollToHorizontalOffset(horizontal);
+            }));
+        };
+    }
+
     private static void OnRevealItemChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
     {
         if (dependencyObject is not ListBox listBox)
             return;
 
+        AttachCollectionViewport(listBox);
         var revision = (long)listBox.GetValue(RevealRevisionProperty) + 1;
         listBox.SetValue(RevealRevisionProperty, revision);
         if (args.NewValue is null || !GetIsEnabled(listBox))

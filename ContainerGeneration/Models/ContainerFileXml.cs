@@ -34,10 +34,20 @@ public static class ContainerFileXml
     public static IEnumerable<XElement> Objects(XElement container) =>
         container.Element("SimObjects")?.Elements("SimObject") ?? [];
 
-    public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName) =>
-        item.Element("Role")?.Value is "Primary" or "TechnicalHelper" ||
+    public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName,
+        string? liveFeeType = null) =>
         item.Attribute("assignment")?.Value == "Manual" ||
-        string.Equals(liveName, containerName, StringComparison.OrdinalIgnoreCase);
+        (!string.IsNullOrWhiteSpace(liveName) && !string.IsNullOrWhiteSpace(containerName) &&
+         string.Equals(liveName.Trim(), containerName.Trim(), StringComparison.OrdinalIgnoreCase)) ||
+        IsStructuralObject(liveFeeType ?? item.Element("FeeType")?.Value, item.Element("Role")?.Value);
+
+    // A stored role alone must never authorize an automatic physical-object link.
+    public static bool IsStructuralObject(string? feeType, string? role)
+    {
+        var type = (feeType ?? "").Split('.').Last();
+        return role == "Primary" && (type is "LogicObject" or "LogicBox" or "CabinetElement" or "Cabinet") ||
+               role == "TechnicalHelper" && (type is "BoolNot" or "MoveBit" or "BoolAnd" or "BoolOr");
+    }
 
     public static XElement Object(string guid, string name, string feeType, string role = "SimObject",
         string target = "", string clrType = "", IEnumerable<ContainerFeeSlot>? slots = null,

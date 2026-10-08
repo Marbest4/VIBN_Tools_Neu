@@ -198,15 +198,19 @@ public static class ContainerToFeeVisualDragDropBehavior
         DependencyObject? current = originalSource;
         while (current is not null && current != sourceElement)
         {
-            if (current is FrameworkElement frameworkElement &&
-                frameworkElement.DataContext is not null &&
-                frameworkElement.DataContext != sourceDataContext)
+            var dataContext = current switch
             {
-                item = frameworkElement.DataContext;
+                FrameworkElement element => element.DataContext,
+                FrameworkContentElement content => content.DataContext,
+                _ => null
+            };
+            if (dataContext is not null && dataContext != sourceDataContext)
+            {
+                item = dataContext;
                 break;
             }
 
-            current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            current = GetSafeParent(current);
         }
 
         item ??= sourceElement is ListBox sourceListBox
@@ -233,12 +237,22 @@ public static class ContainerToFeeVisualDragDropBehavior
     private static T? FindAncestor<T>(DependencyObject? start) where T : DependencyObject
     {
         for (var current = start; current is not null;
-             current = System.Windows.Media.VisualTreeHelper.GetParent(current))
+             current = GetSafeParent(current))
         {
             if (current is T match)
                 return match;
         }
         return null;
+    }
+
+    internal static DependencyObject? GetSafeParent(DependencyObject current)
+    {
+        if (current is ContentElement content)
+            return ContentOperations.GetParent(content) ??
+                (content as FrameworkContentElement)?.Parent ?? LogicalTreeHelper.GetParent(content);
+        if (current is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D)
+            return System.Windows.Media.VisualTreeHelper.GetParent(current);
+        return LogicalTreeHelper.GetParent(current);
     }
 
     private static void CaptureScrollOffset(DragSourceState state)

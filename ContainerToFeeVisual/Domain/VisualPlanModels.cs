@@ -130,7 +130,9 @@ public sealed class VisualFeeObject
         IReadOnlyCollection<string> assignableTypeNames,
         string parentGuidString,
         string parentName,
-        bool hasExactDuplicate)
+        bool hasExactDuplicate,
+        string assembliesParentName = "",
+        bool hasSameNameInOtherParent = false)
     {
         Id = id;
         GuidString = guidString;
@@ -141,6 +143,8 @@ public sealed class VisualFeeObject
         ParentGuidString = parentGuidString;
         ParentName = parentName;
         HasExactDuplicate = hasExactDuplicate;
+        AssembliesParentName = assembliesParentName;
+        HasSameNameInOtherParent = hasSameNameInOtherParent;
     }
 
     public string Id { get; }
@@ -159,10 +163,12 @@ public sealed class VisualFeeObject
     public string ParentGuidString { get; }
 
     public string ParentName { get; }
+    public string AssembliesParentName { get; }
+    public bool HasSameNameInOtherParent { get; }
 
     /// <summary>
-    /// Another FEE object has the same name, runtime/SimObject type and parent,
-    /// but a different GUID. Such entries are retained for diagnosis.
+    /// Another FEE object has the same name and logical parent name,
+    /// but a different GUID. Such entries are retained as warnings.
     /// </summary>
     public bool HasExactDuplicate { get; }
 
@@ -175,7 +181,7 @@ public sealed class VisualFeeObject
         AssignableTypeNames,
         ParentGuidString,
         ParentName,
-        hasExactDuplicate);
+        hasExactDuplicate, AssembliesParentName, HasSameNameInOtherParent);
 }
 
 /// <summary>

@@ -1,22 +1,30 @@
-using System.Windows.Controls;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
+using VIBN_Tools.Application.VM;
 
 namespace VIBN_Tools.Application.View;
 
-public partial class Fee2ContainerPage : UserControl
+public partial class Fee2ContainerEditWindow : Window
 {
-    public Fee2ContainerPage()
+    public Fee2ContainerEditWindow(Fee2ContainerEditVM viewModel)
     {
         InitializeComponent();
+        DataContext = viewModel;
     }
-    private void CommitPendingEdits(object sender, RoutedEventArgs args)
+    private void CommitTables(object sender, RoutedEventArgs args)
     {
         foreach (var grid in FindGrids(this))
         {
             grid.CommitEdit(DataGridEditingUnit.Cell, true);
             grid.CommitEdit(DataGridEditingUnit.Row, true);
         }
+    }
+    private void Apply_Click(object sender, RoutedEventArgs args)
+    {
+        CommitTables(sender, args);
+        if (DataContext is Fee2ContainerEditVM vm && !vm.ApplyXmlIfNeeded()) return;
+        DialogResult = true;
     }
     private static IEnumerable<DataGrid> FindGrids(DependencyObject parent)
     {

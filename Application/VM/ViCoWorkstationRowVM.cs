@@ -236,52 +236,8 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 		_ => $"{count} Projekte"
 	};
 
-	public string WorkingEndBackground
-	{
-		get
-		{
-			if (string.IsNullOrWhiteSpace(WorkingEndSummary))
-				return "#00FFFFFF";
+	public string WorkingEndBackground => WorkingEndColorPolicy.GetBackground(WorkingEndSummary);
 
-			var dates = WorkingEndSummary
-				.Split('|', StringSplitOptions.RemoveEmptyEntries)
-				.Select(x => x.Trim());
-
-			var today = DateTime.Today;
-			var red = false;
-			var yellow = false;
-
-			foreach (var dateString in dates)
-			{
-				if (!DateTime.TryParseExact(
-						dateString,
-						"dd.MM.yyyy",
-						CultureInfo.InvariantCulture,
-						DateTimeStyles.None,
-						out var endDate))
-					continue;
-
-				if (endDate.Date < today)
-				{
-					red = true;
-					break;
-				}
-
-				if (endDate.Date <= today.AddDays(7))
-				{
-					yellow = true;
-				}
-			}
-
-			if (red)
-				return "#FFFFC7CE";   // Rot
-
-			if (yellow)
-				return "#FFFFEB9C";   // Gelb
-
-			return "#00FFFFFF";       // Transparent: Zeilenselektion bleibt sichtbar
-		}
-	}
 }
 
 public sealed record ViCoProjectCardItemVM(int CardId, string Title, string Status, string Start, string End)

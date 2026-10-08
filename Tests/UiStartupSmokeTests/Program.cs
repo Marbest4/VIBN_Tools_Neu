@@ -1016,6 +1016,8 @@ internal static partial class Program
                 "11111111-1111-1111-1111-111111111111",
                 "Axes",
                 false,
+                "",
+                false,
             ]);
             SetPrivateField(service, "_feeObjects", new[] { visualJoint });
             SetPrivateField(service, "_hasDiscoveredFeeObjects", true);
@@ -1132,7 +1134,7 @@ internal static partial class Program
             viewModel.SelectedFeeSignal = activeSignal;
             if (!ReferenceEquals(viewModel.SelectedFeeSignal, activeSignal) ||
                 !ReferenceEquals(viewModel.SelectedTreeNode, nodes.Single(item => item.Kind == VisualNodeKind.Signal)) ||
-                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 2)
+                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 1 || availableObject.IsSynchronizationMatch)
             {
                 throw new InvalidOperationException(
                     "The active FEE signal list selection was not preserved while duplicate matches synchronized to the tree.");
@@ -1147,10 +1149,10 @@ internal static partial class Program
             if (!ReferenceEquals(viewModel.SelectedIssue, objectIssue) ||
                 !ReferenceEquals(viewModel.SelectedTreeNode, simObject) ||
                 !availableObject.IsSynchronizationMatch ||
-                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 2)
+                viewModel.AvailableFeeSignals.Any(item => item.IsSynchronizationMatch))
             {
                 throw new InvalidOperationException(
-                    "Selecting a validation entry did not synchronize its affected object and the signals of the same container.");
+                    "Selecting an object diagnostic did not retain object-only selection.");
             }
             viewModel.SelectedFeeSignal = activeSignal;
             if (!ReferenceEquals(viewModel.SelectedFeeSignal, activeSignal) ||

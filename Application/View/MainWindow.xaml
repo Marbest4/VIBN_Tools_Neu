@@ -8,6 +8,7 @@
         xmlns:uxb="http://Grob.com/wpf.ux.behaviors"
         xmlns:local="clr-namespace:VIBN_Tools.Application.View"
         xmlns:p="clr-namespace:VIBN_Tools.Application.View"
+        xmlns:g="clr-namespace:VIBN_Tools.GlobalClasses"
         mc:Ignorable="d"
         Title="VIBN Tools"
         Height="900" Width="1600"
@@ -22,6 +23,7 @@
 				<ResourceDictionary Source="pack://application:,,,/Grob.UX;component/Styles/General.xaml" />
 			</ResourceDictionary.MergedDictionaries>
 			<BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <g:ConnectionStateToBrushConverter x:Key="ConnectionStateToBrushConverter"/>
 			<Style TargetType="{x:Type TabItem}" BasedOn="{StaticResource {x:Type TabItem}}">
 				<Setter Property="HorizontalContentAlignment" Value="Stretch" />
 				<Setter Property="VerticalContentAlignment" Value="Center" />
@@ -94,14 +96,14 @@
 						<StackPanel Margin="10,4" VerticalAlignment="Center">
 							<TextBlock Style="{StaticResource H2Style }" Text="Tools for Modeling and Virtual Commissioning"/>
 							<WrapPanel Margin="0,3,0,0">
-								<TextBlock Margin="0,0,16,0" FontSize="11">
+								<TextBlock Margin="0,0,16,0" FontSize="11" Foreground="Black" Background="{Binding Connection.IsConnected, Converter={StaticResource ConnectionStateToBrushConverter}}">
 									<Run FontWeight="SemiBold" Text="FEE: "/><Run Text="{Binding Connection.ConnectedServerDisplay, Mode=OneWay}"/>
 								</TextBlock>
-								<TextBlock Margin="0,0,16,0" FontSize="11"
+								<TextBlock Margin="0,0,16,0" FontSize="11" Foreground="Black" Background="{Binding Connection.IsConnected, Converter={StaticResource ConnectionStateToBrushConverter}}"
 								           ToolTip="In-Arbeit-Projekt des verbundenen Rechners aus der Rechnerübersicht. Bei einer lokalen FEE-Verbindung wird localhost angezeigt.">
 									<Run FontWeight="SemiBold" Text="FEE-Station: "/><Run Text="{Binding Connection.ConnectedStationDisplay, Mode=OneWay}"/>
 								</TextBlock>
-								<TextBlock FontSize="11">
+								<TextBlock FontSize="11" Foreground="Black" Background="{Binding Connection.IsConnected, Converter={StaticResource ConnectionStateToBrushConverter}}">
 									<Run FontWeight="SemiBold" Text="Rechner: "/><Run Text="{Binding StatusContext.SelectedWorkstationDisplay, Mode=OneWay}"/>
 								</TextBlock>
 							</WrapPanel>

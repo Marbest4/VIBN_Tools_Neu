@@ -692,6 +692,8 @@ internal static class Program
                     "11111111-1111-1111-1111-111111111111",
                     "Axes",
                     true,
+                    "",
+                    false,
                 ]);
             }
             var objects = new[] { CreateJoint(), CreateJoint() };
@@ -730,10 +732,11 @@ internal static class Program
             var duplicateIssue = service.Validate().Issues.SingleOrDefault(issue =>
                 issue.Code == "DUPLICATE_FEE_SIMOBJECT_IDENTITY");
             if (duplicateIssue is null ||
-                !duplicateIssue.Message.Contains("2 identische FEE-SimObjects", StringComparison.Ordinal))
+                duplicateIssue.Severity != VisualIssueSeverity.Warning ||
+                !duplicateIssue.Message.Contains("2 gleichnamige FEE-SimObjects", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException(
-                    "Exact same-name/type/parent FEE SimObject duplicates were not exposed as a validation error.");
+                    "Same-name/logical-parent FEE SimObject duplicates were not exposed as a warning.");
             }
             var confirmation = service.ConfirmDuplicateAssignment(target.Id, objects[0].Id);
             var confirmedIssue = service.Validate().Issues.SingleOrDefault(issue =>

@@ -193,6 +193,8 @@ namespace VIBN_Tools.ModelValidation
 
 
 
+    public enum ValidationColorFilter { All, Clean, Warning, Error }
+
     public class ValidationGroupViewModel : NotifyBase
     {
         public string GroupName { get; set; }
@@ -218,6 +220,7 @@ namespace VIBN_Tools.ModelValidation
 
 
         private string _currentFilter;
+        private ValidationColorFilter _colorFilter;
 
         public ICollectionView ItemsView { get; set; }
 
@@ -237,21 +240,32 @@ namespace VIBN_Tools.ModelValidation
 
             ItemsView = CollectionViewSource.GetDefaultView(Items);
             ItemsView.Filter = FilterItems;
+            if (ItemsView is ICollectionViewLiveShaping { CanChangeLiveFiltering: true } live)
+            {
+                live.LiveFilteringProperties.Add(nameof(FeeAbstractObject.HasError));
+                live.LiveFilteringProperties.Add(nameof(FeeAbstractObject.HasWarning));
+                live.LiveFilteringProperties.Add(nameof(FeeAbstractObject.IsPlausible));
+                live.IsLiveFiltering = true;
+            }
         }
 
 
         // Methods
-        public void ApplyFilter(string filter)
+        public void ApplyFilter(string filter, ValidationColorFilter colorFilter = ValidationColorFilter.All)
         {
             _currentFilter = filter;
+            _colorFilter = colorFilter;
 
             if (!IsAllObjectsGroup)
             {
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                void Refresh()
                 {
                     ItemsView.Refresh();
                     OnPropertyChanged(nameof(HasItems));
-                }), DispatcherPriority.Background);
+                }
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher is null || dispatcher.CheckAccess()) Refresh();
+                else dispatcher.BeginInvoke(new Action(Refresh), DispatcherPriority.Background);
             }
 
         }
@@ -262,6 +276,13 @@ namespace VIBN_Tools.ModelValidation
             if (obj is not FeeAbstractObject item)
                 return false;
 
+            if (!(_colorFilter switch
+            {
+                ValidationColorFilter.Clean => item.IsPlausible,
+                ValidationColorFilter.Warning => item.HasWarning && !item.HasError,
+                ValidationColorFilter.Error => item.HasError,
+                _ => true
+            })) return false;
             if (string.IsNullOrWhiteSpace(_currentFilter))
                 return true;
 

@@ -31,6 +31,7 @@ internal static partial class Program
             VerifyTreeVerticalReveal();
             VerifyDockedValidationAndWindowBounds();
             VerifyInvalidComparisonCanBeReviewed();
+            VerifyOctoberWorkflowRegressions(directory);
         }
         finally
         {

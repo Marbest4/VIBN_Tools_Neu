@@ -314,6 +314,7 @@ public sealed class IbnRemoteWorkstationRow : NotifyObject
         .Where(card => card.Deadline is not null)
         .Select(card => card.Deadline!.Value.LocalDateTime.ToString("dd.MM.yyyy"))
         .Distinct(StringComparer.Ordinal));
+    public string WorkingEndBackground => WorkingEndColorPolicy.GetBackground(WorkingEnd);
     public string Software => _model.WorkstationConfiguration.Software.Value;
     public string Location => _model.WorkstationConfiguration.Location.Value;
     public string ProjectIp => _model.WorkstationConfiguration.ProjectIp.Value;

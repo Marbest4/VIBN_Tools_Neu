@@ -27,9 +27,10 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         // Debounce Timer for user input
         private readonly Dictionary<(object obj, string property), CancellationTokenSource> _debounceUserInput = new Dictionary<(object obj, string property), CancellationTokenSource>();
 
-        private readonly HashSet<FeeAbstractObject> _subscribedObjects = new HashSet<FeeAbstractObject>();
+        private readonly Dictionary<INotifyPropertyChanged, FeeAbstractObject> _subscribedObjects = new();
+        private long _activeConnectionRevision = -1;
+        private long _snapshotConnectionRevision = -1;
 
-        private readonly List<Task> _debounceTasks = new();
         private readonly object _updateSync = new();
         private readonly SemaphoreSlim _sdkReadGate = new(1, 1);
         private Task? _activeUpdate;
@@ -99,12 +100,29 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         public Task UpdateFeeDataAsync()
         {
             lock (_updateSync)
-                return _activeUpdate is { IsCompleted: false }
-                    ? _activeUpdate
-                    : _activeUpdate = UpdateFeeDataCoreAsync();
+            {
+                var revision = Services.Connection.ConnectionRevision;
+                if (_activeUpdate is { IsCompleted: false } active)
+                    return _activeConnectionRevision == revision ? active : UpdateAfterPreviousAsync(active);
+                _activeConnectionRevision = revision;
+                return _activeUpdate = UpdateFeeDataCoreAsync(revision);
+            }
         }
 
-        private async Task UpdateFeeDataCoreAsync()
+        private async Task UpdateAfterPreviousAsync(Task previous)
+        {
+            try { await previous; }
+            catch { /* The previous project's failure must not prevent a fresh read. */ }
+            await UpdateFeeDataAsync();
+        }
+
+        private void EnsureCurrentConnection(long revision)
+        {
+            if (!Services.Connection.IsConnected || Services.Connection.ConnectionRevision != revision)
+                throw new OperationCanceledException("Die FEE-Verbindung hat sich während des Einlesens geändert.");
+        }
+
+        private async Task UpdateFeeDataCoreAsync(long connectionRevision)
         {
             var startTime = DateTime.Now;            
             var snapshotReadTime = TimeSpan.Zero;
@@ -117,7 +135,12 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 // Container2FEE Visual and FEE2Container. Concurrent callers
                 // await this same operation instead of allocating a second
                 // complete project snapshot and racing the vendor client.
-                var oldObjects = AllFeeObjects;
+                var oldObjects = _snapshotConnectionRevision == connectionRevision ? AllFeeObjects : null;
+                DetachPropertyChanges();
+                foreach (var cts in _debounceUserInput.Values.ToArray()) cts.Cancel();
+                _debounceUserInput.Clear();
+                AllFeeObjects = Array.Empty<FeeAbstractObject>();
+                EnsureCurrentConnection(connectionRevision);
                 var snapshotWatch = Stopwatch.StartNew();
                 await _sdkReadGate.WaitAsync();
                 List<FeeAbstractObject> newObjects;
@@ -131,19 +154,18 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 }
                 snapshotReadTime = snapshotWatch.Elapsed;
 
+                EnsureCurrentConnection(connectionRevision);
                 FindAndAssignParents(newObjects);
-                SubscribePropertyChanges(newObjects);
                 var validationWatch = Stopwatch.StartNew();
-                await RunPlausibilityChecks(newObjects);
+                await RunPlausibilityChecks(newObjects, connectionRevision);
                 validationTime = validationWatch.Elapsed;
+                EnsureCurrentConnection(connectionRevision);
                 AllFeeObjects = MergeAcknowledgeInformation(oldObjects, newObjects);
-
-                var pendingChanges = _debounceTasks.ToArray();
-                if (pendingChanges.Length > 0)
-                    await Task.WhenAll(pendingChanges);
-                _debounceTasks.Clear();
+                _snapshotConnectionRevision = connectionRevision;
+                SubscribePropertyChanges(AllFeeObjects);
 
                 await Task.Yield();
+                EnsureCurrentConnection(connectionRevision);
                 FeeObjectsUpdated?.Invoke(this, new FeeObjectsUpdatedEventargs
                 {
                     ElapsedTime = DateTime.Now - startTime,
@@ -523,44 +545,42 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
 
 
+        private void DetachPropertyChanges()
+        {
+            foreach (var source in _subscribedObjects.Keys)
+                WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.RemoveHandler(
+                    source, nameof(INotifyPropertyChanged.PropertyChanged), OnFeeObjectChanged);
+            _subscribedObjects.Clear();
+        }
+
         private void SubscribePropertyChanges(IEnumerable<FeeAbstractObject> feeObjects)
         {
-            // Subscribe to PropertyChanged of every object
             foreach (var obj in feeObjects)
             {
-                WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(obj, nameof(obj.PropertyChanged), OnFeeObjectChanged);
-
-                foreach(var issue in obj.PlausibilityIssues)
-                {
-                    WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(issue, nameof(issue.PropertyChanged), OnFeeObjectChanged);
-                }
-
-                if(obj is FeeInterface iface)
-                {
-                    foreach(var signal in iface.Signals)
-                    {
-                        WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(signal, nameof(signal.PropertyChanged), OnFeeObjectChanged);
-                    }
-                }
-
+                Subscribe(obj, obj);
+                foreach (var issue in obj.PlausibilityIssues) Subscribe(issue, obj);
+                if (obj is FeeInterface iface)
+                    foreach (var signal in iface.Signals) Subscribe(signal, signal);
+            }
+            void Subscribe(INotifyPropertyChanged source, FeeAbstractObject owner)
+            {
+                if (!_subscribedObjects.TryAdd(source, owner)) return;
+                WeakEventManager<INotifyPropertyChanged, PropertyChangedEventArgs>.AddHandler(
+                    source, nameof(INotifyPropertyChanged.PropertyChanged), OnFeeObjectChanged);
             }
         }
 
-
         private async void OnFeeObjectChanged(object sender, PropertyChangedEventArgs e)
         {
-
-            // No validation when loading all Fee objects
-            if (_isLoadingFeeData) return;
-
-
-            var task = HandleFeeObjectChangedAsync(sender, e);
-
-            _debounceTasks.Add(task);
-            _ = task.ContinueWith(t => _debounceTasks.Remove(t));
-
-            _ = task;
-
+            if (_isLoadingFeeData || sender is not INotifyPropertyChanged source ||
+                !_subscribedObjects.TryGetValue(source, out var owner)) return;
+            // Issue changes update acknowledgement/filters; they are not SDK property edits.
+            if (sender is PlausibilityIssue) { owner.NotifyIssueStateChanged(); return; }
+            try { await HandleFeeObjectChangedAsync(owner, e); }
+            catch (Exception exception)
+            {
+                ApplicationLogService.Instance.Error("Model Validation", "Objektänderung konnte nicht geprüft werden.", exception);
+            }
         }
 
         private async Task HandleFeeObjectChangedAsync(object sender, PropertyChangedEventArgs e)
@@ -578,26 +598,30 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             {
                 await Task.Delay(250, cts.Token);
 
-                _debounceUserInput.Remove(key);
-
+                cts.Token.ThrowIfCancellationRequested();
+                if (!_subscribedObjects.ContainsKey((INotifyPropertyChanged)sender) || _isLoadingFeeData) return;
                 var obj = (FeeAbstractObject)sender;
                 await ModelValidationService.Router.HandleChangeAsync(obj, e.PropertyName);
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException) { /* Debounced or replaced project. */ }
+            finally
             {
-                // Debounced
+                if (_debounceUserInput.TryGetValue(key, out var current) && ReferenceEquals(current, cts))
+                    _debounceUserInput.Remove(key);
+                cts.Dispose();
             }
         }
 
 
 
 
-        private async Task RunPlausibilityChecks(IEnumerable<FeeAbstractObject> feeObjects)
+        private async Task RunPlausibilityChecks(IEnumerable<FeeAbstractObject> feeObjects, long connectionRevision)
         {
             var basicFrames = feeObjects.Where(x => x.FeeType == nameof(FeeBasicFrame)).OfType<FeeBasicFrame>().ToList();
 
             await Parallel.ForEachAsync(feeObjects, async (obj, token) =>
             {
+                EnsureCurrentConnection(connectionRevision);
                 // Delete all issues before
                 obj.PlausibilityIssues.Clear();
 
@@ -605,6 +629,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 if (obj is IPlausibilityCheck checker)
                 {
                     await checker.CheckObjectIssuesAsync(feeObjects);
+                    EnsureCurrentConnection(connectionRevision);
                 }
 
                 // Special Check (BasicFrames involved)
@@ -621,13 +646,13 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         private void ResetFeeData()
         {
             AllFeeObjects = Array.Empty<FeeAbstractObject>();
-            _subscribedObjects.Clear();
+            DetachPropertyChanges();
+            _snapshotConnectionRevision = -1;
 
             foreach (var cts in _debounceUserInput.Values)
                 cts.Cancel();
 
             _debounceUserInput.Clear();
-            _debounceTasks.Clear();
         }
 
 

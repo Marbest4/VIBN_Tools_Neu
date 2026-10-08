@@ -103,6 +103,12 @@
 				<TextBlock Margin="5,0,8,0" VerticalAlignment="Center" Text="Minuten" />
 				<Button MinWidth="95" MinHeight="28" Padding="8,2" Content="Übernehmen"
                         Command="{Binding SaveAutoRefreshIntervalCommand}" />
+                <TextBlock Margin="16,0,6,0" VerticalAlignment="Center" Text="Online-Intervall:"/>
+                <TextBox Width="58" MinHeight="28" Padding="6,2" VerticalContentAlignment="Center"
+                         Text="{Binding OnlineRefreshIntervalMinutes, UpdateSourceTrigger=LostFocus}" ToolTip="Nur Online-Prüfung, 1 bis 1440 Minuten; pro Windows-Benutzer gespeichert."/>
+                <TextBlock Margin="5,0,8,0" VerticalAlignment="Center" Text="Minuten"/>
+                <Button MinWidth="95" MinHeight="28" Padding="8,2" Content="Übernehmen" Command="{Binding SaveOnlineRefreshIntervalCommand}"/>
+                <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" Text="{Binding OnlineRefreshCountdown}"/>
 				<Menu Margin="18,0,0,0" VerticalAlignment="Center">
 					<MenuItem Header="Spalten ein-/ausblenden"
                               ToolTip="Die Auswahl wird für den aktuellen Windows-Benutzer gespeichert."

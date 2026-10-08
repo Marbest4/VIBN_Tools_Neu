@@ -313,7 +313,7 @@
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
-                              behaviors:ContainerToFeeVisualTreeSelectionBehavior.RevealEnabled="{Binding SynchronizeRelatedSelections}"
+                              behaviors:ContainerToFeeVisualTreeSelectionBehavior.RevealEnabled="{Binding IsSelectionRevealEnabled}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
                     <WrapPanel Grid.Row="4" Margin="0,7,0,0"
@@ -392,7 +392,7 @@
 
                     <ListBox Grid.Row="2" ItemsSource="{Binding Targets}"
                              SelectedItem="{Binding SelectedTarget, Mode=TwoWay}"
-                             behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
+                             behaviors:ListBoxRevealBehavior.IsEnabled="{Binding IsSelectionRevealEnabled}"
                              behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedTarget}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -488,7 +488,7 @@
                     <ListBox Grid.Row="4" ItemsSource="{Binding SignalSlots}" MinHeight="190"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              SelectedItem="{Binding SelectedSignalSlot, Mode=TwoWay}"
-                             behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
+                             behaviors:ListBoxRevealBehavior.IsEnabled="{Binding IsSelectionRevealEnabled}"
                              behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedSignalSlot}"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -648,7 +648,7 @@
                                   ToolTip="SimObjects nach Zuordnungszustand filtern" />
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeObjectsView}"
                                  SelectedItem="{Binding SelectedFeeObject, Mode=TwoWay}"
-                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding IsSelectionRevealEnabled}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeObject}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -704,6 +704,8 @@
                                                 <TextBlock Text="{Binding FeeType}" Foreground="#777777" FontSize="10" />
                                                 <TextBlock Text="{Binding DuplicateStateText}" Foreground="{Binding StateForeground}"
                                                            FontSize="10" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{Binding ParentDetails}" Foreground="#444444" FontSize="10" TextWrapping="Wrap"
+                                                           Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                 <TextBlock Text="{Binding ConnectionStateText}" Foreground="{Binding StateForeground}"
                                                            FontSize="10" TextWrapping="Wrap"
                                                            Visibility="{Binding DataContext.ShowFeeObjectDetails, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}, Converter={StaticResource BooleanToVisibilityConverter}}" />
@@ -794,7 +796,7 @@
                         </Grid>
                         <ListBox Grid.Row="4" ItemsSource="{Binding FeeSignalsView}"
                                  SelectedItem="{Binding SelectedFeeSignal, Mode=TwoWay}"
-                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding IsSelectionRevealEnabled}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeSignal}"
                                  SelectionMode="Extended"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -853,7 +855,7 @@
                         <TextBlock DockPanel.Dock="Top" Style="{StaticResource VisualPanelHeader}" Text="Validierung" />
                         <ListBox ItemsSource="{Binding Issues}" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  SelectedItem="{Binding SelectedIssue, Mode=TwoWay}"
-                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding SynchronizeRelatedSelections}"
+                                 behaviors:ListBoxRevealBehavior.IsEnabled="{Binding IsSelectionRevealEnabled}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedIssue}"
                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                                  ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True">

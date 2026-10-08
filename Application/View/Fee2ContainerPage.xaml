@@ -32,7 +32,7 @@
         <StackPanel>
             <TextBlock FontSize="24" FontWeight="SemiBold" Text="FEE2Container" />
             <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
-                       Text="Liest alle FEE-Objekte außer Decoration. BasicFrames und Projektobjekte ohne BasicFrame bilden die auswählbaren Bereiche. Container zeigen Signale und FEE-Objekte getrennt. Eindeutige gleichnamige Objekte werden automatisch zugeordnet; andere und mehrdeutige Objekte bleiben für die manuelle Zuordnung verfügbar." />
+                       Text="Liest alle FEE-Objekte außer Decoration. BasicFrames und Projektobjekte ohne BasicFrame bilden die auswählbaren Bereiche. Container zeigen Signale und FEE-Objekte getrennt. Für einen gemeinsamen Export alle gewünschten FEE-Roots sowie deren Container und Signale unter Export markieren. Eindeutige gleichnamige Objekte werden automatisch zugeordnet; andere und mehrdeutige Objekte bleiben für die manuelle Zuordnung verfügbar." />
         </StackPanel>
 
         <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
@@ -43,11 +43,13 @@
                     ToolTip="{Binding RefreshUnavailableReason}"
                     ToolTipService.ShowOnDisabled="True" />
             <Button Margin="8,0,0,0" MinWidth="165" MinHeight="34"
-                    Content="ContainerFile exportieren"
+                    Content="ContainerFile exportieren" Click="CommitPendingEdits"
                     Command="{Binding ExportCommand}"
                     IsEnabled="{Binding CanExport}"
                     ToolTip="{Binding ExportUnavailableReason}"
                     ToolTipService.ShowOnDisabled="True" />
+            <Button Margin="8,0,0,0" MinWidth="160" MinHeight="34" Content="Bearbeiten / Grouping"
+                    Command="{Binding EditContainersCommand}" Click="CommitPendingEdits"/>
             <Button Margin="8,0,0,0" MinWidth="100" MinHeight="34"
                     Content="Abbrechen" Command="{Binding CancelCommand}" />
             <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
