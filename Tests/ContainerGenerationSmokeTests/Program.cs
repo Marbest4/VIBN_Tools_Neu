@@ -451,6 +451,7 @@ internal static class Program
         var buttonGuid = Guid.NewGuid();
         var notGuid = Guid.NewGuid();
         var ignoredGuid = Guid.NewGuid();
+        var decorationGuid = Guid.NewGuid();
         var unassignedGuid = Guid.NewGuid();
         var sensorSignal1 = Guid.NewGuid();
         var sensorSignal2 = Guid.NewGuid();
@@ -476,7 +477,8 @@ internal static class Program
                     CabinetDefinition: @"definitions/Grob_Fuse.XML", Label: "Fuse_1"),
                 new FeeContainerLiveObject(gripperGuid, "Gripper_1", "LogicObject", "Grob_GripperBasic"),
                 new FeeContainerLiveObject(pickAndPlaceGuid, "Gripper_1", "PickAndPlace"),
-                new FeeContainerLiveObject(ignoredGuid, "Unrelated", "Decoration"),
+                new FeeContainerLiveObject(ignoredGuid, "Unrelated", "Surface"),
+                new FeeContainerLiveObject(decorationGuid, "Decoration", "Decoration"),
             ],
             [
                 new FeeContainerLiveVariable(sensorSignal1, "Sensor A", "%I10.0", "", "Bool", "S1"),
@@ -497,10 +499,11 @@ internal static class Program
 
         var containers = result.Snapshot.ContainerDocument.Descendants("Container").ToArray();
         if (result.Snapshot.ContainerCount != 7 || result.Snapshot.SignalCount != 6 ||
-            result.IgnoredObjectCount != 1 || result.Issues.Count != 3 ||
-            result.UnmappedObjects.Count != 1 ||
-            result.UnmappedObjects.Single().Guid != ignoredGuid ||
-            result.UnmappedObjects.Single().Name != "Unrelated" ||
+            result.IgnoredObjectCount != 3 || result.Issues.Count != 3 ||
+            result.UnmappedObjects.Count != 3 ||
+            result.UnmappedObjects.Single(item => item.Guid == ignoredGuid).Name != "Unrelated" ||
+            result.UnmappedObjects.Any(item => item.Guid == decorationGuid) ||
+            result.ObjectAssociations.Any(item => item.ObjectGuid == switchGuid || item.ObjectGuid == fuseGuid) ||
             containers.Single(item => item.Element("Type")?.Value == "Sensor")
                 .Descendants("Entry").Count() != 2 ||
             containers.Single(item => item.Element("Type")?.Value == "Button")
@@ -544,7 +547,7 @@ internal static class Program
             result.UnmappedObjects);
         var editor = new Fee2ContainerRootEditor(editableRoot);
         editor.Containers[0].IsIncluded = false;
-        var unmapped = editor.NonContainerObjects.Single();
+        var unmapped = editor.NonContainerObjects.Single(item => item.Guid == ignoredGuid);
         unmapped.TargetComponent = "ManuallyReviewed";
         unmapped.TargetContainerType = "Sensor";
         var manualContainer = editor.AddObjectAsContainer(unmapped);

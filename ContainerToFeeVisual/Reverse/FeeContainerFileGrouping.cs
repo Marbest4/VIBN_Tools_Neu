@@ -84,8 +84,7 @@ public static class FeeContainerFileGrouping
             {
                 if (targetObjects.Elements("SimObject").Any(existing => existing.Element("Guid")?.Value == item.Element("Guid")?.Value)) continue;
                 var clone = new XElement(item);
-                if (!string.Equals(clone.Element("Name")?.Value, targets[0].Element("Component")?.Value, StringComparison.OrdinalIgnoreCase) &&
-                    !ContainerFileXml.IsStructuralObject(clone.Element("FeeType")?.Value, clone.Element("Role")?.Value))
+                if (!ContainerFileXml.HasMatchingObjectName(clone.Element("Name")?.Value, targets[0].Element("Component")?.Value))
                     clone.SetAttributeValue("assignment", "Manual");
                 targetObjects.Add(clone);
             }

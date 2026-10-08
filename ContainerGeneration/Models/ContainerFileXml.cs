@@ -34,19 +34,36 @@ public static class ContainerFileXml
     public static IEnumerable<XElement> Objects(XElement container) =>
         container.Element("SimObjects")?.Elements("SimObject") ?? [];
 
-    public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName,
-        string? liveFeeType = null) =>
-        item.Attribute("assignment")?.Value == "Manual" ||
-        (!string.IsNullOrWhiteSpace(liveName) && !string.IsNullOrWhiteSpace(containerName) &&
-         string.Equals(liveName.Trim(), containerName.Trim(), StringComparison.OrdinalIgnoreCase)) ||
-        IsStructuralObject(liveFeeType ?? item.Element("FeeType")?.Value, item.Element("Role")?.Value);
+    public static bool HasMatchingObjectName(string? objectName, string? containerName) =>
+        !string.IsNullOrWhiteSpace(objectName) && !string.IsNullOrWhiteSpace(containerName) &&
+        string.Equals(objectName.Trim(), containerName.Trim(), StringComparison.OrdinalIgnoreCase);
 
-    // A stored role alone must never authorize an automatic physical-object link.
-    public static bool IsStructuralObject(string? feeType, string? role)
+    public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName) =>
+        item.Attribute("assignment")?.Value == "Manual" || HasMatchingObjectName(liveName, containerName);
+
+    /// <summary>
+    /// ContainerGeneration can write empty IDs. Reverse editing needs one unique
+    /// key per container so its objects and signals cannot leak into other rows.
+    /// Existing unique IDs stay unchanged; repeated IDs are replaced for every
+    /// occurrence rather than silently favoring the first container.
+    /// </summary>
+    public static void EnsureUniqueContainerIds(XDocument document)
     {
-        var type = (feeType ?? "").Split('.').Last();
-        return role == "Primary" && (type is "LogicObject" or "LogicBox" or "CabinetElement" or "Cabinet") ||
-               role == "TechnicalHelper" && (type is "BoolNot" or "MoveBit" or "BoolAnd" or "BoolOr");
+        var containers = document.Descendants("Container").ToArray();
+        var counts = containers.Select(item => item.Attribute("id")?.Value ?? "")
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .GroupBy(id => id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var reserved = counts.Keys.ToHashSet(StringComparer.Ordinal);
+        for (var index = 0; index < containers.Length; index++)
+        {
+            var id = containers[index].Attribute("id")?.Value ?? "";
+            if (!string.IsNullOrWhiteSpace(id) && counts[id] == 1) continue;
+            var prefix = $"fee-container:{index + 1}";
+            var replacement = prefix;
+            for (var suffix = 2; !reserved.Add(replacement); suffix++) replacement = $"{prefix}:{suffix}";
+            containers[index].SetAttributeValue("id", replacement);
+        }
     }
 
     public static XElement Object(string guid, string name, string feeType, string role = "SimObject",

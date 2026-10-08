@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using System.Xml.Linq;
 using Microsoft.Win32;
 using VIBN_Tools.Application.Behaviors;
+using VIBN_Tools.ContainerGeneration.Models;
 using VIBN_Tools.ContainerToFeeVisual;
 using VIBN_Tools.Core.Collections;
 using VIBN_Tools.GlobalClasses;
@@ -748,30 +749,32 @@ public sealed class Fee2ContainerRootEditor
     public Fee2ContainerRootEditor(Fee2ContainerRoot root)
     {
         _root = root;
-        var document = root.Provenance?.ContainerDocument;
+        // Work on a copy: normalizing legacy IDs must not alter saved root
+        // provenance or another edit session.
+        var document = root.Provenance is { } provenance ? new XDocument(provenance.ContainerDocument) : null;
+        var sourceContainers = document?.Descendants("Container").ToArray() ?? [];
+        var sourceIds = sourceContainers.ToDictionary(item => item, item => item.Attribute("id")?.Value ?? "");
+        var containerRows = new Dictionary<XElement, Fee2ContainerFoundContainerVM>();
+        if (document is not null) ContainerFileXml.EnsureUniqueContainerIds(document);
         foreach (var element in document?.Descendants("SimObject") ?? [])
             if (Guid.TryParse(element.Element("Guid")?.Value, out var guid)) _sourceObjects.TryAdd(guid, new XElement(element));
         if (document is not null)
         {
             var bindings = root.Provenance!.SignalBindings
                 .ToDictionary(item => (item.ContainerIndex, item.EntryIndex), item => item.VariableGuid);
-            foreach (var (container, containerIndex) in document.Descendants("Container").Select((item, index) => (item, index)))
+            foreach (var (container, containerIndex) in sourceContainers.Select((item, index) => (item, index)))
             {
-                var id = container.Attribute("id")?.Value ?? $"container-{containerIndex}";
+                var id = container.Attribute("id")!.Value;
                 var component = container.Element("Component")?.Value ?? string.Empty;
                 var type = CanonicalizeContainerType(container.Element("Type")?.Value);
                 var entries = container.Descendants("Entry").ToArray();
-                var associatedObjects = (root.ObjectAssociations ?? [])
-                    .Where(item => string.Equals(item.ContainerId, id, StringComparison.Ordinal))
-                    .Select(item => $"{item.ObjectName} ({item.ObjectType})")
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray();
-                Containers.Add(new Fee2ContainerFoundContainerVM(
+                var row = new Fee2ContainerFoundContainerVM(
                     id,
                     component,
                     type,
-                    entries.Length,
-                    string.Join(", ", associatedObjects)) { IsIncluded = container.Attribute("export")?.Value != "false" });
+                    entries.Length) { IsIncluded = container.Attribute("export")?.Value != "false" };
+                Containers.Add(row);
+                containerRows[container] = row;
                 foreach (var (entry, entryIndex) in entries.Select((item, index) => (item, index)))
                 {
                     bindings.TryGetValue((containerIndex, entryIndex), out var variableGuid);
@@ -791,30 +794,43 @@ public sealed class Fee2ContainerRootEditor
         }
         foreach (var item in root.NonContainerObjects ?? [])
             NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(item));
+        var proposals = new List<FeeContainerObjectAssociation>();
         foreach (var association in root.ObjectAssociations ?? [])
         {
-            var container = Containers.FirstOrDefault(item => item.Id == association.ContainerId);
-            if (container is not null && (association.IsManual || VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.IsStructuralObject(association.ObjectType, association.Role) ||
-                string.Equals(association.ObjectName, container.Component, StringComparison.OrdinalIgnoreCase)))
-                ObjectAssociations.Add(association);
+            if (association.ObjectGuid == Guid.Empty) continue;
+            var matches = sourceContainers.Where(item =>
+                (sourceIds[item] == association.ContainerId || containerRows[item].Id == association.ContainerId) &&
+                (association.IsManual || ContainerFileXml.HasMatchingObjectName(association.ObjectName, containerRows[item].Component))).ToArray();
+            if (matches.Length > 1)
+                matches = matches.Where(container => ContainerFileXml.Objects(container)
+                    .Any(item => Guid.TryParse(item.Element("Guid")?.Value, out var guid) && guid == association.ObjectGuid)).ToArray();
+            if (matches.Length == 1)
+                proposals.Add(association with { ContainerId = containerRows[matches[0]].Id });
             else RestoreUnmatched(association.ObjectGuid, association.ObjectName, association.ObjectType);
         }
-        foreach (var container in document?.Descendants("Container") ?? [])
-            foreach (var item in VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects(container))
+        foreach (var container in sourceContainers)
+            foreach (var item in ContainerFileXml.Objects(container))
             {
-                if (!Guid.TryParse(item.Element("Guid")?.Value, out var guid) || ObjectAssociations.Any(association => association.ObjectGuid == guid)) continue;
+                if (!Guid.TryParse(item.Element("Guid")?.Value, out var guid) || guid == Guid.Empty) continue;
                 var name = item.Element("Name")?.Value ?? ""; var type = item.Element("FeeType")?.Value ?? "";
-                if (VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.CanRetainObjectAssociation(item, name, container.Element("Component")?.Value ?? ""))
-                    ObjectAssociations.Add(new FeeContainerObjectAssociation(guid, name, type, Guid.Empty, container.Attribute("id")?.Value ?? "",
+                if (ContainerFileXml.CanRetainObjectAssociation(item, name, container.Element("Component")?.Value ?? ""))
+                    proposals.Add(new FeeContainerObjectAssociation(guid, name, type, Guid.Empty, containerRows[container].Id,
                         "Gespeicherte Zuordnung aus ContainerFile", item.Element("Role")?.Value ?? "SimObject",
                         IsManual: item.Attribute("assignment")?.Value == "Manual"));
                 else RestoreUnmatched(guid, name, type);
             }
+        foreach (var group in proposals.GroupBy(item => item.ObjectGuid))
+        {
+            if (group.Select(item => item.ContainerId).Distinct(StringComparer.Ordinal).Count() == 1)
+                ObjectAssociations.Add(group.FirstOrDefault(item => item.IsManual) ?? group.First());
+            else
+                RestoreUnmatched(group.Key, group.First().ObjectName, group.First().ObjectType);
+        }
         void RestoreUnmatched(Guid guid, string name, string type)
         {
             if (!NonContainerObjects.Any(item => item.Guid == guid))
                 NonContainerObjects.Add(new Fee2ContainerUnmappedObjectVM(new FeeContainerUnmappedObject(guid, name, type,
-                    "Automatische Zuordnung verworfen: Objekt- und Containername unterscheiden sich; manuelle Zuordnung möglich")));
+                    "Automatische Zuordnung verworfen: Name oder Containerbezug ist nicht eindeutig; manuelle Zuordnung möglich")));
         }
         var assignedGuids = ObjectAssociations.Select(item => item.ObjectGuid).ToHashSet();
         foreach (var item in NonContainerObjects.Where(item => assignedGuids.Contains(item.Guid)).ToArray()) NonContainerObjects.Remove(item);
@@ -828,8 +844,7 @@ public sealed class Fee2ContainerRootEditor
                 for (var index = 0; index < ObjectAssociations.Count; index++)
                 {
                     var association = ObjectAssociations[index];
-                    if (association.ContainerId == container.Id && !string.Equals(association.ObjectName, container.Component, StringComparison.OrdinalIgnoreCase) &&
-                        !VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.IsStructuralObject(association.ObjectType, association.Role))
+                    if (association.ContainerId == container.Id && !ContainerFileXml.HasMatchingObjectName(association.ObjectName, container.Component))
                         ObjectAssociations[index] = association with { IsManual = true, Reason = "Manuelle Änderung des Containernamens" };
                 }
                 RefreshObjectAssociations();
@@ -884,7 +899,7 @@ public sealed class Fee2ContainerRootEditor
     }
 
     public static bool HasMatchingName(Fee2ContainerUnmappedObjectVM item, Fee2ContainerFoundContainerVM container) =>
-        string.Equals(item.Name, container.Component, StringComparison.OrdinalIgnoreCase);
+        ContainerFileXml.HasMatchingObjectName(item.Name, container.Component);
 
     private void RefreshObjectAssociations()
     {

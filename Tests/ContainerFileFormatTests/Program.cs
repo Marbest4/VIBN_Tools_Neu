@@ -76,11 +76,25 @@ foreach (var role in new[] { "Primary", "TechnicalHelper", "SimObject" })
 {
     var physical = ContainerFileXml.Object(firstGuid, "Other", "Surface", role);
     Assert(!ContainerFileXml.CanRetainObjectAssociation(physical, "Other", "Container_A"), "A stored role bypassed the physical-object name rule.");
-    physical.Element("FeeType")!.Value = "LogicObject";
-    Assert(!ContainerFileXml.CanRetainObjectAssociation(physical, "Other", "Container_A", "Surface"), "Stored type metadata overrode the live physical type.");
 }
-Assert(ContainerFileXml.CanRetainObjectAssociation(ContainerFileXml.Object(firstGuid, "Logic", "LogicObject", "Primary"), "Logic", "Container_A"), "A structural container identity was dropped.");
+foreach (var (type, role) in new[] { ("LogicObject", "Primary"), ("CabinetElement", "Primary"), ("BoolNot", "TechnicalHelper"), ("MoveBit", "TechnicalHelper") })
+    Assert(!ContainerFileXml.CanRetainObjectAssociation(ContainerFileXml.Object(firstGuid, "Other", type, role), "Other", "Container_A"),
+        "A structural type bypassed the automatic name rule.");
 Assert(!ContainerFileXml.CanRetainObjectAssociation(automatic, "", ""), "Empty names authorized an automatic link.");
+Assert(ContainerFileXml.HasMatchingObjectName(" Container_A ", "container_a"), "Name normalization is inconsistent.");
+var legacyIds = ContainerFileXml.Document(Enumerable.Range(0, 130).Select(index => Container("C" + index, "Sensor")));
+foreach (var container in legacyIds.Descendants("Container")) container.SetAttributeValue("id", "");
+var legacyContainers = legacyIds.Descendants("Container").ToArray();
+legacyContainers[1].Attribute("id")!.Remove(); legacyContainers[2].SetAttributeValue("id", " ");
+legacyContainers[3].SetAttributeValue("id", "duplicate"); legacyContainers[4].SetAttributeValue("id", "duplicate");
+legacyContainers[5].SetAttributeValue("id", "fee-container:1");
+ContainerFileXml.EnsureUniqueContainerIds(legacyIds);
+var normalizedIds = legacyContainers.Select(item => item.Attribute("id")!.Value).ToArray();
+Assert(normalizedIds.All(id => !string.IsNullOrWhiteSpace(id)) && normalizedIds.Distinct().Count() == 130,
+    "Empty, missing or duplicate IDs still share a reverse-editor identity.");
+Assert(normalizedIds[5] == "fee-container:1", "A valid unique ID was overwritten by a generated ID.");
+ContainerFileXml.EnsureUniqueContainerIds(legacyIds);
+Assert(normalizedIds.SequenceEqual(legacyContainers.Select(item => item.Attribute("id")!.Value)), "ID normalization changed an already normalized document.");
 var runtimeErrors = ContainerFileXml.Document([Container("Container_A", "Button", automatic)]);
 runtimeErrors.Root!.Add(new XElement("ComparisonDiagnostics", new XElement("Issue", new XAttribute("objectGuid", firstGuid), "Live object validation failed")));
 Assert(ContainerFileComparison.CompareForReview(runtimeErrors, runtimeErrors).Single().HasErrors, "A live FEE error did not mark its container comparison row.");

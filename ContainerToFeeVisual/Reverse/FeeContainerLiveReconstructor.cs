@@ -138,7 +138,15 @@ public static class FeeContainerLiveReconstructor
                      .ThenBy(item => item.Object.Guid))
         {
             var members = objectAssociations.Where(item => item.ContainerObjectGuid == candidate.Object.Guid).ToArray();
-            var objectAssignments = members.SelectMany(item => assignmentsByObject.GetValueOrDefault(item.ObjectGuid) ?? [])
+            // A cabinet's displayed label or a technical helper's name can
+            // differ from the component. They still carry real signal routes,
+            // but that does not authorize a differently named SimObject link.
+            var signalObjects = members.Select(item => item.ObjectGuid).ToHashSet();
+            signalObjects.Add(candidate.Object.Guid);
+            if (!string.IsNullOrWhiteSpace(candidate.Object.ProvenanceContainerId))
+                signalObjects.UnionWith(sourceObjects.Where(item => IsHelper(item.FeeType) &&
+                    item.ProvenanceContainerId == candidate.Object.ProvenanceContainerId).Select(item => item.Guid));
+            var objectAssignments = signalObjects.SelectMany(guid => assignmentsByObject.GetValueOrDefault(guid) ?? [])
                 .Distinct().ToArray();
             var resolved = objectAssignments
                 .Select(assignment => TryCreateEntry(candidate, assignment, variableByGuid))
@@ -231,7 +239,7 @@ public static class FeeContainerLiveReconstructor
                 item.Guid,
                 item.Name,
                 item.FeeType,
-                "Kein eindeutiger Containerbezug aus Typ, Logikdefinition oder Provenienz erkennbar."))
+                "Kein eindeutig gleichnamiger Container erkennbar; manuelle Zuordnung möglich."))
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.FeeType, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -251,12 +259,8 @@ public static class FeeContainerLiveReconstructor
         var result = new List<FeeContainerObjectAssociation>();
         foreach (var item in objects)
         {
-            var matches = candidates.Where(candidate => candidate.Object.Guid == item.Guid ||
-                ((!string.IsNullOrWhiteSpace(item.Name) &&
-                  string.Equals(item.Name, candidate.ComponentName, StringComparison.OrdinalIgnoreCase)) ||
-                 (IsHelper(item.FeeType) && !string.IsNullOrWhiteSpace(item.ProvenanceContainerId) &&
-                  item.ProvenanceContainerId == candidate.Object.ProvenanceContainerId)))
-                .ToArray();
+            var matches = candidates.Where(candidate =>
+                ContainerFileXml.HasMatchingObjectName(item.Name, candidate.ComponentName)).ToArray();
             // Provenance disambiguates equal names but never invents an automatic
             // association between differently named physical scene objects.
             var own = matches.Where(candidate => candidate.Object.Guid == item.Guid).ToArray();

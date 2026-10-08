@@ -25,6 +25,7 @@ internal static partial class Program
         VerifyAssembliesParentScope();
         VerifyValidationColourFilters();
         VerifyPhysicalRoleCannotBypassNames();
+        VerifyProvenanceObjectIsolation();
         VerifyReverseGroupingAndEditIsolation();
         VerifyCombinedReverseExport();
         VerifyDeletedTreeIdentity(directory);
