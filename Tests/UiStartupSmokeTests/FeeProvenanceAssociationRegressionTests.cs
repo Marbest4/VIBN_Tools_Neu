@@ -140,13 +140,21 @@ internal static partial class Program
     private static void VerifyTechnicalSignalRoutes()
     {
         var primary = Guid.NewGuid(); var helper = Guid.NewGuid(); var signal = Guid.NewGuid();
-        var result = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root",
-            [new(primary, "Container_A", "LogicObject", ProvenanceContainerId: "same", ProvenanceContainerType: "ReturnCircuit"),
-             new(helper, "OtherHelper", "MoveBit", ProvenanceContainerId: "same", ProvenanceContainerType: "ReturnCircuit")],
-            [new(signal, "Ready", "%I0.0", "", "Bool", "S1")], [new(signal, helper, "Output 01")]);
+        var objects = new FeeContainerLiveObject[]
+        {
+            new(primary, "Container_A", "BoolNot", ProvenanceContainerId: "same", ProvenanceContainerType: "ReturnCircuit"),
+            new(helper, "OtherHelper", "MoveBit", ProvenanceContainerId: "same", ProvenanceContainerType: "ReturnCircuit"),
+        };
+        var variables = new FeeContainerLiveVariable[] { new(signal, "Ready", "%I0.0", "", "Bool", "S1") };
+        var stale = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", objects, variables,
+            [new(signal, helper, "Output 01")]);
+        if (stale.Snapshot.SignalCount != 0)
+            throw new InvalidOperationException("Old helper provenance invented a current signal route.");
+        var result = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", objects, variables,
+            [new(signal, helper, "Output 01"), new(signal, primary, "Output 01")]);
         if (result.Snapshot.SignalCount != 1 || result.ObjectAssociations.Any(item => item.ObjectGuid == helper) ||
             result.UnmappedObjects.Single().Guid != helper)
-            throw new InvalidOperationException("Strict object names lost a real technical signal route or assigned a differently named helper.");
+            throw new InvalidOperationException("A current technical route was lost or authorized a differently named automatic object association.");
         var cabinet = Guid.NewGuid();
         var labelled = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root",
             [new(cabinet, "RawName;%I0.0", "CabinetElement", CabinetDefinition: "Grob_2PositionSwitch", Label: "Selector")],

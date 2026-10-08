@@ -47,9 +47,8 @@ public sealed record Fee2ContainerDiscoveryResult(
 public sealed record Fee2ContainerProgress(int Percent, string Message);
 
 /// <summary>
-/// Lists only top-level BasicFrames as selectable scopes. Roots carrying versioned
-/// Container2FEE metadata use the exact round-trip; other roots can be
-/// reconstructed from supported descendants and their live assignments.
+/// Lists only top-level BasicFrames as selectable scopes. The interactive reverse workflow reconstructs every root from current scene
+/// objects and live assignments; provenance is only a type-disambiguation hint.
 /// </summary>
 public sealed class Fee2ContainerService
 {
@@ -63,7 +62,7 @@ public sealed class Fee2ContainerService
             throw new InvalidOperationException(FeeConnectionService.MissingConnectionMessage);
 
         if (reconstructLegacyRoots)
-            return await DiscoverFromModelValidationSnapshotAsync(progress, cancellationToken);
+            return await DiscoverFromLiveSceneAsync(progress, cancellationToken);
 
         var roots = new List<Fee2ContainerRoot>();
         var issues = new List<Fee2ContainerDiscoveryIssue>();
@@ -450,191 +449,85 @@ public sealed class Fee2ContainerService
         return result;
     }
 
-    private static async Task<Fee2ContainerDiscoveryResult> DiscoverFromModelValidationSnapshotAsync(
+    private static async Task<Fee2ContainerDiscoveryResult> DiscoverFromLiveSceneAsync(
         IProgress<Fee2ContainerProgress>? progress,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        progress?.Report(new Fee2ContainerProgress(5, "FEE-Projekt wird einmalig wie in ModelValidation eingelesen …"));
+        progress?.Report(new Fee2ContainerProgress(5, "Aktuelle FEE-Struktur wird als frischer Snapshot eingelesen …"));
         if (Services.FeeObjects is null)
-            throw new InvalidOperationException("Der ModelValidation-FEE-Dienst ist nicht initialisiert.");
-        await Services.FeeObjects.UpdateFeeDataAsync();
+            throw new InvalidOperationException("Der FEE-Dienst ist nicht initialisiert.");
+        var allObjects = (await Services.FeeObjects.ReadFeeSceneObjectsForDiscoveryAsync(cancellationToken))
+            .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item)).DistinctBy(item => item.Guid).ToArray();
+        var roots = allObjects.OfType<FeeBasicFrame>().Where(IsTopLevelInSnapshot)
+            .OrderBy(frame => frame.Name, StringComparer.OrdinalIgnoreCase).ThenBy(frame => frame.Guid).ToArray();
+        var ownerByObject = allObjects.ToDictionary(item => item.Guid, item =>
+            Guid.TryParse(FeeSimObjectDiscovery.ResolveRoot(item).GuidString, out var guid) ? guid : Guid.Empty);
+        var rootGuids = roots.Select(root => root.Guid).ToHashSet();
+        var scopedByRoot = allObjects.Where(item => !rootGuids.Contains(item.Guid))
+            .GroupBy(item => ownerByObject[item.Guid]).ToDictionary(group => group.Key, group => group.ToArray());
+        if (scopedByRoot.ContainsKey(Guid.Empty))
+            roots = roots.Append(new FeeBasicFrame { Guid = Guid.Empty, Name = "Projektobjekte ohne BasicFrame" }).ToArray();
+        progress?.Report(new Fee2ContainerProgress(12, "Aktuelle Interface-Variablen werden gelesen …"));
+        var interfaces = await FeeInterface.GetAllInterfacesAsync();
         cancellationToken.ThrowIfCancellationRequested();
-
-        var allObjects = Services.FeeObjects.AllFeeObjects?
-            .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item))
-            .ToArray() ?? [];
-        var roots = allObjects
-            .OfType<FeeBasicFrame>()
-            .Where(IsTopLevelInSnapshot)
-            .OrderBy(frame => frame.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(frame => frame.Guid)
-            .ToArray();
-        var rootTags = new Dictionary<Guid, IReadOnlyDictionary<string, string>>();
-        var explicitOwners = new Dictionary<Guid, HashSet<Guid>>();
-        foreach (var root in roots)
+        var variables = interfaces.SelectMany(item => item.Signals ?? []).DistinctBy(signal => signal.Guid).ToArray();
+        foreach (var cabinet in allObjects.OfType<FeeCabinetElement>().Where(item => string.IsNullOrWhiteSpace(item.ElementType)))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            rootTags[root.Guid] = await ReadOptionalTagsAsync(root.Guid);
-            if (!FeeContainerProvenanceCodec.TryRead(rootTags[root.Guid], out var metadata, out _)) continue;
-            foreach (var item in metadata!.ContainerDocument.Descendants("SimObject"))
-                if (Guid.TryParse(item.Element("Guid")?.Value, out var guid))
-                {
-                    if (!explicitOwners.TryGetValue(guid, out var owners)) explicitOwners[guid] = owners = [];
-                    owners.Add(root.Guid);
-                }
+            cabinet.ElementType = await ReadOptionalObjectPropertyAsync(cabinet.Guid, "Definition") ??
+                await ReadOptionalObjectPropertyAsync(cabinet.Guid, "ElementType") ?? "";
+            if (string.IsNullOrWhiteSpace(cabinet.Label))
+                cabinet.Label = await ReadOptionalObjectPropertyAsync(cabinet.Guid, "Label") ?? "";
         }
-        var unscoped = allObjects.Where(item => !explicitOwners.ContainsKey(item.Guid) &&
-            !roots.Any(root => root.Guid == item.Guid || IsWithinRoot(item, root))).ToArray();
-        if (unscoped.Length > 0)
-            roots = roots.Append(new FeeBasicFrame { Guid = Guid.Empty, Name = "Projektobjekte ohne BasicFrame" }).ToArray();
-        var variables = allObjects
-            .OfType<FeeInterface>()
-            .SelectMany(item => item.Signals ?? [])
-            .GroupBy(signal => signal.Guid)
-            .Select(group => group.First())
-            .ToArray();
-        var variableStates = variables.Select(signal => new FeeContainerVariableState(
-            signal.Guid,
-            signal.Tag ?? string.Empty,
-            signal.Address ?? string.Empty,
-            signal.Path ?? string.Empty,
-            signal.IOTypeString ?? string.Empty,
-            signal.Comment ?? string.Empty)).ToArray();
-        var liveVariables = variableStates.Select(variable => new FeeContainerLiveVariable(
-            variable.VariableGuid,
-            variable.Signal,
-            variable.Address,
-            variable.Path,
-            variable.DataType,
-            variable.Comment)).ToArray();
-        var variableGuids = variables.Select(item => item.Guid).ToHashSet();
+        var liveVariables = variables.Select(signal => new FeeContainerLiveVariable(signal.Guid,
+            signal.Tag ?? "", signal.Address ?? "", signal.Path ?? "", signal.IOTypeString ?? "", signal.Comment ?? "")).ToArray();
+        progress?.Report(new Fee2ContainerProgress(18, "Aktuelle Variablen- und Hilfslogikrouten werden einmalig gelesen …"));
+        var assignmentRead = await ReadAssignmentsAsync(variables.Select(signal => signal.Guid),
+            allObjects.Select(item => item.Guid).ToHashSet(), cancellationToken);
+        var assignmentsByRoot = assignmentRead.Assignments.GroupBy(assignment =>
+                ownerByObject.GetValueOrDefault(assignment.TargetObjectGuid))
+            .ToDictionary(group => group.Key, group => group.ToArray());
+        // Provenance can resolve type aliases such as Cylinder/FeedSafetyDoor
+        // or ReturnCircuit/SafeArea. It never supplies signal entries or object
+        // ownership; both are rebuilt from the current scene and API endpoints.
+        var hintObjects = allObjects.Where(item => item is FeeSimpleNot || item is FeeLogic logic &&
+            ContainerMetadataCatalog.FindXmlTypesByLogicName(logic.LogicDefinitionName).Count > 1).ToArray();
+        var hints = await ReadContainerObjectPropertiesAsync(hintObjects, cancellationToken);
         var resultRoots = new List<Fee2ContainerRoot>();
         var resultIssues = new List<Fee2ContainerDiscoveryIssue>();
-        var withoutProvenance = 0;
-
+        foreach (var issue in assignmentRead.Issues)
+            resultIssues.Add(new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, "Signalrouten", issue.Message));
         for (var index = 0; index < roots.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var root = roots[index];
-            progress?.Report(new Fee2ContainerProgress(
-                roots.Length == 0 ? 90 : 15 + index * 75 / roots.Length,
-                $"Root {index + 1} von {roots.Length} wird rekonstruiert: {root.Name}"));
-            var scoped = root.Guid == Guid.Empty ? unscoped : allObjects
-                .Where(item => item.Guid != root.Guid && IsWithinRoot(item, root) &&
-                    (!explicitOwners.TryGetValue(item.Guid, out var owners) || owners.Contains(root.Guid))).ToArray();
-            var assignments = scoped
-                .Where(item => item.Slots is not null)
-                .SelectMany(item => item.Slots
-                    .Where(slot => variableGuids.Contains(slot.Value))
-                    .Select(slot => new FeeContainerLiveAssignment(slot.Value, item.Guid, slot.Key)))
-                .Distinct()
-                .ToArray();
+            progress?.Report(new Fee2ContainerProgress(roots.Length == 0 ? 90 : 30 + index * 65 / roots.Length,
+                $"Root {index + 1} von {roots.Length} wird live rekonstruiert: {root.Name}"));
+            var scoped = scopedByRoot.GetValueOrDefault(root.Guid) ?? [];
+            var assignments = assignmentsByRoot.GetValueOrDefault(root.Guid) ?? [];
             try
             {
-                var tags = rootTags.GetValueOrDefault(root.Guid) ?? new Dictionary<string, string>();
-                if (FeeContainerProvenanceCodec.TryRead(tags, out var provenance, out var provenanceError))
-                {
-                    var explicitGuids = provenance!.ContainerDocument.Descendants("SimObject")
-                        .Select(item => Guid.TryParse(item.Element("Guid")?.Value, out var guid) ? guid : Guid.Empty).ToHashSet();
-                    var names = provenance.ContainerDocument.Descendants("Container")
-                        .Select(item => item.Element("Component")?.Value ?? "").Where(name => name.Length > 0)
-                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                    scoped = scoped.Concat(allObjects.Where(item => !roots.Any(frame => frame.Guid == item.Guid) &&
-                        (explicitGuids.Contains(item.Guid) || names.Contains(item.Name ?? "")))).DistinctBy(item => item.Guid).ToArray();
-                    assignments = scoped.Where(item => item.Slots is not null).SelectMany(item => item.Slots
-                        .Where(slot => variableGuids.Contains(slot.Value))
-                        .Select(slot => new FeeContainerLiveAssignment(slot.Value, item.Guid, slot.Key))).Distinct().ToArray();
-                    var exactObjectProperties = await ReadContainerObjectPropertiesAsync(scoped, cancellationToken);
-                    var exactLiveObjects = scoped
-                        .Select(item => ToLiveObject(item, exactObjectProperties.GetValueOrDefault(item.Guid)))
-                        .ToArray();
-                    var classification = FeeContainerLiveReconstructor.Reconstruct(
-                        root.Guid,
-                        root.Name,
-                        exactLiveObjects,
-                        liveVariables,
-                        assignments);
-                    var slots = ResolveSlotsFromSnapshot(provenance!, assignments);
-                    var projection = FeeContainerVariableProjector.Apply(provenance!, variableStates, slots);
-                    var associations = FeeContainerAssociationProjection.Apply(projection.Snapshot, classification, scoped);
-                    AttachInventory(projection.Snapshot, scoped, liveVariables);
-                    var assignedGuids = associations.Select(item => item.ObjectGuid).ToHashSet();
-                    var unmapped = scoped.Where(item => !assignedGuids.Contains(item.Guid)).Select(item =>
-                        new FeeContainerUnmappedObject(item.Guid, item.Name, item.FeeType,
-                            "Keine eindeutige Containerzuordnung; manuelle Zuordnung möglich")).ToArray();
-                    resultRoots.Add(new Fee2ContainerRoot(
-                        root.Guid,
-                        root.Name,
-                        projection.Snapshot,
-                        projection.UpdatedEntries,
-                        projection.MissingVariableGuids.Count,
-                        projection.UpdatedSlots,
-                        projection.UnresolvedSlotVariableGuids.Count,
-                        UsesExactProvenance: true,
-                        scoped.Length,
-                        0,
-                        [],
-                        unmapped,
-                        associations));
-                    continue;
-                }
-
-                withoutProvenance++;
-                if (tags.ContainsKey(FeeContainerProvenanceCodec.SchemaKey) && !string.IsNullOrWhiteSpace(provenanceError))
-                {
-                    resultIssues.Add(new Fee2ContainerDiscoveryIssue(
-                        root.Guid,
-                        root.Name,
-                        $"Provenienz ist ungültig; die Struktur wird stattdessen live rekonstruiert: {provenanceError}"));
-                }
-                // A legacy root has no exact Container2FEE metadata by
-                // definition. Avoid hundreds of individual TagComponent calls
-                // here; the ModelValidation snapshot already contains every
-                // structural property required for the legacy reconstruction.
-                IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, string>> objectProperties =
-                    new Dictionary<Guid, IReadOnlyDictionary<string, string>>();
-                var liveObjects = scoped
-                    .Select(item => ToLiveObject(
-                        item,
-                        objectProperties.GetValueOrDefault(item.Guid)))
-                    .ToArray();
-                var reconstructed = FeeContainerLiveReconstructor.Reconstruct(
-                    root.Guid,
-                    root.Name,
-                    liveObjects,
-                    liveVariables,
-                    assignments);
-                FeeContainerAssociationProjection.Apply(reconstructed.Snapshot, reconstructed, scoped);
+                var liveObjects = scoped.Select(item => ToLiveObject(item, hints.GetValueOrDefault(item.Guid))).ToArray();
+                var reconstructed = FeeContainerLiveReconstructor.Reconstruct(root.Guid, root.Name, liveObjects, liveVariables, assignments);
+                var associations = FeeContainerAssociationProjection.Apply(reconstructed.Snapshot, reconstructed, scoped);
                 AttachInventory(reconstructed.Snapshot, scoped, liveVariables);
-                resultRoots.Add(new Fee2ContainerRoot(
-                    root.Guid,
-                    root.Name,
-                    reconstructed.Snapshot,
-                    0,
-                    0,
-                    0,
-                    0,
-                    UsesExactProvenance: false,
-                    reconstructed.InspectedObjectCount,
-                    reconstructed.IgnoredObjectCount,
-                    reconstructed.Issues,
-                    reconstructed.UnmappedObjects,
-                    reconstructed.ObjectAssociations));
+                var rootIssues = reconstructed.Issues.Concat(assignmentRead.Issues).ToArray();
+                resultRoots.Add(new Fee2ContainerRoot(root.Guid, root.Name, reconstructed.Snapshot,
+                    reconstructed.Snapshot.SignalCount, 0, reconstructed.Snapshot.SignalCount, 0,
+                    UsesExactProvenance: false, reconstructed.InspectedObjectCount, reconstructed.IgnoredObjectCount,
+                    rootIssues, reconstructed.UnmappedObjects, associations));
                 resultIssues.AddRange(reconstructed.Issues.Select(issue =>
                     new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, root.Name, issue.Message)));
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
-                resultIssues.Add(new Fee2ContainerDiscoveryIssue(
-                    root.Guid,
-                    root.Name,
-                    $"Der Snapshot dieses Roots konnte nicht rekonstruiert werden: {exception.Message}"));
+                resultIssues.Add(new Fee2ContainerDiscoveryIssue(root.Guid, root.Name,
+                    $"Die aktuelle Struktur dieses Roots konnte nicht rekonstruiert werden: {exception.Message}"));
             }
         }
-
-        progress?.Report(new Fee2ContainerProgress(100, "FEE-Roots und Container wurden vollständig ausgewertet."));
-        return new Fee2ContainerDiscoveryResult(resultRoots, withoutProvenance, resultIssues);
+        progress?.Report(new Fee2ContainerProgress(100, "FEE-Roots und aktuelle Container vollständig ausgewertet."));
+        return new Fee2ContainerDiscoveryResult(resultRoots, resultRoots.Count, resultIssues);
     }
 
     /// <summary>
@@ -738,7 +631,9 @@ public sealed class Fee2ContainerService
             cabinet?.ElementType,
             cabinet?.Label,
             provenance.ContainerId,
-            provenance.ContainerType);
+            provenance.ContainerType,
+            item.Parent?.Guid,
+            item.Slots?.Values.Where(guid => guid != Guid.Empty).Distinct().ToArray());
     }
 
     private static IReadOnlyDictionary<Guid, string> ResolveSlotsFromSnapshot(
@@ -815,6 +710,17 @@ public sealed class Fee2ContainerService
         CancellationToken cancellationToken)
     {
         using var throttle = new SemaphoreSlim(6);
+        var helperRoutes = new System.Collections.Concurrent.ConcurrentDictionary<Guid,
+            Lazy<Task<IReadOnlyList<(Guid ObjectGuid, string SlotName)>>>>();
+        async Task<IReadOnlyList<(Guid ObjectGuid, string SlotName)>> ReadHelperRouteAsync(Guid guid)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var links = await Services.ApiInstance!.Interface.GetSlotSlotAssignmentAsync(guid, "Input 01") ?? [];
+            cancellationToken.ThrowIfCancellationRequested();
+            return links.SelectMany(link => Guid.TryParse(link.SceneObjectGuid, out var linkedGuid)
+                    ? (link.SlotNames ?? []).Select(slot => (linkedGuid, slot)) : [])
+                .Distinct().ToArray();
+        }
         var tasks = variableGuids.Distinct().Select(async variableGuid =>
         {
             await throttle.WaitAsync(cancellationToken);
@@ -843,22 +749,18 @@ public sealed class Fee2ContainerService
                             continue;
                         try
                         {
-                            var links = await Services.ApiInstance.Interface
-                                .GetSlotSlotAssignmentAsync(objectGuid, "Input 01") ?? [];
-                            foreach (var (linkedGuidText, linkedSlots) in links)
+                            var links = await helperRoutes.GetOrAdd(objectGuid, guid =>
+                                new Lazy<Task<IReadOnlyList<(Guid ObjectGuid, string SlotName)>>>(() => ReadHelperRouteAsync(guid))).Value;
+                            foreach (var (linkedGuid, linkedSlot) in links)
                             {
-                                if (!Guid.TryParse(linkedGuidText, out var linkedGuid) ||
-                                    !scopedObjects.Contains(linkedGuid))
-                                    continue;
-                                foreach (var linkedSlot in linkedSlots ?? Array.Empty<string>())
-                                {
+                                if (scopedObjects.Contains(linkedGuid))
                                     matches.Add(new FeeContainerLiveAssignment(
                                         variableGuid,
                                         linkedGuid,
                                         linkedSlot));
-                                }
                             }
                         }
+                        catch (OperationCanceledException) { throw; }
                         catch (Exception exception)
                         {
                             localIssues.Add(new FeeContainerReconstructionIssue(
@@ -870,6 +772,7 @@ public sealed class Fee2ContainerService
 
                 return new VariableAssignmentRead(matches, localIssues);
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception exception)
             {
                 return new VariableAssignmentRead(

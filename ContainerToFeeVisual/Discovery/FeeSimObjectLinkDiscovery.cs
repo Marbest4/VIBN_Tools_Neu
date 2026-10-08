@@ -101,7 +101,7 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
                      "MOTIONJOINT" => ["InValue", "OutValue", "InTarget", "InVelocity"],
                      "FLOOR" => ["Collision"],
                      "SENSOR" or "SAFETYSENSOR" => ["Channel1", "Channel2"],
-                     "SURFACE" => ["Velocity"],
+                     "SURFACE" => ["InVelocityX", "Velocity"],
                      "PICKANDPLACE" => ["Feedback", "Pick", "Drop"],
                      _ => Array.Empty<string>(),
                  })

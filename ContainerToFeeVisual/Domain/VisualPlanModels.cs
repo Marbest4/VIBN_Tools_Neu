@@ -132,7 +132,9 @@ public sealed class VisualFeeObject
         string parentName,
         bool hasExactDuplicate,
         string assembliesParentName = "",
-        bool hasSameNameInOtherParent = false)
+        bool hasSameNameInOtherParent = false,
+        string rootGuidString = "",
+        string rootName = "")
     {
         Id = id;
         GuidString = guidString;
@@ -145,6 +147,8 @@ public sealed class VisualFeeObject
         HasExactDuplicate = hasExactDuplicate;
         AssembliesParentName = assembliesParentName;
         HasSameNameInOtherParent = hasSameNameInOtherParent;
+        RootGuidString = rootGuidString;
+        RootName = rootName;
     }
 
     public string Id { get; }
@@ -165,6 +169,8 @@ public sealed class VisualFeeObject
     public string ParentName { get; }
     public string AssembliesParentName { get; }
     public bool HasSameNameInOtherParent { get; }
+    public string RootGuidString { get; }
+    public string RootName { get; }
 
     /// <summary>
     /// Another FEE object has the same name and logical parent name,
@@ -181,7 +187,7 @@ public sealed class VisualFeeObject
         AssignableTypeNames,
         ParentGuidString,
         ParentName,
-        hasExactDuplicate, AssembliesParentName, HasSameNameInOtherParent);
+        hasExactDuplicate, AssembliesParentName, HasSameNameInOtherParent, RootGuidString, RootName);
 }
 
 /// <summary>

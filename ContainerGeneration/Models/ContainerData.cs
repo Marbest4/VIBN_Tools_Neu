@@ -23,6 +23,10 @@ namespace VIBN_Tools.ContainerGeneration.Models
         private string _reimportDetails = string.Empty;
         private string _id = string.Empty;
         private string _component = string.Empty;
+        private int _updateDepth;
+        private bool _validationPending;
+        private bool _reviewPending;
+        private readonly HashSet<ContainerEntry> _observedEntries = [];
 
 
         /// <summary>
@@ -118,20 +122,21 @@ namespace VIBN_Tools.ContainerGeneration.Models
 
         [XmlIgnore]
         public bool HasDetectedChanges =>
-            DataList.Any(entry =>
-                entry.ReviewState is not ContainerEntryReviewState.None and
-                    not ContainerEntryReviewState.Preserved);
+            DataList.Any(entry => entry.HasUnconfirmedChange);
+
+        [XmlIgnore]
+        public bool HasAcknowledgedChanges => DataList.Any(entry => entry.IsChangeAcknowledged);
+
+        [XmlIgnore]
+        public bool HasErrors => !IsValid || DataList.Any(entry => entry.HasValidationError);
+
+        [XmlIgnore]
+        public bool HasWarnings => DataList.Any(entry => entry.HasAssignmentWarning ||
+            entry.ReviewState == ContainerEntryReviewState.NeedsReview);
 
         [XmlIgnore]
         public bool RequiresReview =>
-            !ManuallyChecked &&
-            (!IsValid ||
-             DataList.Any(entry =>
-                 entry.ReviewState is ContainerEntryReviewState.NeedsReview or
-                     ContainerEntryReviewState.NewFromSource or
-                     ContainerEntryReviewState.NewlyRecognized or
-                     ContainerEntryReviewState.SourceChanged or
-                     ContainerEntryReviewState.ManuallyEdited));
+            HasErrors || HasWarnings || !ManuallyChecked && HasDetectedChanges;
 
         [XmlIgnore]
         public string ReimportStatusText
@@ -198,6 +203,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
 
             foreach (var entry in DataList)
             {
+                _observedEntries.Add(entry);
                 entry.SlotChanged += Entry_SlotChanged;
                 entry.PropertyChanged += Entry_PropertyChanged;
             }
@@ -212,6 +218,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
         /// </summary>
         public void Validate()
         {
+            if (_updateDepth > 0) { _validationPending = true; return; }
             bool TempValid = true;
             StringBuilder ErrorBuilder = new StringBuilder();
             // check for empty or duplicate key slots
@@ -326,9 +333,25 @@ namespace VIBN_Tools.ContainerGeneration.Models
 
         private void DataList_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
+            if (e.Action == NotifyCollectionChangedAction.Reset)
+            {
+                foreach (var entry in _observedEntries)
+                {
+                    entry.SlotChanged -= Entry_SlotChanged;
+                    entry.PropertyChanged -= Entry_PropertyChanged;
+                }
+                _observedEntries.Clear();
+                foreach (var entry in DataList)
+                    if (_observedEntries.Add(entry))
+                    {
+                        entry.SlotChanged += Entry_SlotChanged;
+                        entry.PropertyChanged += Entry_PropertyChanged;
+                    }
+            }
             if (e.NewItems != null)
                 foreach (ContainerEntry entry in e.NewItems)
                 {
+                    if (!_observedEntries.Add(entry)) continue;
                     entry.SlotChanged += Entry_SlotChanged;
                     entry.PropertyChanged += Entry_PropertyChanged;
                 }
@@ -336,6 +359,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
             if (e.OldItems != null)
                 foreach (ContainerEntry entry in e.OldItems)
                 {
+                    if (DataList.Contains(entry) || !_observedEntries.Remove(entry)) continue;
                     entry.SlotChanged -= Entry_SlotChanged;
                     entry.PropertyChanged -= Entry_PropertyChanged;
                 }
@@ -357,6 +381,10 @@ namespace VIBN_Tools.ContainerGeneration.Models
             if (e.PropertyName is nameof(ContainerEntry.ReviewState) or
                 nameof(ContainerEntry.ReviewMessage) or
                 nameof(ContainerEntry.IsManuallyEdited) or
+                nameof(ContainerEntry.IsChangeAcknowledged) or
+                nameof(ContainerEntry.HasUnconfirmedChange) or
+                nameof(ContainerEntry.HasValidationError) or
+                nameof(ContainerEntry.HasAssignmentWarning) or
                 nameof(ContainerEntry.Signal))
             {
                 RefreshReimportStatus();
@@ -366,6 +394,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
 
         public void RefreshReimportStatus()
         {
+            if (_updateDepth > 0) { _reviewPending = true; return; }
             var states = DataList
                 .Select(entry => entry.ReviewStateText)
                 .Where(text => !string.IsNullOrWhiteSpace(text))
@@ -437,8 +466,34 @@ namespace VIBN_Tools.ContainerGeneration.Models
 
         private void NotifyReviewProperties()
         {
+            if (_updateDepth > 0) { _reviewPending = true; return; }
             NotifyOfPropertyChange(nameof(HasDetectedChanges));
             NotifyOfPropertyChange(nameof(RequiresReview));
+            NotifyOfPropertyChange(nameof(HasAcknowledgedChanges));
+            NotifyOfPropertyChange(nameof(HasErrors));
+            NotifyOfPropertyChange(nameof(HasWarnings));
+        }
+
+        /// <summary>Keeps subscriptions live but validates and builds review details once per batch.</summary>
+        public IDisposable DeferUpdates()
+        {
+            _updateDepth++;
+            return new UpdateScope(this);
+        }
+
+        private sealed class UpdateScope(ContainerData owner) : IDisposable
+        {
+            private ContainerData? _owner = owner;
+            public void Dispose()
+            {
+                var current = Interlocked.Exchange(ref _owner, null);
+                if (current is null || --current._updateDepth != 0) return;
+                var validation = current._validationPending;
+                var review = current._reviewPending;
+                current._validationPending = current._reviewPending = false;
+                if (validation) current.Validate();
+                if (review || validation) current.RefreshReimportStatus();
+            }
         }
 
 

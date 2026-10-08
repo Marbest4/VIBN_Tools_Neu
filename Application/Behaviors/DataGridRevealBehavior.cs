@@ -41,51 +41,48 @@ public static class DataGridRevealBehavior
             return;
         var requestedItem = args.NewValue;
 
-        _ = grid.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+        QueueReveal(grid, requestedItem, revision, attempt: 0);
+    }
+
+    private static void QueueReveal(DataGrid grid, object item, long revision, int attempt)
+    {
+        if (grid.Dispatcher.HasShutdownStarted || grid.Dispatcher.HasShutdownFinished) return;
+        _ = grid.Dispatcher.BeginInvoke(attempt == 0 ? DispatcherPriority.Loaded : DispatcherPriority.ContextIdle,
+            new Action(() =>
         {
-            if ((long)grid.GetValue(RevealRevisionProperty) != revision)
-                return;
+            if ((long)grid.GetValue(RevealRevisionProperty) != revision || !grid.IsLoaded) return;
             try
             {
-                if (!grid.Items.Contains(requestedItem))
-                    return;
-                var viewer = FindVisualChild<ScrollViewer>(grid);
-                var itemIndex = grid.Items.IndexOf(requestedItem);
-                if (viewer is not null && itemIndex >= 0 && itemIndex < grid.Items.Count)
+                var index = grid.Items.IndexOf(item);
+                if (index < 0 || index >= grid.Items.Count) return;
+                var viewer = grid.Template?.FindName("DG_ScrollViewer", grid) as ScrollViewer ?? FindVisualChild<ScrollViewer>(grid);
+                if (viewer is null || !double.IsFinite(viewer.ViewportHeight) || viewer.ViewportHeight <= 0) return;
+                var logical = viewer.CanContentScroll && VirtualizingPanel.GetScrollUnit(grid) == ScrollUnit.Item;
+                var row = grid.ItemContainerGenerator.ContainerFromItem(item) as DataGridRow;
+                var rowHeight = row is { ActualHeight: > 0 } ? row.ActualHeight
+                    : double.IsFinite(grid.RowHeight) && grid.RowHeight > 0 ? grid.RowHeight : 24d;
+                double offset;
+                if (row is not null && attempt > 0)
                 {
-                    // Do not call DataGrid.ScrollIntoView here. During a root
-                    // switch that API can race WPF's ItemContainerGenerator
-                    // and throw IndexMustBeLess outside the caller's stack.
-                    // Moving the owned ScrollViewer is sufficient to center
-                    // the related row without materializing stale containers.
-                    var logicalScroll = viewer.CanContentScroll && VirtualizingPanel.GetScrollUnit(grid) == ScrollUnit.Item;
-                    var rowHeight = double.IsFinite(grid.RowHeight) && grid.RowHeight > 0
-                        ? grid.RowHeight
-                        : grid.ItemContainerGenerator.ContainerFromIndex(itemIndex) is DataGridRow existingRow
-                            ? Math.Max(existingRow.ActualHeight, 1d) : 24d;
-                    var targetOffset = logicalScroll
-                        ? itemIndex - (viewer.ViewportHeight / 2d)
-                        : (itemIndex * rowHeight) - (viewer.ViewportHeight / 2d);
-                    viewer.ScrollToVerticalOffset(Math.Max(0d, targetOffset));
-                    grid.UpdateLayout();
-                    if (!logicalScroll && grid.ItemContainerGenerator.ContainerFromItem(requestedItem) is DataGridRow row)
-                    {
-                        var position = row.TransformToAncestor(viewer).Transform(new Point(0, 0));
-                        viewer.ScrollToVerticalOffset(Math.Max(0d, viewer.VerticalOffset + position.Y -
-                            Math.Max(0d, (viewer.ViewportHeight - row.ActualHeight) / 2d)));
-                    }
+                    var presenter = viewer.Template?.FindName("PART_ScrollContentPresenter", viewer) as FrameworkElement;
+                    var viewport = presenter ?? (FrameworkElement)viewer;
+                    var top = row.TransformToAncestor(viewport).Transform(new Point(0, 0)).Y;
+                    var pixelDelta = top - Math.Max(0d, (viewport.ActualHeight - rowHeight) / 2d);
+                    offset = viewer.VerticalOffset + pixelDelta / (logical ? rowHeight : 1d);
                 }
+                else
+                    offset = logical ? index - Math.Max(0d, (viewer.ViewportHeight - 1d) / 2d)
+                        : index * rowHeight - Math.Max(0d, (viewer.ViewportHeight - rowHeight) / 2d);
+                if (!double.IsFinite(offset)) return;
+                viewer.ScrollToVerticalOffset(Math.Clamp(offset, 0d, Math.Max(0d, viewer.ScrollableHeight)));
+                // Let layout and the generator finish before correcting the
+                // realized row's position. UpdateLayout inside the selection
+                // notification can revive stale row indexes during root changes.
+                if (attempt < 2) QueueReveal(grid, item, revision, attempt + 1);
             }
-            catch (ArgumentOutOfRangeException)
-            {
-                // A root switch can invalidate the virtualized Items collection
-                // between viewport calculation and container generation. The newer
-                // reveal request owns the viewport; this stale one is ignored.
-            }
-            catch (InvalidOperationException)
-            {
-                // The grid may be unloaded while a deferred reveal is queued.
-            }
+            catch (ArgumentOutOfRangeException) { }
+            catch (InvalidOperationException) { }
+            catch (ArgumentException) { }
         }));
     }
 

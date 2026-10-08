@@ -80,7 +80,7 @@ internal static partial class Program
         if (!Equals(identity.Invoke(null, [obj]), identity.Invoke(null, [sameParent])) || Equals(identity.Invoke(null, [obj]), identity.Invoke(null, [otherParent])))
             throw new InvalidOperationException("Duplicate classification did not respect the logical Assemblies parent.");
         var model = (VisualFeeObject)typeof(VisualFeeObject).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single()
-            .Invoke(["fee:test", obj.GuidString, obj.Name, typeof(FeeSurface).FullName!, "Surface", Array.Empty<string>(), logical.GuidString, logical.Name, true, plant.Name, false]);
+            .Invoke(["fee:test", obj.GuidString, obj.Name, typeof(FeeSurface).FullName!, "Surface", Array.Empty<string>(), logical.GuidString, logical.Name, true, plant.Name, false, plant.GuidString, plant.Name]);
         var row = new ContainerToFeeVisualFeeObjectVM(model, null, new VisualFeeObjectConnectionSummary(true, []));
         if (row.HasError || !row.HasWarning || !row.ParentDetails.Contains("Plant"))
             throw new InvalidOperationException("An equal-parent duplicate became an error or omitted Assemblies parent details.");

@@ -97,19 +97,74 @@ public static class GenerationWorkspaceEditor
         var beforeCount = containers.Count;
         var moved = 0;
 
-        foreach (var source in sourceList)
-        {
-            foreach (var entry in source.DataList.ToList())
-            {
-                MoveToContainer(entry, target, containers, unassigned, filtered);
-                moved++;
-            }
-        }
+        var entries = sourceList.SelectMany(source => source.DataList).Distinct().ToArray();
+        MoveToContainerBatch(entries, target, containers, unassigned, filtered);
+        moved = entries.Length;
 
         target.ManuallyChecked = false;
         target.Validate();
         target.RefreshReimportStatus();
         return new MergeContainersResult(moved, Math.Max(0, beforeCount - containers.Count));
+    }
+
+    public static void MoveToContainerBatch(IEnumerable<ContainerEntry> entries, ContainerData target,
+        IList<ContainerData> containers, IList<ContainerEntry> unassigned, IList<ContainerEntry> filtered)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        MoveBatch(entries, target, null, containers, unassigned, filtered);
+    }
+
+    public static void MoveToUnassignedBatch(IEnumerable<ContainerEntry> entries,
+        IList<ContainerData> containers, IList<ContainerEntry> unassigned, IList<ContainerEntry> filtered) =>
+        MoveBatch(entries, null, unassigned, containers, unassigned, filtered);
+
+    public static void MoveToFilteredBatch(IEnumerable<ContainerEntry> entries,
+        IList<ContainerData> containers, IList<ContainerEntry> unassigned, IList<ContainerEntry> filtered) =>
+        MoveBatch(entries, null, filtered, containers, unassigned, filtered);
+
+    private static void MoveBatch(IEnumerable<ContainerEntry> entries, ContainerData? target,
+        IList<ContainerEntry>? openTarget, IList<ContainerData> containers,
+        IList<ContainerEntry> unassigned, IList<ContainerEntry> filtered)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        ArgumentNullException.ThrowIfNull(containers);
+        ArgumentNullException.ThrowIfNull(unassigned);
+        ArgumentNullException.ThrowIfNull(filtered);
+        var selection = entries.ToArray();
+        if (selection.Any(entry => entry is null)) throw new ArgumentException("A signal selection contains null.", nameof(entries));
+        selection = selection.DistinctBy(entry => string.IsNullOrWhiteSpace(entry.SignalId)
+            ? "source:" + GenerationWorkspaceReconciler.CreatePrimaryKey(entry) : "id:" + entry.SignalId).ToArray();
+        if (selection.Length == 0) return;
+
+        // Preserve SameSource's fallback for older entries without SignalId,
+        // while keeping different stable IDs distinct even with equal names.
+        var ids = selection.Where(entry => !string.IsNullOrWhiteSpace(entry.SignalId)).Select(entry => entry.SignalId).ToHashSet(StringComparer.Ordinal);
+        var keys = selection.Select(GenerationWorkspaceReconciler.CreatePrimaryKey).ToHashSet(StringComparer.Ordinal);
+        var legacyKeys = selection.Where(entry => string.IsNullOrWhiteSpace(entry.SignalId))
+            .Select(GenerationWorkspaceReconciler.CreatePrimaryKey).ToHashSet(StringComparer.Ordinal);
+        bool Matches(ContainerEntry entry) => string.IsNullOrWhiteSpace(entry.SignalId)
+            ? keys.Contains(GenerationWorkspaceReconciler.CreatePrimaryKey(entry))
+            : ids.Contains(entry.SignalId) || legacyKeys.Contains(GenerationWorkspaceReconciler.CreatePrimaryKey(entry));
+        using (new ContainerUpdateBatch(containers.Concat(target is null ? Array.Empty<ContainerData>() : new[] { target })))
+        {
+            foreach (var container in containers)
+                RemoveMatches(container.DataList, Matches);
+            RemoveMatches(unassigned, Matches);
+            RemoveMatches(filtered, Matches);
+            if (target is not null && !containers.Contains(target)) containers.Add(target);
+            foreach (var entry in selection)
+            {
+                if (target is not null) target.DataList.Add(entry);
+                else { entry.Slot = string.Empty; openTarget!.Add(entry); }
+            }
+            RemoveEmptyContainers(containers, target);
+        }
+    }
+
+    private static void RemoveMatches(IList<ContainerEntry> entries, Func<ContainerEntry, bool> matches)
+    {
+        for (var index = entries.Count - 1; index >= 0; index--)
+            if (matches(entries[index])) entries.RemoveAt(index);
     }
 
     private static UnassignEntryResult MoveToOpenList(

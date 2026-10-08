@@ -124,6 +124,7 @@
                     <TextBox Margin="4" Padding="6,3" Text="{Binding ContainerSearchText, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Container nach Komponente, Typ oder Anzahl der Signale durchsuchen." />
                 <DataGrid Grid.Row="1" ItemsSource="{Binding FoundContainersView}" SelectedItem="{Binding SelectedFoundContainer}"
+                          ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Item"
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
                           RowStyle="{StaticResource Fee2ContainerDropRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
@@ -196,6 +197,7 @@
                     <TextBox Margin="4" Padding="6,3" Text="{Binding SignalSearchText, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="Signalzuordnungen nach Container, Signal, Slot, Adresse, Datentyp, ID oder Status durchsuchen." />
                 <DataGrid Grid.Row="1" ItemsSource="{Binding FoundSignalsView}" SelectedItem="{Binding SelectedFoundSignal}"
+                          ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Item"
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding SignalRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"

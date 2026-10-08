@@ -11,7 +11,8 @@ internal sealed record VisualFeeDiscoveryResult(
     IReadOnlyList<VisualFeeObject> Objects,
     IReadOnlyDictionary<string, FeeAbstractObject> RuntimeObjects,
     IReadOnlyList<VisualFeeContainerObject> ContainerObjects,
-    IReadOnlyDictionary<Guid, string> TopLevelBasicFrames);
+    IReadOnlyDictionary<Guid, string> TopLevelBasicFrames,
+    IReadOnlyList<FeeAbstractObject> SceneObjects);
 
 /// <summary>Reads selectable FEE objects and keeps SDK instances out of the view model.</summary>
 internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
@@ -57,6 +58,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
         {
             var id = CreateFeeObjectId(runtimeObject.GuidString);
             var parent = parentScopes[runtimeObject.Guid];
+            var root = ResolveRoot(runtimeObject);
             byId[id] = runtimeObject;
             objects.Add(new VisualFeeObject(
                 id,
@@ -69,7 +71,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 parent.Name,
                 duplicateIdentities.Contains(CreateIdentity(runtimeObject)),
                 parent.AssembliesParentName,
-                namesInDifferentParents.Contains(runtimeObject.Name?.Trim() ?? "")));
+                namesInDifferentParents.Contains(runtimeObject.Name?.Trim() ?? ""), root.GuidString, root.Name));
         }
 
         var helpers = allObjects.Where(item => item is FeeSimpleNot or FeeSimpleMove or FeeSimpleAnd or FeeSimpleOr).ToArray();
@@ -107,11 +109,21 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
         logger.Information(
             $"{objects.Count} zuweisbare FEE-SimObjects, {containerObjects.Length} vorhandene Logik-/Cabinet-Objekte " +
             $"und {topLevelBasicFrames.Count} Root(s) in {stopwatch.Elapsed.TotalSeconds:F1} s gelesen (schlanker Snapshot).");
-        return new VisualFeeDiscoveryResult(objects, byId, containerObjects, topLevelBasicFrames);
+        return new VisualFeeDiscoveryResult(objects, byId, containerObjects, topLevelBasicFrames, allObjects);
     }
 
     internal static string CreateFeeObjectId(string guidString) =>
         $"fee:{guidString.Trim().ToLowerInvariant()}";
+
+    internal static (string GuidString, string Name) ResolveRoot(FeeAbstractObject item)
+    {
+        var visited = new HashSet<Guid>();
+        FeeBasicFrame? root = null;
+        for (var current = item; current is not null && visited.Add(current.Guid); current = current.Parent)
+            if (current is FeeBasicFrame frame) root = frame;
+        return root is null ? (Guid.Empty.ToString("D"), "Projektobjekte ohne BasicFrame")
+            : (root.GuidString, root.Name ?? string.Empty);
+    }
 
     internal static Dictionary<string, Guid> ParseSlotAssignments(XElement xml)
     {

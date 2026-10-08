@@ -43,15 +43,14 @@ public sealed class WorkspaceUndoState
 
     private static ContainerData CloneContainer(ContainerData source)
     {
-        var clone = new ContainerData
-        {
-            Id = source.Id,
-            Component = source.Component,
-            Type = source.Type,
-            MinSignals = source.MinSignals,
-            MaxSignals = source.MaxSignals,
-            ManuallyChecked = source.ManuallyChecked
-        };
+        var clone = new ContainerData();
+        using var updates = clone.DeferUpdates();
+        clone.Id = source.Id;
+        clone.Component = source.Component;
+        clone.Type = source.Type;
+        clone.MinSignals = source.MinSignals;
+        clone.MaxSignals = source.MaxSignals;
+        clone.ManuallyChecked = source.ManuallyChecked;
 
         clone.Slots.Clear();
         foreach (var slot in source.Slots)

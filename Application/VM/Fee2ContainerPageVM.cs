@@ -374,6 +374,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         BeginOperation();
         try
         {
+            ClearDiscoveredRoots();
             var progress = new Progress<Fee2ContainerProgress>(update =>
             {
                 ProgressValue = update.Percent;
@@ -401,7 +402,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             StatusText = result.Roots.Count == 0
                 ? "Keine obersten BasicFrames im geöffneten FEE-Projekt gefunden."
                 : $"{result.Roots.Count} oberste BasicFrame(s) gefunden; " +
-                  $"{result.IgnoredWithoutProvenance} ohne Provenienz live rekonstruiert; " +
+                  $"{result.Roots.Count} aus aktueller FEE-Struktur rekonstruiert; " +
                   $"{result.Issues.Count} Hinweis(e).";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
@@ -466,6 +467,16 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
         }
         finally { EndOperation(); }
+    }
+
+    private void ClearDiscoveredRoots()
+    {
+        _selectionRevision++;
+        SelectedRoot = null;
+        foreach (var root in Roots) root.PropertyChanged -= OnRootSelectionChanged;
+        Roots.Clear();
+        Issues.Clear();
+        RefreshSelectionDetails(null);
     }
 
     private void BeginOperation()

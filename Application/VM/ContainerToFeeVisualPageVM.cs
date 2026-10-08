@@ -117,7 +117,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             () => IsFeeObjectDiscoveryAvailable);
         AutoAssignCommand = new RelayCommand(
             AutoAssignMatches,
-            () => HasPlan && AvailableFeeObjects.Count > 0 && !IsBusy);
+            () => HasPlan && (AvailableFeeObjects.Count > 0 || AvailableFeeSignals.Count > 0) && !IsBusy);
         StartGenerationCommand = new AsyncRelayCommand(
             StartGenerationAsync,
             () => CanStartGeneration);
@@ -899,9 +899,9 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                 : "FEE-Daten wurden direkt über die API aktualisiert. Falls kürzlich geänderte SimObjects oder Signale fehlen: Model Validation ausführen und danach erneut aktualisieren.";
             StatusText = snapshot.AutomaticAssignmentCount > 0
                 ? $"{snapshot.ObjectCount} FEE-SimObjects, {snapshot.ContainerObjectCount} Logik-/Cabinet-Objekte, {snapshot.SignalCount} Signale und {snapshot.InterfaceCount} Interfaces geladen; " +
-                  $"{snapshot.SignalLinkCount} Signal- und {snapshot.SimObjectLinkCount} SimObject-Slot-Verknüpfungen gelesen; {snapshot.AutomaticAssignmentCount} automatisch zugeordnet; {snapshot.VerifiedContainerCount} Container mit Provenienz abgeglichen."
+                  $"{snapshot.SignalLinkCount} Signal- und {snapshot.SimObjectLinkCount} SimObject-Slot-Verknüpfungen gelesen; {snapshot.AutomaticAssignmentCount} automatisch zugeordnet; {snapshot.VerifiedContainerCount} Container anhand aktueller FEE-Verknüpfungen vollständig geprüft."
                 : $"{snapshot.ObjectCount} FEE-SimObjects, {snapshot.ContainerObjectCount} Logik-/Cabinet-Objekte, {snapshot.SignalCount} Signale und {snapshot.InterfaceCount} Interfaces geladen; " +
-                  $"{snapshot.SignalLinkCount} Signal- und {snapshot.SimObjectLinkCount} SimObject-Slot-Verknüpfungen gelesen; {snapshot.VerifiedContainerCount} Container mit Provenienz abgeglichen.";
+                  $"{snapshot.SignalLinkCount} Signal- und {snapshot.SimObjectLinkCount} SimObject-Slot-Verknüpfungen gelesen; {snapshot.VerifiedContainerCount} Container anhand aktueller FEE-Verknüpfungen vollständig geprüft.";
             _log.Information(LogArea, StatusText);
             AddOperationDetail("FEE aktualisiert", StatusText);
             RecordCurrentConnectionDetails();
@@ -912,8 +912,9 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
     private void AutoAssignMatches()
     {
         int count = _planService.AutoAssignMatches();
+        RefreshCompletedContainerSelection();
         StatusText = count > 0
-            ? $"{count} FEE-SimObject-Zuordnung(en) automatisch erkannt."
+            ? $"{count} FEE-SimObject-/Signalzuordnung(en) automatisch erkannt."
             : "Keine weiteren eindeutigen Namens-/Typzuordnungen gefunden.";
         _log.Information(LogArea, StatusText);
         AddOperationDetail("Automatische Zuordnung", StatusText);
@@ -1163,6 +1164,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                 {
                     await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
                     ApplyDiscoveredSimObjectStates();
+                    RefreshCompletedContainerSelection();
                     _log.Information(LogArea, result.Message);
                 }
                 else
@@ -1181,7 +1183,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         }
 
         await RunBusyAsync(
-            "Vorhandene Interface-Signale werden ohne Objekterzeugung verknüpft …",
+            "Fehlende Signalverknüpfungen werden ergänzt; vorhandene Routen bleiben erhalten …",
             async cancellationToken =>
             {
                 VisualExecutionResult result =
@@ -1191,8 +1193,13 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                 if (result.Success)
                 {
                     await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
+                    await _planService.DiscoverFeeObjectsAsync(cancellationToken);
+                    RefreshFeeRootProjection();
+                    ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
                     ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
                     RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
+                    await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
+                    RefreshCompletedContainerSelection();
                     _log.Information(LogArea, result.Message);
                 }
                 else
@@ -1585,6 +1592,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         GenerationProgressText = "1/6: FEE-SimObjects und Modellzustand werden gelesen …";
         IReadOnlyList<VisualFeeObject> objects =
             await _planService.DiscoverFeeObjectsAsync(cancellationToken);
+        RefreshFeeRootProjection();
         var objectReadTime = stageWatch.Elapsed;
         stageWatch.Restart();
         GenerationProgressText = "2/6: FEE-Interfaces und Signale werden zugeordnet …";
@@ -1602,6 +1610,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         GenerationProgressText = "3/6: Signalverknüpfungen werden gelesen …";
         IReadOnlyList<VisualFeeSignalLink> signalLinks =
             await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
+        automaticAssignments += _planService.AutoAssignMatches();
         var signalLinkTime = stageWatch.Elapsed;
         stageWatch.Restart();
         GenerationProgressText = "4/6: SimObject-Verknüpfungen werden gelesen …";
@@ -1616,7 +1625,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
         RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
         stageWatch.Restart();
-        GenerationProgressText = "5/6: Vorhandene Container und Provenienz werden abgeglichen …";
+        GenerationProgressText = "5/6: Vollständige Container werden anhand der aktuellen Verknüpfungen geprüft …";
         IReadOnlySet<string> verifiedContainers = await _planService
             .DiscoverVerifiedContainerIdsAsync(cancellationToken);
         var provenanceTime = stageWatch.Elapsed;
@@ -2140,6 +2149,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             .ToDictionary(node => node.Id, node => node.IsExpanded, StringComparer.Ordinal);
         if (!string.Equals(SourceXmlPath, plan.SourceXmlPath, StringComparison.OrdinalIgnoreCase))
             _verifiedContainerIds.Clear();
+        _verifiedContainerIds.IntersectWith(_planService.FindFullyVerifiedContainerIds());
         _isApplyingPlan = true;
         try
         {
@@ -2759,6 +2769,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
     {
         if (item is not ContainerToFeeVisualFeeObjectVM feeObject)
             return false;
+        if (!_planService.IsFeeObjectInSelectedRoots(feeObject.Model)) return false;
 
         if (!string.IsNullOrWhiteSpace(FeeObjectFilter) &&
             !feeObject.Name.Contains(FeeObjectFilter, StringComparison.OrdinalIgnoreCase) &&
@@ -3004,6 +3015,9 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         AvailableFeeObjects.Clear();
         AvailableFeeSignals.Clear();
         AvailableFeeInterfaces.Clear();
+        foreach (var root in AvailableFeeRoots) root.PropertyChanged -= OnFeeRootSelectionChanged;
+        AvailableFeeRoots.Clear();
+        OnPropertyChanged(nameof(SelectedFeeRootsSummary));
         _selectedFeeObject = null;
         _selectedFeeSignal = null;
         _selectedExistingInterface = null;

@@ -152,6 +152,7 @@ internal static partial class Program
             if (containerGenerationViewModel.CanCompareContainerFile)
                 throw new InvalidOperationException("ContainerFile comparison must require an active workspace.");
             VerifyContainerReviewFilterScope(containerGenerationViewModel);
+            VerifyContainerGenerationWorkflowRegressions();
 
             var rockwellPage = new RockwellPage();
             if (rockwellPage.DataContext is not RockwellPageVM rockwellViewModel)
@@ -265,6 +266,7 @@ internal static partial class Program
             }
             VerifyVisualSimObjectColorAggregation();
             VerifyFeeWorkflowRegressions();
+            VerifyCurrentFeeStateRegressions();
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
                 .First(node => node.Kind == VisualNodeKind.Container);
@@ -1018,6 +1020,8 @@ internal static partial class Program
                 false,
                 "",
                 false,
+                "",
+                "",
             ]);
             SetPrivateField(service, "_feeObjects", new[] { visualJoint });
             SetPrivateField(service, "_hasDiscoveredFeeObjects", true);
@@ -1053,6 +1057,15 @@ internal static partial class Program
                         "SIM_TargetPosition")
                 });
             SetPrivateField(service, "_hasDiscoveredFeeSimObjectLinks", true);
+            var targetForCompleteness = service.CurrentPlan!.Assignments.Single().TargetId;
+            if (service.GetSimObjectConnectionState(targetForCompleteness, visualJoint.Id).IsVerified)
+                throw new InvalidOperationException("A single MotionJoint link must not certify missing velocity/feedback endpoints.");
+            SetPrivateField(service, "_feeSimObjectLinks", new[]
+            {
+                new VisualFeeObjectLink(jointGuid.ToString("D"), "InTarget", logicGuid.ToString("D"), "SIM_TargetPosition"),
+                new VisualFeeObjectLink(jointGuid.ToString("D"), "InVelocity", logicGuid.ToString("D"), "SIM_Velocity"),
+                new VisualFeeObjectLink(jointGuid.ToString("D"), "OutValue", logicGuid.ToString("D"), "SIM_ActualPosition"),
+            });
 
             var duplicateLogic = new VisualFeeContainerObject(Guid.NewGuid().ToString("D"),
                 "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder");
@@ -1087,15 +1100,11 @@ internal static partial class Program
             var group = nodes.Single(node => node.Kind == VisualNodeKind.Group && node.Name == "SimObjects");
             var container = nodes.Single(node => node.Kind == VisualNodeKind.Container);
             var availableObject = viewModel.AvailableFeeObjects.Single();
-            if (availableObject.ConnectionDetails.Count != 1 ||
-                !availableObject.ConnectionDetails[0].Contains("InTarget", StringComparison.Ordinal) ||
-                !availableObject.ConnectionDetails[0].Contains("SIM_TargetPosition", StringComparison.Ordinal) ||
-                !availableObject.ConnectionDetails[0].Contains("Logik 'Axis_1'", StringComparison.Ordinal) ||
-                availableObject.ConnectionDetails[0].Contains(logicGuid.ToString("D"), StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    "FEE-SimObject link details must show resolved names and both slots instead of a GUID.");
-            }
+            if (availableObject.ConnectionDetails.Count != 3 ||
+                !availableObject.ConnectionDetails.Any(detail => detail.Contains("InTarget", StringComparison.Ordinal) &&
+                    detail.Contains("SIM_TargetPosition", StringComparison.Ordinal) && detail.Contains("Logik 'Axis_1'", StringComparison.Ordinal)) ||
+                availableObject.ConnectionDetails.Any(detail => detail.Contains(logicGuid.ToString("D"), StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("FEE-SimObject details must show resolved names and every expected endpoint.");
             viewModel.SelectedFeeObject = availableObject;
             if (!ReferenceEquals(viewModel.SelectedTreeNode, simObject) ||
                 !string.Equals(viewModel.SelectedTarget?.Id, target.Id, StringComparison.Ordinal))

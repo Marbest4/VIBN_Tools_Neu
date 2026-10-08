@@ -630,26 +630,39 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Style="{StaticResource VisualPanelHeader}" Text="Verfügbare FEE-SimObjects" />
-                        <TextBox Grid.Row="1" MinHeight="29" Margin="0,0,0,6"
+                        <Expander Grid.Row="1" Margin="0,0,0,6" MaxHeight="145"
+                                  Header="{Binding SelectedFeeRootsSummary}"
+                                  ToolTip="SimObjects nach ihrem höchsten BasicFrame eingrenzen. Automatische Zuordnung berücksichtigt nur ausgewählte Roots.">
+                            <ListBox ItemsSource="{Binding AvailableFeeRoots}" MaxHeight="105" BorderThickness="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Margin="2" IsChecked="{Binding IsSelected, Mode=TwoWay}" Content="{Binding Name}" />
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Expander>
+                        <TextBox Grid.Row="2" MinHeight="29" Margin="0,0,0,6"
                                  Text="{Binding FeeObjectFilter, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Nach Name oder Typ filtern" />
-                        <WrapPanel Grid.Row="2" Margin="0,0,0,6">
+                        <WrapPanel Grid.Row="3" Margin="0,0,0,6">
                             <CheckBox Content="Nur kompatible Objekte"
                                       IsChecked="{Binding ShowOnlyCompatibleFeeObjects}" />
                             <CheckBox Margin="12,0,0,0" Content="Details anzeigen"
                                       IsChecked="{Binding ShowFeeObjectDetails}"
                                       ToolTip="Blendet Live-Verknüpfungen und Plan-Zuordnungen ein oder aus." />
                         </WrapPanel>
-                        <ComboBox Grid.Row="3" MinHeight="28" Margin="0,0,0,6"
+                        <ComboBox Grid.Row="4" MinHeight="28" Margin="0,0,0,6"
                                   ItemsSource="{Binding FeeObjectStatusFilters}"
                                   SelectedItem="{Binding SelectedFeeObjectStatusFilter}"
                                   DisplayMemberPath="DisplayName"
                                   ToolTip="SimObjects nach Zuordnungszustand filtern" />
-                        <ListBox Grid.Row="4" ItemsSource="{Binding FeeObjectsView}"
+                        <ListBox Grid.Row="5" ItemsSource="{Binding FeeObjectsView}"
                                  SelectedItem="{Binding SelectedFeeObject, Mode=TwoWay}"
                                  behaviors:ListBoxRevealBehavior.IsEnabled="{Binding IsSelectionRevealEnabled}"
                                  behaviors:ListBoxRevealBehavior.RevealItem="{Binding SelectedFeeObject}"
@@ -736,7 +749,7 @@
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
-                        <WrapPanel Grid.Row="5" Margin="0,6,0,0" ToolTip="Farben entsprechen dem Containerbaum; gelb kann in dieser Liste leer sein, da sie nur bereits vorhandene FEE-Objekte enthält.">
+                        <WrapPanel Grid.Row="6" Margin="0,6,0,0" ToolTip="Farben entsprechen dem Containerbaum; gelb kann in dieser Liste leer sein, da sie nur bereits vorhandene FEE-Objekte enthält.">
                             <Border Width="13" Height="13" Background="#FFC6EFCE"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="gültig"/>
                             <Border Width="13" Height="13" Background="#FFE8D9F3"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="Verknüpfung fehlt"/>
                             <Border Width="13" Height="13" Background="#FFFFC7CE"/><TextBlock Margin="3,0,0,0" FontSize="10" Text="Fehler"/>
