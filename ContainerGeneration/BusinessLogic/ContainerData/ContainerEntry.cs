@@ -105,6 +105,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
                         nameof(Signal),
                         previousValue,
                         value));
+                IsChangeAcknowledged = false;
                 _signal = value;
                 OnPropertyChanged();
 
@@ -139,6 +140,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
                         nameof(Slot),
                         _slot,
                         value));
+                IsChangeAcknowledged = false;
                 _slot = value;
                 OnPropertyChanged();
                 RefreshAssignmentWarning();
@@ -163,6 +165,22 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         private string _reviewMessage = string.Empty;
         private bool _isManuallyEdited;
         private string _validationError = string.Empty;
+        private bool _isChangeAcknowledged;
+
+        [XmlIgnore]
+        public bool IsChangeAcknowledged
+        {
+            get => _isChangeAcknowledged;
+            set
+            {
+                if (SetPropertyChange(ref _isChangeAcknowledged, value))
+                    OnPropertyChanged(nameof(HasUnconfirmedChange));
+            }
+        }
+
+        [XmlIgnore]
+        public bool HasUnconfirmedChange => !IsChangeAcknowledged &&
+            ReviewState is not ContainerEntryReviewState.None and not ContainerEntryReviewState.Preserved;
 
         /// <summary>
         /// Runtime-only provenance used by the safe reimport workflow.
@@ -175,7 +193,11 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
             set
             {
                 if (SetPropertyChange(ref _reviewState, value))
+                {
+                    IsChangeAcknowledged = false;
                     OnPropertyChanged(nameof(ReviewStateText));
+                    OnPropertyChanged(nameof(HasUnconfirmedChange));
+                }
             }
         }
 
@@ -258,6 +280,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
             clone.ReviewState = this.ReviewState;
             clone.ReviewMessage = this.ReviewMessage;
             clone.IsManuallyEdited = this.IsManuallyEdited;
+            clone.IsChangeAcknowledged = this.IsChangeAcknowledged;
             clone.ValidationError = this.ValidationError;
 
             return clone;
@@ -308,6 +331,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
             WorkspaceValueChanging?.Invoke(
                 this,
                 new WorkspaceValueChangingEventArgs(propertyName, field, value));
+            IsChangeAcknowledged = false;
             field = value;
             OnPropertyChanged(propertyName);
         }

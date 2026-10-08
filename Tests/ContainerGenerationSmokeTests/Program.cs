@@ -58,6 +58,7 @@ internal static class Program
         ValidateRequirementsDiagnosticsAndDataTypeCase();
         ValidateWorkspaceBlockingMarker();
         ValidateWorkspaceContainerMergeAndAssignmentWarning();
+        ContainerGenerationResilienceTests.Verify();
         ValidateDecorationExclusionPolicy();
         ValidateSlotMultiplicityPolicy();
         ValidateBestEffortSignalConflictPlanning();
