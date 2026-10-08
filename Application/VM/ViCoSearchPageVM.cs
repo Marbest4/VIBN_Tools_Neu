@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Concurrent;
 using System.Collections;
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Input;
 using VIBN_Tools.Core.ViCo;
 using VIBN_Tools.GlobalClasses;
@@ -44,6 +45,10 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     private bool? _lastObservedOnlineConfiguration;
     private IReadOnlyList<ViCoWorkstationRowVM> _selectedWorkstations = Array.Empty<ViCoWorkstationRowVM>();
     private bool _columnPreferencesLoaded;
+    private readonly IViCoProjectDocumentsService _documentsService;
+    private CancellationTokenSource? _documentsCancellation;
+    private readonly ConcurrentDictionary<string, (ViCoProjectDocumentsResult Result, DateTimeOffset CheckedAt)> _documentsCache = new(StringComparer.OrdinalIgnoreCase);
+    private bool _disposed;
     private bool _searchVisibleColumnsOnly;
     private DateTimeOffset? _displayedDataUpdatedAt;
 
@@ -63,7 +68,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         IViCoLastActiveSnapshotStore lastActiveSnapshotStore,
         ViCoWorkspaceContext workspaceContext,
         Action<IEnumerable<ViCoWorkstation>> synchronizeWorkstations,
-        IApplicationLog? log = null)
+        IApplicationLog? log = null,
+        IViCoProjectDocumentsService? documentsService = null)
     {
         _catalog = catalog;
         _search = search;
@@ -81,6 +87,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         _workspaceContext = workspaceContext;
         _synchronizeWorkstations = synchronizeWorkstations;
         _log = log ?? NullApplicationLog.Instance;
+        _documentsService = documentsService ?? new VIBN_Tools.Infrastructure.ViCo.FileSystemProjectDocumentsService();
 
         RefreshCommand = GetCommandBindingAsync(RefreshFromBestAvailableSourceAsync);
         ConnectRemoteCommand = GetCommandBinding(ConnectRemote);
@@ -109,6 +116,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         OnlineColumn = AddColumn("online", "Online", true);
         PlanningColumn = AddColumn("planning", "Planung", true);
         WorkingColumn = AddColumn("working", "In Arbeit", true);
+        DocumentsColumn = AddColumn("documents", "00_Documents", true);
         PlanningStartColumn = AddColumn("planningStart", "Startdatum Planung", true);
         PlanningEndColumn = AddColumn("planningEnd", "Enddatum Planung", true);
         WorkingStartColumn = AddColumn("workingStart", "Startdatum In Arbeit", true);
@@ -153,6 +161,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
     public ViCoColumnOptionVM OnlineColumn { get; }
     public ViCoColumnOptionVM PlanningColumn { get; }
     public ViCoColumnOptionVM WorkingColumn { get; }
+    public ViCoColumnOptionVM DocumentsColumn { get; }
     public ViCoColumnOptionVM PlanningStartColumn { get; }
     public ViCoColumnOptionVM PlanningEndColumn { get; }
     public ViCoColumnOptionVM WorkingStartColumn { get; }
@@ -304,6 +313,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
                 SelectedProject = null;
             }
             UpdatePathInformation();
+            RequestDocumentsRefresh();
         }
     }
 
@@ -406,6 +416,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             OnPropertyChanged(nameof(SelectedProjectStart));
             OnPropertyChanged(nameof(SelectedProjectEnd));
             UpdatePathInformation();
+            RequestDocumentsRefresh();
         }
     }
 
@@ -493,6 +504,10 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
     public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
+        _documentsCancellation?.Cancel();
+        _documentsCancellation?.Dispose();
         _availabilityCancellation?.Cancel();
         _availabilityCancellation?.Dispose();
         _searchDebounceCancellation?.Cancel();
@@ -653,6 +668,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
 
     private void ApplyWorkstations(IReadOnlyList<ViCoWorkstation> workstations)
     {
+        _documentsCache.Clear();
         _allWorkstations = workstations;
         _synchronizeWorkstations(_allWorkstations);
         OnPropertyChanged(nameof(CanOpenPcProjects));
@@ -797,6 +813,73 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         SelectedWorkstation = Results.FirstOrDefault(item =>
             string.Equals(item.PcName, selected, StringComparison.OrdinalIgnoreCase)) ?? Results.FirstOrDefault();
         StartAvailabilityRefresh();
+        RequestDocumentsRefresh();
+    }
+
+    private string ProjectForRow(ViCoWorkstationRowVM row) =>
+        ReferenceEquals(row, SelectedWorkstation) && !string.IsNullOrWhiteSpace(SelectedProject)
+            ? SelectedProject!
+            : row.Model.PlanningProjects.Concat(row.Model.WorkingProjects).FirstOrDefault() ?? SearchText;
+
+    private void RequestDocumentsRefresh()
+    {
+        if (_disposed) return;
+        _documentsCancellation?.Cancel();
+        _documentsCancellation?.Dispose();
+        _documentsCancellation = null;
+        if (!DocumentsColumn.IsVisible) return;
+        _documentsCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetimeCancellation.Token);
+        _ = RefreshDocumentsAsync(Results.ToArray(), _pathResolver, _documentsCancellation.Token);
+    }
+
+    private async Task RefreshDocumentsAsync(IReadOnlyList<ViCoWorkstationRowVM> rows,
+        IViCoRelatedPathResolver? resolver, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(150, cancellationToken);
+            var reads = new Dictionary<string, Task<ViCoProjectDocumentsResult>>(StringComparer.OrdinalIgnoreCase);
+            async Task ReadRow(ViCoWorkstationRowVM row)
+            {
+                var project = ProjectForRow(row);
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var path = string.IsNullOrWhiteSpace(project) ? null : resolver?.Resolve(row.Model, project, ViCoRelatedPathKind.Simulation);
+                    if (string.IsNullOrWhiteSpace(path))
+                    {
+                        row.SetDocuments(project, "Projektpfad nicht gefunden");
+                        return;
+                    }
+                    row.SetDocuments(project, "Wird geprüft …", Path.Combine(path, "00_Documents"));
+                    if (!reads.TryGetValue(path, out var read))
+                    {
+                        read = _documentsCache.TryGetValue(path, out var cached) && DateTimeOffset.Now - cached.CheckedAt < TimeSpan.FromMinutes(5)
+                            ? Task.FromResult(cached.Result) : ReadAndCacheDocumentsAsync(path, cancellationToken);
+                        reads[path] = read;
+                    }
+                    var result = await read.WaitAsync(TimeSpan.FromSeconds(8), cancellationToken);
+                    if (!cancellationToken.IsCancellationRequested && Results.Contains(row))
+                        row.SetDocuments(project, result.DisplayText, result.FolderPath, result.Detail);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+                catch (Exception exception)
+                {
+                    if (!cancellationToken.IsCancellationRequested && Results.Contains(row))
+                        row.SetDocuments(project, "Ordner nicht erreichbar", detail: exception is TimeoutException ? "Zeitüberschreitung beim Serverzugriff (8 Sekunden)." : exception.Message);
+                }
+            }
+            await Task.WhenAll(rows.Select(ReadRow));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+    }
+
+    private async Task<ViCoProjectDocumentsResult> ReadAndCacheDocumentsAsync(string path, CancellationToken cancellationToken)
+    {
+        var result = await _documentsService.ReadAsync(path, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        _documentsCache[path] = (result, DateTimeOffset.Now);
+        return result;
     }
 
     private async Task ApplySearchDebouncedAsync()
@@ -1257,9 +1340,7 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         var missing = new List<string>();
         foreach (var row in rows)
         {
-            var project = ReferenceEquals(row, SelectedWorkstation) && !string.IsNullOrWhiteSpace(SelectedProject)
-                ? SelectedProject
-                : row.Model.PlanningProjects.Concat(row.Model.WorkingProjects).FirstOrDefault() ?? SearchText;
+            var project = ProjectForRow(row);
             var path = _pathResolver.Resolve(row.Model, project ?? string.Empty, kind);
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -1420,7 +1501,10 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         if (SearchVisibleColumnsOnly)
             ApplySearch();
         if (_columnPreferencesLoaded)
+        {
             _ = SaveDisplayPreferencesAsync();
+            RequestDocumentsRefresh();
+        }
     }
 
     private void ApplyColumnPreferences(ViCoAutoRefreshSettings settings)
@@ -1444,6 +1528,9 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
             }
             foreach (var column in ColumnOptions)
                 column.Apply(visible.Contains(column.Key));
+            // Existing preferences predate this column. Show it once, then
+            // persist the user's explicit visibility choice with layout v1.
+            if (settings.ColumnLayoutVersion < 1) DocumentsColumn.Apply(true);
         }
         else
         {
@@ -1460,7 +1547,8 @@ public sealed class ViCoSearchPageVM : MvvmBase, IDisposable
         OtherColumn.IsVisible && ProjectIpColumn.IsVisible,
         ColumnOptions.Where(column => column.IsVisible).Select(column => column.Key).ToArray(),
         SearchVisibleColumnsOnly,
-        ViCoAutoRefreshPolicy.Normalize(OnlineRefreshIntervalMinutes));
+        ViCoAutoRefreshPolicy.Normalize(OnlineRefreshIntervalMinutes),
+        ColumnLayoutVersion: 1);
 
     private static string BuildWorkstationLoadStatus(ViCoWorkstationSnapshot snapshot)
     {

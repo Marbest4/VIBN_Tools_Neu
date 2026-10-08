@@ -6,7 +6,8 @@ public sealed record ViCoAutoRefreshSettings(
     bool ShowExtendedInformation = false,
     IReadOnlyList<string>? VisibleColumns = null,
     bool SearchVisibleColumnsOnly = false,
-    int OnlineIntervalMinutes = 5)
+    int OnlineIntervalMinutes = 5,
+    int ColumnLayoutVersion = 0)
 {
     public static ViCoAutoRefreshSettings Default { get; } = new(60, false, null, false, 5);
 }

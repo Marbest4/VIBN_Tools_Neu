@@ -1,9 +1,8 @@
 namespace VIBN_Tools.Application.Behaviors;
 
 /// <summary>
-/// Recognizes the narrow WPF virtualization race that can occur when a
-/// DataGrid's items are replaced while its container generator still owns a
-/// deferred index request. Other argument errors remain fatal and visible.
+/// Recognizes stale WPF item indices and negative layout sizes. Unrelated
+/// argument errors are not hidden by this recovery policy.
 /// </summary>
 public static class WpfVirtualizationExceptionPolicy
 {
@@ -24,6 +23,8 @@ public static class WpfVirtualizationExceptionPolicy
         var candidate = exception;
         while (candidate is not null)
         {
+            if (candidate is ArgumentException && IsNegativeLayoutSize(candidate, diagnosticText ?? exception.ToString()))
+                return true;
             if (candidate is ArgumentOutOfRangeException argumentError &&
                 string.Equals(argumentError.ParamName, "index", StringComparison.OrdinalIgnoreCase))
             {
@@ -39,4 +40,15 @@ public static class WpfVirtualizationExceptionPolicy
 
         return false;
     }
+
+    private static bool IsNegativeLayoutSize(Exception exception, string diagnostic) =>
+        exception.Message.Contains("Width and Height must be non-negative", StringComparison.OrdinalIgnoreCase) ||
+        exception.Message.Contains("Breite und die Höhe dürfen nicht negativ", StringComparison.OrdinalIgnoreCase) ||
+        diagnostic.Contains("System.Windows.Size..ctor", StringComparison.Ordinal) ||
+        diagnostic.Contains("System.Windows.Rect..ctor", StringComparison.Ordinal) ||
+        diagnostic.Contains("System.Windows.Size.set_Width", StringComparison.Ordinal) ||
+        diagnostic.Contains("System.Windows.Size.set_Height", StringComparison.Ordinal) ||
+        diagnostic.Contains("SyncUniformSizeFlags", StringComparison.Ordinal) &&
+        (exception.Message.Contains("negative", StringComparison.OrdinalIgnoreCase) ||
+         exception.Message.Contains("negativ", StringComparison.OrdinalIgnoreCase));
 }

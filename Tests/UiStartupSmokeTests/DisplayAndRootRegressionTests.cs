@@ -21,13 +21,16 @@ internal static partial class Program
         var otherInterface = sameSource with { InterfaceGuidString = Guid.NewGuid().ToString("D") };
         var otherLocation = sameSource with { Address = "%I0.1" };
         var warning = new ContainerToFeeVisualFeeSignalVM(signal, [signal, sameSource], null);
-        if (warning.HasError || !warning.HasWarning || warning.StateBackground != "#FFFFF2CC")
+        if (warning.HasError || !warning.HasWarning || warning.StateBackground != "#FFE8D9F3")
             throw new InvalidOperationException("An equal name from the same source must only warn.");
         foreach (var unique in new[] { otherInterface, otherLocation })
         {
             var row = new ContainerToFeeVisualFeeSignalVM(signal, [signal, unique], null);
-            if (row.HasError || row.HasWarning || row.StateBackground != "#FFC6EFCE")
-                throw new InvalidOperationException("An equal name from a different source was not unique/green.");
+            if (row.HasError || row.HasWarning || row.StateBackground != "#FFE8D9F3")
+                throw new InvalidOperationException("A unique but unassigned signal was not purple.");
+            var assigned = new ContainerToFeeVisualFeeSignalVM(signal, [signal, unique], null, ["verified-node"]);
+            if (!assigned.IsAssigned || assigned.StateBackground != "#FFC6EFCE")
+                throw new InvalidOperationException("A unique assigned signal was not green.");
         }
     }
 

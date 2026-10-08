@@ -36,6 +36,18 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 	};
 
 	public string ProjectSummary => Model.ProjectSummary;
+    private string _documentsSummary = "Projektpfad wird geprüft …";
+    private string _documentsDetails = "";
+    public string DocumentsSummary => _documentsSummary;
+    public string DocumentsDetails => _documentsDetails;
+
+    public void SetDocuments(string project, string summary, string folder = "", string detail = "")
+    {
+        _documentsSummary = summary;
+        _documentsDetails = string.Join(Environment.NewLine, new[] { project, folder, summary, detail }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        OnPropertyChanged(nameof(DocumentsSummary));
+        OnPropertyChanged(nameof(DocumentsDetails));
+    }
 	public IReadOnlyList<ViCoProjectCardItemVM> PlanningProjects => Model.PlanningProjectCards
 		.Select(card => new ViCoProjectCardItemVM(card))
 		.Concat(Model.PlanningProjectCards.Count == 0

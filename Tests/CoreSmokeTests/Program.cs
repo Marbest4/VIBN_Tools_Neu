@@ -39,6 +39,8 @@ try
     await VerifyWorkstationStartupSnapshotAsync(temporaryRoot);
     Console.WriteLine("Running ViCo project identity and path smoke test...");
     VerifyProjectIdentityAndPaths(temporaryRoot);
+    Console.WriteLine("Running project documents and selection race checks...");
+    await ProjectDocumentsSmokeTests.VerifyAsync(temporaryRoot);
     Console.WriteLine("Running Remote Desktop profile smoke test...");
     VerifyRemoteDesktopProfile();
     Console.WriteLine("Running Level9 role policy smoke test...");
@@ -426,9 +428,9 @@ static async Task VerifyAutoRefreshPreferencesAsync(string temporaryRoot)
 
     Assert(ViCoAutoRefreshSettings.Default.IntervalMinutes == 60 && ViCoAutoRefreshSettings.Default.OnlineIntervalMinutes == 5,
         "General/online refresh defaults must be 60/5 minutes.");
-    await store.SaveAsync(new ViCoAutoRefreshSettings(60, true, ["pc"], true, 12));
+    await store.SaveAsync(new ViCoAutoRefreshSettings(60, true, ["pc"], true, 12, ColumnLayoutVersion: 1));
     var separate = await store.LoadAsync();
-    Assert(separate.IntervalMinutes == 60 && separate.OnlineIntervalMinutes == 12 && separate.SearchVisibleColumnsOnly,
+    Assert(separate.IntervalMinutes == 60 && separate.OnlineIntervalMinutes == 12 && separate.SearchVisibleColumnsOnly && separate.ColumnLayoutVersion == 1,
         "Saving separate online preferences lost another per-user setting.");
     await File.WriteAllTextAsync(file, "{\"intervalMinutes\":20,\"showExtendedInformation\":true}");
     var legacy = await store.LoadAsync();

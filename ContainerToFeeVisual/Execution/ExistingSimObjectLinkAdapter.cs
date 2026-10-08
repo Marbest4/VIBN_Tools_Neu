@@ -24,6 +24,9 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         CancellationToken cancellationToken)
     {
+        var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan);
+        if (selectedIds.Count == 0)
+            return new VisualExecutionResult(true, "Keine Container ausgewählt; keine SimObject-Verknüpfungen geändert.", []);
         if (Services.Connection?.CanUseFeeFeatures != true)
             return Failure(FeeConnectionService.MissingConnectionMessage, "FEE_NOT_CONNECTED");
 
@@ -39,7 +42,8 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects);
+            var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects,
+                includedContainerIds: selectedIds, includeSignals: false);
             if (!binding.Success)
                 return new VisualExecutionResult(false, binding.Issue!.Message, [binding.Issue]);
 

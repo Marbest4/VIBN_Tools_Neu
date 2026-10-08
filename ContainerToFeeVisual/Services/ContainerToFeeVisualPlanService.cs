@@ -1759,16 +1759,21 @@ public sealed partial class ContainerToFeeVisualPlanService
         if (plan is null)
             return new VisualExecutionResult(false, "Es ist kein visueller Plan geladen.", Validate().Issues);
 
+        if (RuntimeVisualPlanBinder.SelectedContainerIds(plan).Count == 0)
+            return new VisualExecutionResult(true, "Keine Container ausgewählt; keine SimObject-Verknüpfungen geändert.", []);
+
         if (_runtimeObjects.Count == 0)
         {
             await DiscoverFeeObjectsAsync(cancellationToken);
             AutoAssignMatches();
         }
 
-        var validation = Validate();
-        if (!validation.IsValid)
-            return new VisualExecutionResult(false, "Der Plan enthält Fehler und wurde nicht verknüpft.", validation.Issues);
-
+        var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan);
+        var selectedTargets = plan.Targets.Where(item => selectedIds.Contains(item.ContainerId)).Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        var errors = Validate().Issues.Where(issue => issue.Severity == VisualIssueSeverity.Error && issue.NodeId is not null &&
+            selectedTargets.Contains(issue.NodeId) && issue.Code is "SINGLE_TARGET_HAS_MULTIPLE_OBJECTS" or "ASSIGNED_FEE_OBJECT_MISSING" or "ASSIGNED_FEE_OBJECT_INCOMPATIBLE").ToArray();
+        if (errors.Length > 0)
+            return new VisualExecutionResult(false, "Die ausgewählten SimObject-Zuordnungen enthalten Fehler.", errors);
         return await _linkExecutor.ExecuteAsync(plan, _runtimeObjects, cancellationToken);
     }
 
@@ -1782,6 +1787,18 @@ public sealed partial class ContainerToFeeVisualPlanService
         var plan = CurrentPlan;
         if (plan is null)
             return new VisualExecutionResult(false, "Es ist kein visueller Plan geladen.", Validate().Issues);
+        if (RuntimeVisualPlanBinder.SelectedContainerIds(plan).Count == 0)
+            return new VisualExecutionResult(true, "Keine Container ausgewählt; keine Signalverknüpfungen geändert.", []);
+        var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan);
+        var errors = plan.Nodes.Where(node => node.ContainerId is not null && selectedIds.Contains(node.ContainerId) &&
+                node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal && !plan.IsSignalRemoved(node.Id))
+            .Where(node => string.IsNullOrWhiteSpace(node.Name) ||
+                !ContainerMetadataCatalog.TryGet(plan.FindNode(node.ContainerId!)!.TypeName, out var descriptor) ||
+                !descriptor.Slots.Contains(plan.GetEffectiveSlot(node)))
+            .Select(node => new VisualIssue(VisualIssueSeverity.Error, "SIGNAL_LINK_SLOT_INVALID",
+                $"Signal '{node.Name}' besitzt keinen gültigen Slot für den ausgewählten Container.", node.Id)).ToArray();
+        if (errors.Length > 0)
+            return new VisualExecutionResult(false, "Die ausgewählten Signale enthalten ungültige Namen oder Slots.", errors);
         if (_runtimeObjects.Count == 0)
         {
             await DiscoverFeeObjectsAsync(cancellationToken);

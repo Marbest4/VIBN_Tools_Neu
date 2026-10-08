@@ -28,6 +28,7 @@ public sealed class Fee2ContainerEditVM : NotifyBase
         WriteXmlCommand = new RelayCommand(WriteXml);
     }
     public Fee2ContainerRootEditor Editor => _editor;
+    public IReadOnlyList<string> SupportedContainerTypes => FeeContainerLiveReconstructor.SupportedContainerTypes;
     public ContainerGenerationSettings Settings { get; } = new() { GroupByComponent = true, GroupByType = true };
     public string Xml { get => _xml; set { if (SetPropertyChange(ref _xml, value)) _xmlDirty = true; } }
     public string Status { get => _status; private set => SetPropertyChange(ref _status, value); }

@@ -247,6 +247,17 @@
 							</DataTemplate>
 						</DataGridTemplateColumn.CellTemplate>
 					</DataGridTemplateColumn>
+                    <DataGridTemplateColumn Header="00_Documents" Width="250" SortMemberPath="DocumentsSummary"
+                                            Visibility="{Binding Data.DocumentsColumn.IsVisible, Source={StaticResource ViewModelProxy}, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <ScrollViewer MaxHeight="100" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                              ToolTip="{Binding DocumentsDetails}">
+                                    <TextBlock Padding="5,3" Text="{Binding DocumentsSummary}" TextWrapping="Wrap" />
+                                </ScrollViewer>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 					<DataGridTemplateColumn Header="Planung" Width="240" SortMemberPath="PlanningProjectSummary"
                                             Visibility="{Binding Data.PlanningColumn.IsVisible, Source={StaticResource ViewModelProxy}, Converter={StaticResource BooleanToVisibilityConverter}}">
 						<DataGridTemplateColumn.CellTemplate>

@@ -29,6 +29,7 @@ internal static partial class Program
         VerifyReverseGroupingAndEditIsolation();
         VerifyCombinedReverseExport();
         VerifyDeletedTreeIdentity(directory);
+        VerifyLayoutAndLinkScopeRegressions(directory);
     }
 
     private static void VerifyWorkstationColumnReset()

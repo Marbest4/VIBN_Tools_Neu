@@ -25,6 +25,9 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,
         CancellationToken cancellationToken)
     {
+        var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan);
+        if (selectedIds.Count == 0)
+            return new VisualExecutionResult(true, "Keine Container ausgewählt; keine Signalverknüpfungen geändert.", []);
         var selectedInterfaceGuids = plan.ExistingInterfaceSelections
             .Select(item => item.InterfaceGuid)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -35,7 +38,8 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
             return Failure("Bitte mindestens ein vorhandenes Interface auswählen und FEE aktualisieren.", "SIGNAL_LINK_INTERFACE_REQUIRED");
 
         cancellationToken.ThrowIfCancellationRequested();
-        var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects);
+        var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects,
+            includedContainerIds: selectedIds, bindSimObjects: false);
         if (!binding.Success)
             return new VisualExecutionResult(false, binding.Issue!.Message, [binding.Issue]);
 
@@ -122,6 +126,12 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                 }
             }
 
+            else if (container is ISimObjectOwner && container is ISimObjectFindOrSelect selectable)
+            {
+                var primaryIssue = BindSignalOwner(plan, item.PlanNode, selectable, runtimeObjects);
+                if (primaryIssue is not null) { issues.Add(primaryIssue); continue; }
+            }
+
             try
             {
                 switch (container)
@@ -160,6 +170,29 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                 ? $"Vorhandene Signale wurden für {linkedContainers} Container verknüpft; es wurden keine FEE-Objekte erzeugt."
                 : "Einige vorhandene Signale konnten nicht verknüpft werden. Details stehen in der Validierung.",
             issues);
+    }
+
+    private static VisualIssue? BindSignalOwner(VisualPlan plan, VisualNode container,
+        ISimObjectFindOrSelect owner, IReadOnlyDictionary<string, FeeAbstractObject> objects)
+    {
+        var targets = plan.Targets.Where(item => item.ContainerId == container.Id).ToArray();
+        var runtimeTargets = owner.GetSimObjectTargets().ToArray();
+        if (targets.Length != runtimeTargets.Length)
+            return new VisualIssue(VisualIssueSeverity.Error, "SIGNAL_OWNER_TARGET_MISMATCH", "Signalziel passt nicht zum Containertyp.", container.Id);
+        for (var index = 0; index < targets.Length; index++)
+        {
+            var explicitAssignments = plan.Assignments.Where(item => item.TargetId == targets[index].Id).ToArray();
+            var candidates = explicitAssignments.Length > 0
+                ? explicitAssignments.Select(item => objects.GetValueOrDefault(item.FeeObjectId)).Where(item => item is not null).Cast<FeeAbstractObject>().ToArray()
+                : objects.Values.Where(item => string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                    runtimeTargets[index].AllowedType.IsInstanceOfType(item)).ToArray();
+            if (candidates.Length == 0 || explicitAssignments.Length > 0 && candidates.Length != explicitAssignments.Length ||
+                !targets[index].AllowMultiSelect && candidates.Length > 1 || candidates.Any(item => !runtimeTargets[index].AllowedType.IsInstanceOfType(item)))
+                return new VisualIssue(VisualIssueSeverity.Error, "EXISTING_SIGNAL_OWNER_NOT_UNIQUE",
+                    $"Vorhandenes Signalziel '{container.Name}' ({runtimeTargets[index].AllowedType.Name}) fehlt oder ist nicht eindeutig. Einen konkreten Treffer zuordnen.", container.Id);
+            runtimeTargets[index].AssignObjects(candidates.ToList());
+        }
+        return null;
     }
 
     internal static async Task<IReadOnlyList<FeeLogic>> ReadExistingLogicsAsync(CancellationToken cancellationToken)

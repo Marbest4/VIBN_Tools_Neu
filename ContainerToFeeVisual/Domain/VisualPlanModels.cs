@@ -437,6 +437,7 @@ public sealed class VisualPlan
     private readonly IReadOnlyDictionary<string, string> _sourceContainerTypes;
     private readonly List<VisualIssue> _sourceIssues;
     private readonly HashSet<string> _sourceNodeIds;
+    private readonly IReadOnlyDictionary<string, SourceTypeStructure> _sourceTypeStructures;
 
     internal VisualPlan(
         string sourceXmlPath,
@@ -469,6 +470,18 @@ public sealed class VisualPlan
         Roots = roots;
         _edges = [.. edges];
         _targets = [.. targets];
+        _sourceTypeStructures = _sourceContainerTypes.Keys.ToDictionary(containerId => containerId, containerId =>
+        {
+            var structuralNodes = nodes.Where(node => node.ContainerId == containerId &&
+                (node.Kind is VisualNodeKind.Logic or VisualNodeKind.TechnicalHelper or VisualNodeKind.SimObjectTarget ||
+                 node.Kind == VisualNodeKind.Group && node.Name == "SimObjects")).ToArray();
+            var ids = structuralNodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
+            var signalIds = nodes.Where(node => node.ContainerId == containerId &&
+                node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal).Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
+            return new SourceTypeStructure(structuralNodes, targets.Where(target => target.ContainerId == containerId).ToArray(),
+                edges.Where(edge => ids.Contains(edge.SourceId) || ids.Contains(edge.TargetId) ||
+                    edge.Kind == VisualEdgeKind.SignalToSlot && signalIds.Contains(edge.SourceId)).ToArray());
+        }, StringComparer.Ordinal);
         _assignments = assignments is null ? [] : [.. assignments];
         _creationRequests = creationRequests is null ? [] : [.. creationRequests];
         _generationSelections = generationSelections is null ? [] : [.. generationSelections];
@@ -670,6 +683,8 @@ public sealed class VisualPlan
             !ContainerMetadataCatalog.TryGet(item.TypeName, out var descriptor))
             return false;
 
+        RemoveSourceTypeStructure(container.Id);
+
         container.TypeName = item.TypeName;
         container.SupportsCreation = descriptor.SupportsCreation;
         foreach (var signal in _nodes.Where(node =>
@@ -747,6 +762,14 @@ public sealed class VisualPlan
             }
         }
 
+        foreach (var signal in _nodes.Where(node => node.ContainerId == container.Id &&
+                     node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal && !IsSignalRemoved(node.Id)))
+        {
+            _edges.Add(new VisualEdge(
+                $"edge:type-override:signal:{StableId.Encode(container.Id)}:{StableId.Encode(signal.Id)}",
+                signal.Id, logicNodeId ?? container.Id, VisualEdgeKind.SignalToSlot, GetEffectiveSlot(signal)));
+        }
+
         return true;
     }
 
@@ -772,10 +795,12 @@ public sealed class VisualPlan
         foreach (var node in _nodes)
             node.RemoveChildren(child => child.Id.StartsWith(prefix, StringComparison.Ordinal));
         _targets.RemoveAll(target => target.Id.StartsWith(prefix, StringComparison.Ordinal));
-        _edges.RemoveAll(edge => edge.Id.StartsWith("edge:type-override:", StringComparison.Ordinal) &&
-                                 (edge.SourceId.StartsWith(prefix, StringComparison.Ordinal) ||
-                                  edge.TargetId.StartsWith(prefix, StringComparison.Ordinal)));
+        _edges.RemoveAll(edge => edge.Id.StartsWith($"edge:type-override:signal:{StableId.Encode(containerId)}:", StringComparison.Ordinal) ||
+                                edge.Id.StartsWith("edge:type-override:", StringComparison.Ordinal) &&
+                                (edge.SourceId.StartsWith(prefix, StringComparison.Ordinal) ||
+                                 edge.TargetId.StartsWith(prefix, StringComparison.Ordinal)));
         _assignments.RemoveAll(assignment => assignment.TargetId.StartsWith(prefix, StringComparison.Ordinal));
+        RestoreSourceTypeStructure(containerId);
         if (FindNode(containerId) is { } container &&
             _sourceContainerTypes.TryGetValue(containerId, out var sourceType))
         {
@@ -791,6 +816,33 @@ public sealed class VisualPlan
             }
         }
     }
+
+    private void RemoveSourceTypeStructure(string containerId)
+    {
+        if (!_sourceTypeStructures.TryGetValue(containerId, out var source)) return;
+        var ids = source.Nodes.Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
+        _nodes.RemoveAll(node => ids.Contains(node.Id));
+        foreach (var node in _nodes) node.RemoveChildren(child => ids.Contains(child.Id));
+        _targets.RemoveAll(target => target.ContainerId == containerId);
+        var edgeIds = source.Edges.Select(edge => edge.Id).ToHashSet(StringComparer.Ordinal);
+        _edges.RemoveAll(edge => ids.Contains(edge.SourceId) || ids.Contains(edge.TargetId) || edgeIds.Contains(edge.Id));
+        _assignments.RemoveAll(assignment => source.Targets.Any(target => target.Id == assignment.TargetId));
+    }
+
+    private void RestoreSourceTypeStructure(string containerId)
+    {
+        if (!_sourceTypeStructures.TryGetValue(containerId, out var source)) return;
+        foreach (var node in source.Nodes)
+            if (FindNode(node.Id) is null) _nodes.Add(node);
+        foreach (var node in source.Nodes)
+            if (FindNode(node.ParentId ?? "") is { } parent && !parent.Children.Any(child => child.Id == node.Id)) parent.AddChild(node);
+        foreach (var target in source.Targets)
+            if (!_targets.Any(item => item.Id == target.Id)) _targets.Add(target);
+        foreach (var edge in source.Edges)
+            if (!_edges.Any(item => item.Id == edge.Id)) _edges.Add(edge);
+    }
+
+    private sealed record SourceTypeStructure(VisualNode[] Nodes, VisualSimObjectTarget[] Targets, VisualEdge[] Edges);
 
     internal void ReplaceRemovedSignalNodeIds(IEnumerable<string> nodeIds)
     {

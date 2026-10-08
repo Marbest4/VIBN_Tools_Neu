@@ -24,14 +24,29 @@ internal static class RuntimeVisualPlanBinder
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlySet<string>? excludedContainerIds = null,
         bool omitInvalidSlotEntries = false,
-        bool omitInvalidObjectAssignments = false)
+        bool omitInvalidObjectAssignments = false,
+        IReadOnlySet<string>? includedContainerIds = null,
+        bool bindSimObjects = true,
+        bool includeSignals = true)
     {
         var effectiveDocument = CreateEffectiveDocument(plan, omitInvalidSlotEntries);
+        if (includedContainerIds is not null)
+        {
+            var elements = effectiveDocument.Descendants("Container").ToArray();
+            var nodes = plan.Nodes.Where(node => node.Kind == VisualNodeKind.Container).ToArray();
+            if (elements.Length != nodes.Length)
+                return Failure("Containerdatei und Plan stimmen nicht überein.", "LEGACY_CONTAINER_COUNT_MISMATCH", []);
+            for (var index = 0; index < elements.Length; index++)
+                if (!includedContainerIds.Contains(nodes[index].Id)) elements[index].Remove();
+        }
+        if (!includeSignals)
+            foreach (var dataList in effectiveDocument.Descendants("DataList")) dataList.RemoveNodes();
         var (containers, unknownSignals) =
             ContainerToFeeService.ReadInContainerXmlData(effectiveDocument);
         var containerNodes = plan.Nodes
             .Where(node => node.Kind == VisualNodeKind.Container &&
-                           ContainerMetadataCatalog.TryGet(node.TypeName, out _))
+                           ContainerMetadataCatalog.TryGet(node.TypeName, out _) &&
+                           (includedContainerIds is null || includedContainerIds.Contains(node.Id)))
             .ToArray();
         if (containerNodes.Length != containers.Count)
         {
@@ -42,8 +57,14 @@ internal static class RuntimeVisualPlanBinder
                 unknownSignals);
         }
 
-        foreach (var runtimeObject in runtimeObjects.Values.OfType<IAssignableSimObject>())
-            runtimeObject.AssignedContainer = null!;
+        if (bindSimObjects)
+        {
+            var selectedObjectIds = plan.Assignments.Where(item => includedContainerIds is null ||
+                    includedContainerIds.Contains(plan.FindTarget(item.TargetId)?.ContainerId ?? ""))
+                .Select(item => item.FeeObjectId).ToHashSet(StringComparer.Ordinal);
+            foreach (var pair in runtimeObjects.Where(item => includedContainerIds is null || selectedObjectIds.Contains(item.Key)))
+                if (pair.Value is IAssignableSimObject assignable) assignable.AssignedContainer = null!;
+        }
 
         var bound = new List<BoundVisualContainer>(containers.Count);
         for (var index = 0; index < containers.Count; index++)
@@ -60,7 +81,7 @@ internal static class RuntimeVisualPlanBinder
             if (container is ICreatableContainer creatable)
                 creatable.IsCreationRequested = plan.IsCreationRequested(node.Id);
 
-            if (container is not ISimObjectFindOrSelect selectable)
+            if (!bindSimObjects || container is not ISimObjectFindOrSelect selectable)
                 continue;
 
             var runtimeTargets = selectable.GetSimObjectTargets().ToArray();
@@ -115,6 +136,11 @@ internal static class RuntimeVisualPlanBinder
 
         return new RuntimeVisualPlanBindingResult(true, bound, unknownSignals, null);
     }
+
+    internal static IReadOnlySet<string> SelectedContainerIds(VisualPlan plan) => plan.Nodes
+        .Where(node => node.Kind == VisualNodeKind.Container && plan.IsGenerationSelected(node.Id) &&
+                       ContainerMetadataCatalog.TryGet(node.TypeName, out _))
+        .Select(node => node.Id).ToHashSet(StringComparer.Ordinal);
 
     internal static XDocument CreateEffectiveDocument(
         VisualPlan plan,

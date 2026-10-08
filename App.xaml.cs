@@ -32,8 +32,8 @@ namespace VIBN_Tools
             if (Application.Behaviors.WpfVirtualizationExceptionPolicy.IsRecoverable(args.Exception))
             {
                 Application.ApplicationLogService.Instance.Warning(
-                    "FEE2Container",
-                    "Eine veraltete virtuelle Tabellenanforderung wurde nach einem Ansichtswechsel verworfen.",
+                    "WPF-Ansicht",
+                    "Eine ungültige Layoutgröße oder veraltete virtuelle Listenanforderung wurde abgefangen; die Anwendung bleibt geöffnet.",
                     args.Exception.Message);
                 args.Handled = true;
                 return;

@@ -137,7 +137,15 @@
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="190" />
-                        <DataGridTextColumn Header="Typ" Binding="{Binding Type}" Width="145" />
+                        <DataGridTemplateColumn Header="Typ" Width="145">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ComboBox ItemsSource="{Binding DataContext.SupportedContainerTypes, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                              SelectedItem="{Binding Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEditable="False" MinWidth="100" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" Width="100" IsReadOnly="True" />
                         <DataGridTemplateColumn Header="Zugeordnete FEE-Objekte" Width="240" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>

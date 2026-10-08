@@ -23,7 +23,12 @@
                     <DataGrid.Columns>
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}"/>
                         <DataGridTextColumn Header="Containername" Binding="{Binding Component, UpdateSourceTrigger=PropertyChanged}" Width="2*"/>
-                        <DataGridTextColumn Header="Typ" Binding="{Binding Type, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                        <DataGridTemplateColumn Header="Typ" Width="*">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ComboBox ItemsSource="{Binding DataContext.SupportedContainerTypes, RelativeSource={RelativeSource AncestorType={x:Type Window}}}"
+                                          SelectedItem="{Binding Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEditable="False" />
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="FEE-Objekte (GUIDs und Typen im XML)" Binding="{Binding AssociatedObjects}" IsReadOnly="True" Width="3*"/>
                     </DataGrid.Columns>
                 </DataGrid>

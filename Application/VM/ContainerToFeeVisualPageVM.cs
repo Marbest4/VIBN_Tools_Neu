@@ -304,10 +304,10 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                                       SelectedContainerCount > 0;
 
     public bool CanLinkOnly => HasPlan && CanUseFeeFeatures && !IsBusy &&
-                               !HasValidationErrors && SelectedAssignmentCount > 0;
+                               SelectedAssignmentCount > 0;
 
     public bool CanLinkSignalsOnly => HasPlan && CanUseFeeFeatures && !IsBusy &&
-                                      HasSelectedExistingInterfaces;
+                                      HasSelectedExistingInterfaces && SelectedContainerCount > 0;
 
     public bool HasSelectedExistingInterfaces =>
         AvailableFeeInterfaces.Any(item => item.IsSelected);
@@ -2149,7 +2149,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             if (_isDeletingTreeNode)
                 RemoveDeletedTreeChildren(TreeRoots, plan, validation.Issues);
             else
-                TreeRoots.ReplaceWith(plan.Roots.Select(node => BuildTree(node, plan, validation.Issues)));
+                ReconcileTreeNodes(TreeRoots, plan.Roots.Select(node => BuildTree(node, plan, validation.Issues)).ToArray());
             foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants()))
             {
                 if (expansionState.TryGetValue(node.Id, out var wasExpanded))
@@ -2166,10 +2166,10 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             if (!_isDeletingTreeNode) ApplyTreeSort();
             ApplyTreeFilter();
 
-            var nextSelection = FindTreeNode(selectedNodeId) ?? (_isDeletingTreeNode ? null : TreeRoots.FirstOrDefault());
+            var nextSelection = FindTreeNode(selectedNodeId) ?? (selectedNodeId is null && !_isDeletingTreeNode ? TreeRoots.FirstOrDefault() : null);
             var selectionUnchanged = ReferenceEquals(SelectedTreeNode, nextSelection);
             SelectedTreeNode = nextSelection;
-            if (_isDeletingTreeNode && selectionUnchanged) RefreshSelectionProjection();
+            if (selectionUnchanged) RefreshSelectionProjection();
             SelectedTarget = Targets.FirstOrDefault(target => target.Id == selectedTargetId) ?? Targets.FirstOrDefault();
             _selectedExistingInterface = AvailableFeeInterfaces.FirstOrDefault(item => item.IsSelected);
             OnPropertyChanged(nameof(SelectedExistingInterface));
@@ -2179,7 +2179,6 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             _isApplyingPlan = false;
         }
 
-        if (!_isPreservingTreePosition) SynchronizeSelectionsFromTree(SelectedTreeNode);
         OnPropertyChanged(nameof(HasPlan));
         OnPropertyChanged(nameof(SidecarPath));
         OnPropertyChanged(nameof(ContainerCount));
@@ -2200,6 +2199,29 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         OnPropertyChanged(nameof(SelectedContainerSupportsCreation));
         OnPropertyChanged(nameof(IsCreationRequestedForSelection));
         InvalidateCommands();
+    }
+
+    private void ReconcileTreeNodes(ObservableCollection<ContainerToFeeVisualTreeNodeVM> nodes,
+        IReadOnlyList<ContainerToFeeVisualTreeNodeVM> proposed)
+    {
+        var desired = OrderTreeNodes(proposed).ToArray();
+        var ids = desired.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var obsolete in nodes.Where(item => !ids.Contains(item.Id)).ToArray()) nodes.Remove(obsolete);
+        var existing = nodes.ToDictionary(item => item.Id, StringComparer.Ordinal);
+        for (var index = 0; index < desired.Length; index++)
+        {
+            var next = desired[index];
+            if (!existing.TryGetValue(next.Id, out var current))
+            {
+                ReconcileTreeNodes(next.Children, next.Children.ToArray());
+                nodes.Insert(index, next);
+                continue;
+            }
+            current.ApplyPlanState(next);
+            ReconcileTreeNodes(current.Children, next.Children.ToArray());
+            var previousIndex = nodes.IndexOf(current);
+            if (previousIndex != index) nodes.Move(previousIndex, index);
+        }
     }
 
     private void RemoveDeletedTreeChildren(ObservableCollection<ContainerToFeeVisualTreeNodeVM> nodes,
@@ -2698,7 +2720,18 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
     {
         if (!nodes.Any(node => node.Kind == VisualNodeKind.Container))
             return;
-        var sorted = SelectedTreeSort.Key switch
+        var sorted = OrderTreeNodes(nodes).ToArray();
+        for (var index = 0; index < sorted.Length; index++)
+        {
+            var previousIndex = nodes.IndexOf(sorted[index]);
+            if (previousIndex != index) nodes.Move(previousIndex, index);
+        }
+    }
+
+    private IEnumerable<ContainerToFeeVisualTreeNodeVM> OrderTreeNodes(IEnumerable<ContainerToFeeVisualTreeNodeVM> nodes)
+    {
+        if (!nodes.Any(node => node.Kind == VisualNodeKind.Container)) return nodes;
+        return SelectedTreeSort.Key switch
         {
             VisualTreeSortKey.ContainerName => nodes
                 .OrderBy(node => node.Kind == VisualNodeKind.Container ? 0 : 1)
@@ -2708,7 +2741,6 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                 .ThenBy(node => node.TypeName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(node => node.Name, StringComparer.OrdinalIgnoreCase),
         };
-        nodes.ReplaceWith(sorted.ToArray());
     }
 
     private bool MatchesTreeStatus(ContainerToFeeVisualTreeNodeVM node) =>
@@ -3006,10 +3038,8 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         if (!CanUseFeeFeatures)
             return FeeUnavailableReason;
         var blockingIssue = Issues.FirstOrDefault(issue => issue.Severity == VisualIssueSeverity.Error);
-        if (blockingIssue is not null)
-            return linkOnly
-                ? blockingIssue.Message
-                : $"Fehler vorhanden: {blockingIssue.Message} Beim Start ist eine ausdrückliche Bestätigung erforderlich.";
+        if (!linkOnly && blockingIssue is not null)
+            return $"Fehler vorhanden: {blockingIssue.Message} Beim Start ist eine ausdrückliche Bestätigung erforderlich.";
         if (SelectedContainerCount == 0)
             return "Mindestens einen unterstützten Container auswählen.";
         if (linkOnly && SelectedAssignmentCount == 0)
@@ -3068,7 +3098,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         ContainerToFeeVisualSignalSlotVM? preferredSignalSlot = null,
         VisualIssue? preferredIssue = null)
     {
-        if (node is null || _isSynchronizingSelections)
+        if (node is null || _isSynchronizingSelections || _isApplyingPlan || _isPreservingTreePosition)
             return;
         _isSynchronizingSelections = true;
         try
@@ -3089,7 +3119,6 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                 OnPropertyChanged(nameof(SelectedTreeNode));
             }
             SelectedTreeNode = node;
-            node.IsExpanded = true;
         }
         finally
         {
@@ -3143,8 +3172,6 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             foreach (var item in scope)
             {
                 item.IsSynchronizationMatch = true;
-                if (scopeRoot.Kind == VisualNodeKind.Container)
-                    item.IsExpanded = true;
             }
 
             var nodeIds = scope.Select(item => item.Id).ToHashSet(StringComparer.Ordinal);
@@ -3474,8 +3501,8 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
     private bool _isGenerationSelected;
     private readonly Action<string, bool> _setGenerationSelected;
     private readonly Action<string, string> _setSlotOverride;
-    private readonly bool _canSelectGeneration;
-    private readonly bool _containerSelected;
+    private bool _canSelectGeneration;
+    private bool _containerSelected;
     private IReadOnlyList<string> _validationErrors = Array.Empty<string>();
     private ContainerToFeeVisualNodeState _executionState;
     private bool _isSynchronizationMatch;
@@ -3515,7 +3542,7 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
         _isExpanded = !model.IsTechnical && model.Kind is VisualNodeKind.Root or VisualNodeKind.Container;
     }
 
-    public VisualNode Model { get; }
+    public VisualNode Model { get; private set; }
     public string Id => Model.Id;
     public string? ContainerId => Model.ContainerId;
     public string Name => Model.Name;
@@ -3537,11 +3564,11 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
             _setSlotOverride(Id, value);
         }
     }
-    public IReadOnlyList<string> AllowedSlots { get; }
-    public string? FeeObjectId { get; }
+    public IReadOnlyList<string> AllowedSlots { get; private set; }
+    public string? FeeObjectId { get; private set; }
     public string? ParentId => Model.ParentId;
-    public bool HasDuplicateIdentity { get; }
-    public bool IsDuplicateConfirmed { get; }
+    public bool HasDuplicateIdentity { get; private set; }
+    public bool IsDuplicateConfirmed { get; private set; }
     public bool CanConfirmDuplicate => Kind == VisualNodeKind.SimObject &&
                                        HasDuplicateIdentity &&
                                        !IsDuplicateConfirmed;
@@ -3639,6 +3666,23 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
                 return;
             _setGenerationSelected(Id, value);
         }
+    }
+
+    public void ApplyPlanState(ContainerToFeeVisualTreeNodeVM next)
+    {
+        Model = next.Model;
+        _canSelectGeneration = next._canSelectGeneration;
+        _containerSelected = next._containerSelected;
+        _isGenerationSelected = next._isGenerationSelected;
+        _slot = next._slot;
+        AllowedSlots = next.AllowedSlots;
+        FeeObjectId = next.FeeObjectId;
+        HasDuplicateIdentity = next.HasDuplicateIdentity;
+        IsDuplicateConfirmed = next.IsDuplicateConfirmed;
+        ApplyValidationErrors(next.ValidationErrors);
+        ApplyExecutionState(next.SimObjectState, next.LinkedObjectDescription);
+        // Keep expansion, visibility, synchronization and the WPF container.
+        OnPropertyChanged(string.Empty);
     }
 
     public bool IsExpanded
@@ -4052,7 +4096,7 @@ public sealed class ContainerToFeeVisualFeeSignalVM : MvvmBase
         }.Where(item => item is not null));
     public string StateBackground => HasError
         ? "#FFFFCDD2"
-        : HasWarning ? "#FFFFF2CC" : "#FFC6EFCE";
+        : !IsAssigned ? "#FFE8D9F3" : HasWarning ? "#FFFFF2CC" : "#FFC6EFCE";
     public string ToolTipText => $"Signal: {Tag}{Environment.NewLine}{AssignmentText}";
     public bool IsSynchronizationMatch
     {

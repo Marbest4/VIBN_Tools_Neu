@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -81,6 +82,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             treeView.SelectedItemChanged += OnSelectedItemChanged;
             treeView.PreviewKeyDown += OnPreviewKeyDown;
             treeView.PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
+            treeView.PreviewMouseWheel += OnPreviewMouseWheel;
             treeView.Loaded += OnLoaded;
             treeView.Unloaded += OnUnloaded;
             if (treeView.IsLoaded)
@@ -91,6 +93,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             treeView.SelectedItemChanged -= OnSelectedItemChanged;
             treeView.PreviewKeyDown -= OnPreviewKeyDown;
             treeView.PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDown;
+            treeView.PreviewMouseWheel -= OnPreviewMouseWheel;
             treeView.Loaded -= OnLoaded;
             treeView.Unloaded -= OnUnloaded;
             DetachItemsSource(treeView);
@@ -112,27 +115,43 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
     private static void AttachItemsSource(TreeView treeView)
     {
         var state = ScrollStates.GetOrCreateValue(treeView);
-        if (ReferenceEquals(state.Source, treeView.ItemsSource))
-            return;
         DetachItemsSource(treeView);
-        state.Source = treeView.ItemsSource as INotifyCollectionChanged;
-        if (state.Source is not null)
-            state.Source.CollectionChanged += state.OnCollectionChanged = (_, _) => PreserveScrollOffset(treeView, state);
+        void Observe(INotifyCollectionChanged source)
+        {
+            if (state.Sources.ContainsKey(source)) return;
+            NotifyCollectionChangedEventHandler handler = (_, _) =>
+            {
+                PreserveScrollOffset(treeView, state);
+                AttachItemsSource(treeView);
+            };
+            state.Sources[source] = handler;
+            source.CollectionChanged += handler;
+        }
+        if (treeView.ItemsSource is INotifyCollectionChanged roots) Observe(roots);
+        foreach (var node in treeView.Items.OfType<ContainerToFeeVisualTreeNodeVM>().SelectMany(root => root.SelfAndDescendants()))
+        {
+            Observe(node.Children);
+            PropertyChangedEventHandler handler = (_, args) =>
+            {
+                if (args.PropertyName is nameof(ContainerToFeeVisualTreeNodeVM.IsVisible) or nameof(ContainerToFeeVisualTreeNodeVM.IsExpanded) or "")
+                    PreserveScrollOffset(treeView, state);
+            };
+            state.Nodes[node] = handler;
+            node.PropertyChanged += handler;
+        }
     }
 
     private static void DetachItemsSource(TreeView treeView)
     {
-        if (!ScrollStates.TryGetValue(treeView, out var state) || state.Source is null || state.OnCollectionChanged is null)
-            return;
-        state.Source.CollectionChanged -= state.OnCollectionChanged;
-        state.Source = null;
-        state.OnCollectionChanged = null;
-        state.RestorePending = false;
+        if (!ScrollStates.TryGetValue(treeView, out var state)) return;
+        foreach (var pair in state.Sources) pair.Key.CollectionChanged -= pair.Value;
+        foreach (var pair in state.Nodes) pair.Key.PropertyChanged -= pair.Value;
+        state.Sources.Clear(); state.Nodes.Clear();
     }
 
     private static void PreserveScrollOffset(TreeView treeView, ScrollState state)
     {
-        if (state.RestorePending)
+        if (state.RestorePending || state.RevealRevision is not null)
             return;
         var scrollViewer = FindVisualChild<ScrollViewer>(treeView);
         if (scrollViewer is null)
@@ -140,13 +159,14 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         state.VerticalOffset = scrollViewer.VerticalOffset;
         var revealRevision = (long)treeView.GetValue(SelectionRevealRevisionProperty);
         state.RestorePending = true;
-        treeView.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
+        treeView.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             try
             {
-                if ((long)treeView.GetValue(SelectionRevealRevisionProperty) != revealRevision)
+                if (!treeView.IsLoaded || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revealRevision)
                     return;
                 var current = FindVisualChild<ScrollViewer>(treeView);
+                treeView.UpdateLayout();
                 current?.ScrollToVerticalOffset(state.VerticalOffset);
                 current?.ScrollToLeftEnd();
             }
@@ -159,6 +179,8 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
 
     private static void OnPreviewKeyDown(object sender, KeyEventArgs args)
     {
+        if (sender is TreeView scrollingTree && args.Key is Key.PageUp or Key.PageDown or Key.Home or Key.End or Key.Up or Key.Down)
+            InvalidatePendingReveal(scrollingTree);
         if (args.Key != Key.Delete || sender is not TreeView treeView || treeView.SelectedItem is null)
             return;
         var command = GetDeleteCommand(treeView);
@@ -176,6 +198,7 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
 
     private static void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs args)
     {
+        if (sender is TreeView sourceTree) InvalidatePendingReveal(sourceTree);
         if (sender is not TreeView tree ||
             ItemsControl.ContainerFromElement(tree, args.OriginalSource as DependencyObject) is not TreeViewItem ||
             FindVisualChild<ScrollViewer>(tree) is not { } viewer)
@@ -183,13 +206,23 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         var state = ScrollStates.GetOrCreateValue(tree);
         state.IsSelecting = true;
         var vertical = viewer.VerticalOffset;
+        var revision = (long)tree.GetValue(SelectionRevealRevisionProperty);
         _ = tree.Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, new Action(() =>
         {
             state.IsSelecting = false;
+            if ((long)tree.GetValue(SelectionRevealRevisionProperty) != revision) return;
             viewer.ScrollToVerticalOffset(vertical);
             viewer.ScrollToLeftEnd();
         }));
     }
+
+    private static void OnPreviewMouseWheel(object sender, MouseWheelEventArgs args)
+    {
+        if (sender is TreeView tree) InvalidatePendingReveal(tree);
+    }
+
+    private static void InvalidatePendingReveal(TreeView tree) =>
+        tree.SetValue(SelectionRevealRevisionProperty, (long)tree.GetValue(SelectionRevealRevisionProperty) + 1);
 
     private static void OnRequestBringIntoView(object sender, RequestBringIntoViewEventArgs args)
     {
@@ -200,9 +233,8 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             parent = VisualTreeHelper.GetParent(parent);
         if (parent is not TreeView tree || !GetIsEnabled(tree)) return;
         args.Handled = true;
-        FindVisualChild<ScrollViewer>(tree)?.ScrollToLeftEnd();
-        if (GetRevealEnabled(tree) && !(ScrollStates.TryGetValue(tree, out var state) && state.IsSelecting))
-            CenterContainer(tree, item);
+        // Only a selection explicitly coming from another list may reveal a
+        // row. Focus, layout, filtering and deletion also request BringIntoView.
     }
 
     private static void OnBoundSelectedItemChanged(
@@ -212,8 +244,6 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
         if (dependencyObject is not TreeView treeView)
             return;
 
-        var revision = (long)treeView.GetValue(SelectionRevealRevisionProperty) + 1;
-        treeView.SetValue(SelectionRevealRevisionProperty, revision);
         if (args.NewValue is null || !GetRevealEnabled(treeView))
             return;
 
@@ -225,12 +255,17 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             treeView.IsKeyboardFocusWithin && ReferenceEquals(treeView.SelectedItem, args.NewValue))
             return;
 
+        var revision = (long)treeView.GetValue(SelectionRevealRevisionProperty) + 1;
+        treeView.SetValue(SelectionRevealRevisionProperty, revision);
+        var revealState = ScrollStates.GetOrCreateValue(treeView);
+        revealState.RevealRevision = revision;
+
         treeView.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            if (!GetRevealEnabled(treeView) || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
-                return;
             try
             {
+                if (!GetRevealEnabled(treeView) || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
+                    return;
                 treeView.UpdateLayout();
                 var container = RealizeContainer(treeView, args.NewValue) ?? FindContainer(treeView, args.NewValue);
                 if (container is null || (long)treeView.GetValue(SelectionRevealRevisionProperty) != revision)
@@ -242,6 +277,10 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
             catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
             {
                 // A deferred reveal can outlive the collection it was requested for.
+            }
+            finally
+            {
+                if (revealState.RevealRevision == revision) revealState.RevealRevision = null;
             }
         });
     }
@@ -324,10 +363,11 @@ public static class ContainerToFeeVisualTreeSelectionBehavior
 
     private sealed class ScrollState
     {
-        public INotifyCollectionChanged? Source { get; set; }
-        public NotifyCollectionChangedEventHandler? OnCollectionChanged { get; set; }
+        public Dictionary<INotifyCollectionChanged, NotifyCollectionChangedEventHandler> Sources { get; } = [];
+        public Dictionary<ContainerToFeeVisualTreeNodeVM, PropertyChangedEventHandler> Nodes { get; } = [];
         public bool RestorePending { get; set; }
         public bool IsSelecting { get; set; }
         public double VerticalOffset { get; set; }
+        public long? RevealRevision { get; set; }
     }
 }

@@ -297,25 +297,28 @@
                                   SelectedItem="{Binding SelectedTreeSort}" DisplayMemberPath="DisplayName"
                                   ToolTip="Container nach Typ oder Name sortieren" />
                     </Grid>
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,7">
+                    <WrapPanel Grid.Row="2" Margin="0,0,0,7">
+                        <Button Content="Alle auswählen" Command="{Binding SelectAllCommand}" Padding="8,2" Margin="0,0,5,0" />
+                        <Button Content="Alle abwählen" Command="{Binding DeselectAllCommand}" Padding="8,2" Margin="0,0,5,0" />
                         <Button Content="Alles aufklappen" Command="{Binding ExpandAllCommand}" Padding="8,2" />
                         <Button Content="Alles zuklappen" Command="{Binding CollapseAllCommand}" Padding="8,2" Margin="5,0,0,0" />
                         <CheckBox Margin="12,0,0,0" VerticalAlignment="Center"
                                   Content="Auswahl in Listen und Baum synchronisieren"
-                                  IsChecked="{Binding SynchronizeRelatedSelections}"
+                                  IsChecked="{Binding SynchronizeRelatedSelections, Mode=TwoWay, FallbackValue=True}"
                                   ToolTip="Springt beim Auswählen eines Signals, SimObjects oder Validierungseintrags zum zugehörigen Baumknoten – und umgekehrt." />
-                    </StackPanel>
+                    </WrapPanel>
                     <TreeView Grid.Row="3" ItemsSource="{Binding TreeRoots}"
                               ItemContainerStyle="{StaticResource VisualTreeItemStyle}"
                               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                               ScrollViewer.VerticalScrollBarVisibility="Auto"
-                              ScrollViewer.CanContentScroll="True"
-                              VirtualizingPanel.IsVirtualizing="True"
-                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="False"
+                              VirtualizingPanel.IsVirtualizing="False"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.IsEnabled="True"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.RevealEnabled="{Binding IsSelectionRevealEnabled}"
                               behaviors:ContainerToFeeVisualTreeSelectionBehavior.DeleteCommand="{Binding DeleteTreeNodeCommand}"
-                              behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}" />
+                              behaviors:ContainerToFeeVisualTreeSelectionBehavior.SelectedItem="{Binding SelectedTreeNode, Mode=TwoWay}">
+                        <TreeView.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></TreeView.ItemsPanel>
+                    </TreeView>
                     <WrapPanel Grid.Row="4" Margin="0,7,0,0"
                                ToolTip="Farben werden für Signale, SimObjects und ihre übergeordneten Strukturknoten gleich ausgewertet.">
                         <Border Width="13" Height="13" Background="#FFC6EFCE"/><TextBlock Margin="3,0,8,0" FontSize="10" Text="gültig"/>
