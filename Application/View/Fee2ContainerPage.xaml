@@ -286,7 +286,7 @@
             </GroupBox>
         </Grid>
 
-        <Expander Grid.Row="5" Margin="0,8,0,0" IsExpanded="False">
+        <Expander Grid.Row="5" Margin="0,8,0,0" IsExpanded="{Binding IsIssuesExpanded, Mode=TwoWay}">
             <Expander.Header>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock FontWeight="SemiBold" Text="Fehler und Rekonstruktionshinweise" />

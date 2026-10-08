@@ -268,22 +268,18 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         /// <returns>A new <see cref="ContainerEntry"/> instance with the same property values.</returns>
         public ContainerEntry Clone()
         {
-            ContainerEntry clone = new ContainerEntry();
-            clone.SignalId = EnsureSignalId();
-            clone.FeeGuid = FeeGuid;
-            clone.ID = this.ID;
-            clone.Address = this.Address;
-            clone.DataType = this.DataType;
-            clone.Signal = this.Signal;
-            clone.Slot = this.Slot;
-            clone.Note = this.Note;
-            clone.ReviewState = this.ReviewState;
-            clone.ReviewMessage = this.ReviewMessage;
-            clone.IsManuallyEdited = this.IsManuallyEdited;
-            clone.IsChangeAcknowledged = this.IsChangeAcknowledged;
-            clone.ValidationError = this.ValidationError;
-
-            return clone;
+            // A fresh copy has no observers. Copy the stored state directly
+            // instead of emitting edit notifications and recalculating warnings
+            // for every signal in a complete undo/reimport snapshot.
+            return new ContainerEntry
+            {
+                _signalId = EnsureSignalId(), FeeGuid = FeeGuid,
+                _id = _id, _address = _address, _dataType = _dataType,
+                _signal = _signal, _slot = _slot, _note = _note,
+                _reviewState = _reviewState, _reviewMessage = _reviewMessage,
+                _isManuallyEdited = _isManuallyEdited, _isChangeAcknowledged = _isChangeAcknowledged,
+                _validationError = _validationError, _assignmentWarning = _assignmentWarning
+            };
         }
 
         private void RefreshAssignmentWarning()

@@ -193,11 +193,14 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var connectionRevision = Services.Connection.ConnectionRevision;
             await _sdkReadGate.WaitAsync(cancellationToken);
             try
             {
-                var sceneObjects = await GetFeeSceneObjectsForDiscoveryAsync();
+                EnsureCurrentConnection(connectionRevision);
+                var sceneObjects = await GetFeeSceneObjectsForDiscoveryAsync(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
+                EnsureCurrentConnection(connectionRevision);
                 FindAndAssignParents(sceneObjects);
                 return sceneObjects;
             }
@@ -207,23 +210,45 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             }
         }
 
-        private static async Task<List<FeeAbstractObject>> GetFeeSceneObjectsForDiscoveryAsync()
+        private static async Task<List<FeeAbstractObject>> GetFeeSceneObjectsForDiscoveryAsync(CancellationToken cancellationToken)
         {
-            var guidTask = Services.ApiInstance.Object.GetSceneObjectGuidsAsync();
-            var ignoredDecorationGuidsTask = ReadIgnoredDecorationGuidsAsync();
-            var logicDefinitionsTask = Services.ApiInstance.Logic.GetAllAvailableLogicDefinitionsAsync();
-            await Task.WhenAll(guidTask, ignoredDecorationGuidsTask);
-            var ignoredDecorationGuids = await ignoredDecorationGuidsTask;
-            var guidTexts = (await guidTask)
+            // The SDK shares request state across its API facades. Read each
+            // response before starting the next request, and bound XML batches
+            // so a large project does not produce one oversized request.
+            var allGuids = await Services.ApiInstance.Object.GetSceneObjectGuidsAsync() ?? [];
+            cancellationToken.ThrowIfCancellationRequested();
+            var ignoredDecorationGuids = await ReadIgnoredDecorationGuidsAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            var guidTexts = allGuids
                 .Where(guid => !ignoredDecorationGuids.Contains(guid))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var xmlTask = Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(guidTexts);
-            await Task.WhenAll(logicDefinitionsTask, xmlTask);
+            var logicDefinitions = (IReadOnlyList<ApiLogicDefinition>)(await Services.ApiInstance.Logic
+                .GetAllAvailableLogicDefinitionsAsync() ?? []).ToArray();
+            var xmlTexts = new List<string>(guidTexts.Length);
+            foreach (var batch in guidTexts.Chunk(128))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var first = xmlTexts.Count + 1;
+                try
+                {
+                    var response = (await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(batch) ?? []).ToArray();
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (response.Length != batch.Length)
+                        throw new InvalidOperationException($"FEE lieferte {response.Length} statt {batch.Length} XML-Datensätze.");
+                    xmlTexts.AddRange(response);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception exception)
+                {
+                    throw new InvalidOperationException(
+                        $"FEE-Objekte {first} bis {first + batch.Length - 1} von {guidTexts.Length} konnten nicht gelesen werden: {exception.Message}",
+                        exception);
+                }
+            }
 
-            var xmlTexts = (await xmlTask).ToArray();
-            var logicDefinitions = (IReadOnlyList<ApiLogicDefinition>)(await logicDefinitionsTask).ToArray();
             var sceneObjects = new FeeAbstractObject[guidTexts.Length];
-            var count = Math.Min(guidTexts.Length, xmlTexts.Length);
+            var count = guidTexts.Length;
             Parallel.For(0, count, index =>
             {
                 var xml = XElement.Parse(xmlTexts[index]);

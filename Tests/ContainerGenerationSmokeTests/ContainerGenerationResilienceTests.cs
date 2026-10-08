@@ -11,6 +11,8 @@ internal static class ContainerGenerationResilienceTests
     public static void Verify()
     {
         VerifyBatchMoves();
+        VerifyIndependentUndoCapture();
+        VerifyDuplicateEntrySubscriptions();
         VerifyAcknowledgment();
         VerifyActionLogging();
         if (!ContainerGenerationExceptionPolicy.IsRecoverable(new IOException("read")) ||
@@ -80,6 +82,74 @@ internal static class ContainerGenerationResilienceTests
             throw new InvalidOperationException("Editing a confirmed signal did not reopen its change marker.");
         container.DataList.Clear(); entry.Signal = "Detached";
         if (container.HasDetectedChanges) throw new InvalidOperationException("Reset left removed signal subscriptions attached.");
+    }
+
+    private static void VerifyIndependentUndoCapture()
+    {
+        var entry = Entry("Snapshot");
+        entry.Address = "%Q0.0";
+        entry.FeeGuid = Guid.NewGuid().ToString("D");
+        entry.ReviewState = ContainerEntryReviewState.SourceChanged;
+        entry.ReviewMessage = "Original change";
+        entry.IsManuallyEdited = true;
+        entry.IsChangeAcknowledged = true;
+        entry.ValidationError = "Original validation detail";
+        var source = new ContainerData { Id = "Before", Component = "Before", MinSignals = 1, MaxSignals = 5, ManuallyChecked = true };
+        source.Slots.Add("PLC_IN_Test");
+        source.DataList.Add(entry);
+        source.SimObjects.Add(new ContainerFeeObject { Guid = "original-object", Name = "Original object",
+            Slots = [new ContainerFeeSlot { Name = "Original slot", AssignedGuid = "original-link" }] });
+        var open = Entry("Open");
+        var filtered = Entry("Filtered");
+        var inventory = new System.Xml.XmlDocument();
+        inventory.LoadXml("<FeeInventory><Signal>Original</Signal></FeeInventory>");
+        var state = WorkspaceUndoState.Capture("Move", [source], [open], [filtered], inventory.DocumentElement);
+
+        source.Component = "After"; source.MinSignals = 99; source.Slots.Clear();
+        entry.Signal = "Changed"; entry.ValidationError = "Changed"; entry.ReviewMessage = "Changed";
+        source.SimObjects[0].Slots[0].AssignedGuid = "changed-link";
+        source.DataList.Clear(); source.SimObjects.Clear();
+        open.Slot = "Changed"; filtered.Signal = "Changed";
+        inventory.DocumentElement!.InnerText = "Changed";
+
+        var restored = state.Containers.Single();
+        var saved = restored.DataList.Single();
+        if (restored.Component != "Before" || restored.MinSignals != 1 || restored.MaxSignals != 5 ||
+            !restored.ManuallyChecked || restored.Slots.Single() != "PLC_IN_Test" || saved.Signal != "Snapshot" ||
+            !saved.IsChangeAcknowledged || !saved.IsManuallyEdited || !saved.HasAssignmentWarning ||
+            saved.ValidationError != "Original validation detail" || saved.ReviewMessage != "Original change" ||
+            saved.FeeGuid != entry.FeeGuid || restored.SimObjects.Single().Slots.Single().AssignedGuid != "original-link" ||
+            state.Unassigned.Single().Slot != "PLC_IN_Test" || state.Filtered.Single().Signal != "Filtered" ||
+            state.FeeInventory!.InnerText != "Original")
+            throw new InvalidOperationException("Undo capture retained live references or lost signals, warnings, confirmation, or FEE links.");
+
+        var notifications = 0;
+        saved.PropertyChanged += (_, _) => notifications++;
+        var copy = saved.Clone();
+        copy.Signal = "Copy";
+        if (notifications != 0 || saved.Signal != "Snapshot" || copy.SignalId != saved.SignalId)
+            throw new InvalidOperationException("An entry copy inherited live event subscriptions or lost its identity.");
+    }
+
+    private static void VerifyDuplicateEntrySubscriptions()
+    {
+        var entry = Entry("Duplicate reference");
+        var container = new CountedContainer();
+        using (container.DeferUpdates())
+        {
+            container.DataList.Add(entry);
+            container.DataList.Add(entry);
+        }
+        container.DataList.RemoveAt(0);
+        container.ValidationPasses = 0;
+        entry.Slot = "";
+        if (container.ValidationPasses != 1 || container.IsValid)
+            throw new InvalidOperationException("Removing one duplicate detached the remaining signal or kept duplicate subscriptions.");
+        container.DataList.Clear();
+        container.ValidationPasses = 0;
+        entry.Slot = "PLC_IN_Test";
+        if (container.ValidationPasses != 0)
+            throw new InvalidOperationException("Clearing a container retained subscriptions to removed signals.");
     }
 
     private static void VerifyActionLogging()

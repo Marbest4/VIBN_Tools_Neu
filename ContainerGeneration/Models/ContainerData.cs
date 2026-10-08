@@ -26,7 +26,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
         private int _updateDepth;
         private bool _validationPending;
         private bool _reviewPending;
-        private readonly HashSet<ContainerEntry> _observedEntries = [];
+        private readonly Dictionary<ContainerEntry, int> _observedEntries = [];
 
 
         /// <summary>
@@ -202,11 +202,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
             SimObjects = new ObservableCollection<ContainerFeeObject>(container.SimObjects);
 
             foreach (var entry in DataList)
-            {
-                _observedEntries.Add(entry);
-                entry.SlotChanged += Entry_SlotChanged;
-                entry.PropertyChanged += Entry_PropertyChanged;
-            }
+                ObserveEntry(entry);
 
             DataList.CollectionChanged += DataList_CollectionChanged;
             RefreshReimportStatus();
@@ -335,38 +331,50 @@ namespace VIBN_Tools.ContainerGeneration.Models
         {
             if (e.Action == NotifyCollectionChangedAction.Reset)
             {
-                foreach (var entry in _observedEntries)
+                foreach (var entry in _observedEntries.Keys)
                 {
                     entry.SlotChanged -= Entry_SlotChanged;
                     entry.PropertyChanged -= Entry_PropertyChanged;
                 }
                 _observedEntries.Clear();
                 foreach (var entry in DataList)
-                    if (_observedEntries.Add(entry))
-                    {
-                        entry.SlotChanged += Entry_SlotChanged;
-                        entry.PropertyChanged += Entry_PropertyChanged;
-                    }
+                    ObserveEntry(entry);
             }
             if (e.NewItems != null)
                 foreach (ContainerEntry entry in e.NewItems)
-                {
-                    if (!_observedEntries.Add(entry)) continue;
-                    entry.SlotChanged += Entry_SlotChanged;
-                    entry.PropertyChanged += Entry_PropertyChanged;
-                }
+                    ObserveEntry(entry);
 
             if (e.OldItems != null)
                 foreach (ContainerEntry entry in e.OldItems)
-                {
-                    if (DataList.Contains(entry) || !_observedEntries.Remove(entry)) continue;
-                    entry.SlotChanged -= Entry_SlotChanged;
-                    entry.PropertyChanged -= Entry_PropertyChanged;
-                }
+                    ForgetEntry(entry);
 
             Validate();
             RefreshReimportStatus();
             NotifyReviewProperties();
+        }
+
+        private void ObserveEntry(ContainerEntry entry)
+        {
+            if (_observedEntries.TryGetValue(entry, out var count))
+            {
+                _observedEntries[entry] = count + 1;
+                return;
+            }
+            _observedEntries.Add(entry, 1);
+            entry.SlotChanged += Entry_SlotChanged;
+            entry.PropertyChanged += Entry_PropertyChanged;
+        }
+
+        private void ForgetEntry(ContainerEntry entry)
+        {
+            if (!_observedEntries.TryGetValue(entry, out var count)) return;
+            if (count > 1) { _observedEntries[entry] = count - 1; return; }
+            // Removing a large selection must not scan the remaining DataList
+            // once for every signal. Reference counts also preserve subscriptions
+            // until the last occurrence of an old duplicate has been removed.
+            _observedEntries.Remove(entry);
+            entry.SlotChanged -= Entry_SlotChanged;
+            entry.PropertyChanged -= Entry_PropertyChanged;
         }
 
         private void Entry_SlotChanged(object? sender, EventArgs e)

@@ -2052,8 +2052,8 @@ namespace VIBN_Tools.Application.VM
 
         private bool RunWorkspaceAction(string description, Action action, string? details = null)
         {
-            var checkpoint = WorkspaceUndoState.Capture(description, ContainerList, UnassignedEntries, FilteredEntries, _feeInventory);
             using var measurement = PerformanceMeasurementService.Instance.Start("ContainerGeneration", description);
+            var checkpoint = WorkspaceUndoState.Capture(description, ContainerList, UnassignedEntries, FilteredEntries, _feeInventory);
             using var actionLog = _actionLogger.BeginBatch();
             var previousSuppression = _suppressUndoCapture;
             _suppressUndoCapture = true;
@@ -2503,6 +2503,12 @@ namespace VIBN_Tools.Application.VM
                     if (editableView.IsAddingNew)
                         editableView.CommitNew();
                 }
+
+                // CollectionChanged already updates an unfiltered view. Reassigning
+                // a null filter forces a Reset and rebuilds every realized row after
+                // a drop, even though only the source and target changed.
+                if (filter is null && view.Filter is null)
+                    return;
 
                 using (view.DeferRefresh())
                     view.Filter = filter;

@@ -457,8 +457,11 @@ public sealed class Fee2ContainerService
         progress?.Report(new Fee2ContainerProgress(5, "Aktuelle FEE-Struktur wird als frischer Snapshot eingelesen …"));
         if (Services.FeeObjects is null)
             throw new InvalidOperationException("Der FEE-Dienst ist nicht initialisiert.");
-        var allObjects = (await Services.FeeObjects.ReadFeeSceneObjectsForDiscoveryAsync(cancellationToken))
+        var connectionRevision = Services.Connection!.ConnectionRevision;
+        var allObjects = (await Fee2ContainerReadPhase.ReadAsync("Aktuelle FEE-Szene lesen",
+                () => Services.FeeObjects.ReadFeeSceneObjectsForDiscoveryAsync(cancellationToken), cancellationToken))
             .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item)).DistinctBy(item => item.Guid).ToArray();
+        EnsureLiveConnection(connectionRevision);
         var roots = allObjects.OfType<FeeBasicFrame>().Where(IsTopLevelInSnapshot)
             .OrderBy(frame => frame.Name, StringComparer.OrdinalIgnoreCase).ThenBy(frame => frame.Guid).ToArray();
         var ownerByObject = allObjects.ToDictionary(item => item.Guid, item =>
@@ -469,9 +472,16 @@ public sealed class Fee2ContainerService
         if (scopedByRoot.ContainsKey(Guid.Empty))
             roots = roots.Append(new FeeBasicFrame { Guid = Guid.Empty, Name = "Projektobjekte ohne BasicFrame" }).ToArray();
         progress?.Report(new Fee2ContainerProgress(12, "Aktuelle Interface-Variablen werden gelesen …"));
-        var interfaces = await FeeInterface.GetAllInterfacesAsync();
-        cancellationToken.ThrowIfCancellationRequested();
-        var variables = interfaces.SelectMany(item => item.Signals ?? []).DistinctBy(signal => signal.Guid).ToArray();
+        // Reconstruction needs the current variable snapshot, not the interface
+        // properties. Avoid the extra parallel SDK request per interface.
+        var liveVariables = await Fee2ContainerReadPhase.ReadAsync("Aktuelle FEE-Variablen lesen", async () =>
+        {
+            var variables = await Services.ApiInstance!.Interface.GetAllVariablesAsync() ?? [];
+            return variables.Select(signal => new FeeContainerLiveVariable(signal.VariableGuid,
+                signal.Tag ?? "", signal.Address ?? "", signal.Path ?? "", signal.Type.ToString(), signal.Comment ?? ""))
+                .DistinctBy(signal => signal.VariableGuid).ToArray();
+        }, cancellationToken);
+        EnsureLiveConnection(connectionRevision);
         foreach (var cabinet in allObjects.OfType<FeeCabinetElement>().Where(item => string.IsNullOrWhiteSpace(item.ElementType)))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -480,11 +490,10 @@ public sealed class Fee2ContainerService
             if (string.IsNullOrWhiteSpace(cabinet.Label))
                 cabinet.Label = await ReadOptionalObjectPropertyAsync(cabinet.Guid, "Label") ?? "";
         }
-        var liveVariables = variables.Select(signal => new FeeContainerLiveVariable(signal.Guid,
-            signal.Tag ?? "", signal.Address ?? "", signal.Path ?? "", signal.IOTypeString ?? "", signal.Comment ?? "")).ToArray();
         progress?.Report(new Fee2ContainerProgress(18, "Aktuelle Variablen- und Hilfslogikrouten werden einmalig gelesen …"));
-        var assignmentRead = await ReadAssignmentsAsync(variables.Select(signal => signal.Guid),
-            allObjects.Select(item => item.Guid).ToHashSet(), cancellationToken);
+        var assignmentRead = await Fee2ContainerReadPhase.ReadAsync("Aktuelle FEE-Signalzuordnungen lesen",
+            () => ReadAssignmentsAsync(liveVariables.Select(signal => signal.VariableGuid),
+                allObjects.Select(item => item.Guid).ToHashSet(), cancellationToken, progress), cancellationToken);
         var assignmentsByRoot = assignmentRead.Assignments.GroupBy(assignment =>
                 ownerByObject.GetValueOrDefault(assignment.TargetObjectGuid))
             .ToDictionary(group => group.Key, group => group.ToArray());
@@ -501,6 +510,7 @@ public sealed class Fee2ContainerService
         for (var index = 0; index < roots.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            EnsureLiveConnection(connectionRevision);
             var root = roots[index];
             progress?.Report(new Fee2ContainerProgress(roots.Length == 0 ? 90 : 30 + index * 65 / roots.Length,
                 $"Root {index + 1} von {roots.Length} wird live rekonstruiert: {root.Name}"));
@@ -526,6 +536,8 @@ public sealed class Fee2ContainerService
                     $"Die aktuelle Struktur dieses Roots konnte nicht rekonstruiert werden: {exception.Message}"));
             }
         }
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureLiveConnection(connectionRevision);
         progress?.Report(new Fee2ContainerProgress(100, "FEE-Roots und aktuelle Container vollständig ausgewertet."));
         return new Fee2ContainerDiscoveryResult(resultRoots, resultRoots.Count, resultIssues);
     }
@@ -707,29 +719,43 @@ public sealed class Fee2ContainerService
     private static async Task<VariableAssignmentRead> ReadAssignmentsAsync(
         IEnumerable<Guid> variableGuids,
         IReadOnlySet<Guid> scopedObjects,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<Fee2ContainerProgress>? progress = null)
     {
-        using var throttle = new SemaphoreSlim(6);
-        var helperRoutes = new System.Collections.Concurrent.ConcurrentDictionary<Guid,
-            Lazy<Task<IReadOnlyList<(Guid ObjectGuid, string SlotName)>>>>();
+        var connectionRevision = Services.Connection!.ConnectionRevision;
+        var helperRoutes = new Dictionary<Guid, IReadOnlyList<(Guid ObjectGuid, string SlotName)>>();
+        var failedHelpers = new HashSet<Guid>();
+        var matches = new List<FeeContainerLiveAssignment>();
+        var issues = new List<FeeContainerReconstructionIssue>();
+        var variables = variableGuids.Distinct().ToArray();
         async Task<IReadOnlyList<(Guid ObjectGuid, string SlotName)>> ReadHelperRouteAsync(Guid guid)
         {
+            if (helperRoutes.TryGetValue(guid, out var cached))
+                return cached;
             cancellationToken.ThrowIfCancellationRequested();
             var links = await Services.ApiInstance!.Interface.GetSlotSlotAssignmentAsync(guid, "Input 01") ?? [];
             cancellationToken.ThrowIfCancellationRequested();
-            return links.SelectMany(link => Guid.TryParse(link.SceneObjectGuid, out var linkedGuid)
+            var result = links.SelectMany(link => Guid.TryParse(link.SceneObjectGuid, out var linkedGuid)
                     ? (link.SlotNames ?? []).Select(slot => (linkedGuid, slot)) : [])
                 .Distinct().ToArray();
+            helperRoutes[guid] = result;
+            return result;
         }
-        var tasks = variableGuids.Distinct().Select(async variableGuid =>
+        // The vendor client is stateful. Serial requests avoid one pending
+        // variable/slot request cancelling another request on the same client.
+        for (var index = 0; index < variables.Length; index++)
         {
-            await throttle.WaitAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            EnsureLiveConnection(connectionRevision);
+            var variableGuid = variables[index];
+            if (index % 25 == 0)
+                progress?.Report(new Fee2ContainerProgress(18 + index * 10 / Math.Max(1, variables.Length),
+                    $"Aktuelle Signalzuordnung {index + 1} von {variables.Length} wird gelesen ({variableGuid:D}) …"));
             try
             {
-                var matches = new List<FeeContainerLiveAssignment>();
-                var localIssues = new List<FeeContainerReconstructionIssue>();
                 var assignments = await Services.ApiInstance!.Interface
                     .GetAssignedSceneObjectsAsync(variableGuid) ?? [];
+                cancellationToken.ThrowIfCancellationRequested();
                 foreach (var (objectGuid, slots) in assignments)
                 {
                     foreach (var slot in slots ?? Array.Empty<string>())
@@ -747,10 +773,11 @@ public sealed class Fee2ContainerService
                         // and only scope the linked target back to the selected root.
                         if (!string.Equals(slot, "Output 01", StringComparison.OrdinalIgnoreCase))
                             continue;
+                        if (failedHelpers.Contains(objectGuid))
+                            continue;
                         try
                         {
-                            var links = await helperRoutes.GetOrAdd(objectGuid, guid =>
-                                new Lazy<Task<IReadOnlyList<(Guid ObjectGuid, string SlotName)>>>(() => ReadHelperRouteAsync(guid))).Value;
+                            var links = await ReadHelperRouteAsync(objectGuid);
                             foreach (var (linkedGuid, linkedSlot) in links)
                             {
                                 if (scopedObjects.Contains(linkedGuid))
@@ -760,36 +787,35 @@ public sealed class Fee2ContainerService
                                         linkedSlot));
                             }
                         }
-                        catch (OperationCanceledException) { throw; }
+                        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                         catch (Exception exception)
                         {
-                            localIssues.Add(new FeeContainerReconstructionIssue(
+                            failedHelpers.Add(objectGuid);
+                            issues.Add(new FeeContainerReconstructionIssue(
                                 objectGuid,
-                                $"MoveBit-Slotroute konnte nicht gelesen werden: {exception.Message}"));
+                                $"MoveBit-Slotroute konnte nicht gelesen werden ({objectGuid:D}, Input 01): {Fee2ContainerReadPhase.Describe(exception)}"));
                         }
                     }
                 }
-
-                return new VariableAssignmentRead(matches, localIssues);
             }
-            catch (OperationCanceledException) { throw; }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception exception)
             {
-                return new VariableAssignmentRead(
-                    [],
-                    [new FeeContainerReconstructionIssue(
-                        variableGuid,
-                        $"Zuweisungen der Variable konnten nicht gelesen werden: {exception.Message}")]);
+                issues.Add(new FeeContainerReconstructionIssue(
+                    variableGuid,
+                    $"Zuweisungen der Variable konnten nicht gelesen werden ({variableGuid:D}): {Fee2ContainerReadPhase.Describe(exception)}"));
             }
-            finally
-            {
-                throttle.Release();
-            }
-        });
-        var reads = await Task.WhenAll(tasks);
-        return new VariableAssignmentRead(
-            reads.SelectMany(read => read.Assignments).Distinct().ToArray(),
-            reads.SelectMany(read => read.Issues).ToArray());
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        EnsureLiveConnection(connectionRevision);
+        return new VariableAssignmentRead(matches.Distinct().ToArray(), issues);
+    }
+
+    private static void EnsureLiveConnection(long revision)
+    {
+        if (Services.Connection?.IsConnected != true || Services.Connection.ConnectionRevision != revision)
+            throw new InvalidOperationException("Die FEE-Verbindung hat sich während des Einlesens geändert. " +
+                "Bitte erneut verbinden und ModelValidation → Update Objects ausführen.");
     }
 
     private static async Task<IReadOnlyList<SlotResolution>> ResolveSlotsAsync(

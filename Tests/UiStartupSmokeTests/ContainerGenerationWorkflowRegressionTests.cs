@@ -14,6 +14,7 @@ internal static partial class Program
 {
     private static void VerifyContainerGenerationWorkflowRegressions()
     {
+        VerifyContainerDropViewUpdates();
         var page = new ContainerGenerationPage();
         var vm = (ContainerGenerationPageVM)page.DataContext;
         vm.Settings.AutoSaveEnabled = false;

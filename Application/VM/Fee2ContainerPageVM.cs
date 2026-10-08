@@ -23,6 +23,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private Fee2ContainerRootSelectionVM? _selectedRoot;
     private CancellationTokenSource? _operationCancellation;
     private bool _isBusy;
+    private bool _isIssuesExpanded;
     private int _progressValue;
     private string _statusText = "FEE verbinden und Hauptknoten einlesen.";
     private Fee2ContainerFoundContainerVM? _selectedFoundContainer;
@@ -347,6 +348,12 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         private set { _statusText = value; OnPropertyChanged(); }
     }
 
+    public bool IsIssuesExpanded
+    {
+        get => _isIssuesExpanded;
+        set { if (_isIssuesExpanded == value) return; _isIssuesExpanded = value; OnPropertyChanged(); }
+    }
+
     public bool CanRefresh => !IsBusy && Connection.CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent;
     public bool CanExport => !IsBusy && Roots.Any(root => root.IsSelected);
     public string RefreshUnavailableReason => Connection.CanUseFeeFeatures
@@ -372,16 +379,20 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     {
         if (!CanRefresh) { StatusText = RefreshUnavailableReason; return; }
         BeginOperation();
+        var operationCancellation = _operationCancellation!;
         try
         {
             ClearDiscoveredRoots();
             var progress = new Progress<Fee2ContainerProgress>(update =>
             {
+                if (!IsBusy || !ReferenceEquals(_operationCancellation, operationCancellation) ||
+                    operationCancellation.IsCancellationRequested)
+                    return;
                 ProgressValue = update.Percent;
                 StatusText = update.Message;
             });
             var result = await _service.DiscoverAsync(
-                _operationCancellation!.Token,
+                operationCancellation.Token,
                 reconstructLegacyRoots: true,
                 progress);
             SelectedRoot = null;
@@ -397,6 +408,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             Issues.Clear();
             foreach (var issue in result.Issues)
                 Issues.Add($"{issue.RootName}: {issue.Message}".TrimStart(':', ' '));
+            IsIssuesExpanded = Issues.Count > 0;
             SelectedRoot = Roots.FirstOrDefault();
             if (SelectedRoot is not null) SelectedRoot.IsSelected = true;
             StatusText = result.Roots.Count == 0
@@ -406,15 +418,14 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                   $"{result.Issues.Count} Hinweis(e).";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
         {
-            StatusText = "Einlesen der FEE-Roots wurde abgebrochen.";
+            StatusText = "Einlesen der FEE-Roots wurde durch den Benutzer abgebrochen.";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
         catch (Exception exception)
         {
-            StatusText = $"FEE-Roots konnten nicht gelesen werden: {exception.Message}";
-            ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
+            ReportOperationFailure("FEE-Roots konnten nicht gelesen werden", exception);
         }
         finally { EndOperation(); }
     }
@@ -436,6 +447,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         if (dialog.ShowDialog() != true) return;
 
         BeginOperation();
+        var operationCancellation = _operationCancellation!;
         try
         {
             StatusText = "Ausgewählte FEE-Teilbäume, Logiken, Slots und Signale werden zusammengeführt …";
@@ -443,6 +455,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             Issues.Clear();
             foreach (var issue in export.Issues)
                 Issues.Add($"{(issue.ObjectGuid is Guid guid ? $"{guid:D}: " : string.Empty)}{issue.Message}");
+            IsIssuesExpanded = Issues.Count > 0;
             if (export.Snapshot.ContainerCount == 0)
             {
                 StatusText = "In den ausgewählten Hauptknoten wurden keine sicher unterstützten Container erkannt. Es wurde keine Datei geschrieben.";
@@ -456,17 +469,25 @@ public sealed class Fee2ContainerPageVM : MvvmBase
                          $"{export.Issues.Count} Prüfhinweis(e). Datei: {dialog.FileName}";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (operationCancellation.IsCancellationRequested)
         {
             StatusText = "ContainerFile-Export wurde abgebrochen; es wurde keine Datei geschrieben.";
             ApplicationLogService.Instance.Information(LogArea, StatusText);
         }
         catch (Exception exception)
         {
-            StatusText = $"ContainerFile konnte nicht exportiert werden: {exception.Message}";
-            ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
+            ReportOperationFailure("ContainerFile konnte nicht exportiert werden", exception);
         }
         finally { EndOperation(); }
+    }
+
+    private void ReportOperationFailure(string operation, Exception exception)
+    {
+        StatusText = $"{operation}: {Fee2ContainerReadPhase.Describe(exception)}";
+        Issues.Add(StatusText);
+        Issues.Add(exception.ToString());
+        IsIssuesExpanded = true;
+        ApplicationLogService.Instance.Error(LogArea, StatusText, exception);
     }
 
     private void ClearDiscoveredRoots()
@@ -476,6 +497,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         foreach (var root in Roots) root.PropertyChanged -= OnRootSelectionChanged;
         Roots.Clear();
         Issues.Clear();
+        IsIssuesExpanded = false;
         RefreshSelectionDetails(null);
     }
 
