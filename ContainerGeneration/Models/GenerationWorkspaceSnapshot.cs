@@ -28,8 +28,7 @@ public sealed record WorkspaceEntrySnapshot(
     bool WasManuallyEdited,
     ContainerEntryReviewState ReviewState,
     string ReviewMessage,
-    string FeeGuid = "",
-    bool IsChangeAcknowledged = false);
+    string FeeGuid = "");
 
 public sealed record WorkspaceContainerFeeSnapshot(string Id, string Name, string Type, IReadOnlyList<ContainerFeeObject> Objects);
 
@@ -799,7 +798,7 @@ public static class GenerationWorkspaceReconciler
             entry.Note,
             entry.IsManuallyEdited,
             entry.ReviewState,
-            entry.ReviewMessage, entry.FeeGuid, entry.IsChangeAcknowledged);
+            entry.ReviewMessage, entry.FeeGuid);
     }
 
     private static IEnumerable<CurrentEntry> EnumerateCurrentEntries(
@@ -860,8 +859,7 @@ public static class GenerationWorkspaceReconciler
             Note = snapshot.Note,
             IsManuallyEdited = snapshot.WasManuallyEdited,
             ReviewState = snapshot.ReviewState,
-            ReviewMessage = snapshot.ReviewMessage,
-            IsChangeAcknowledged = snapshot.IsChangeAcknowledged
+            ReviewMessage = snapshot.ReviewMessage
         };
 
         MoveToSnapshotLocation(entry, snapshot, containers, unassigned, filtered);
@@ -1041,8 +1039,6 @@ public static class GenerationWorkspaceReconciler
         string message)
     {
         entry.ReviewState = state;
-        if (state is not ContainerEntryReviewState.None and not ContainerEntryReviewState.Preserved)
-            entry.IsChangeAcknowledged = false;
         entry.ReviewMessage = message;
     }
 

@@ -100,8 +100,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
                     SourceFingerprint = GenerationWorkspaceReconciler.CreateSourceFingerprint(entry),
                     IsManuallyEdited = entry.IsManuallyEdited,
                     ReviewState = entry.ReviewState,
-                    ReviewMessage = entry.ReviewMessage,
-                    IsChangeAcknowledged = entry.IsChangeAcknowledged
+                    ReviewMessage = entry.ReviewMessage
                 })
                 .ToList();
         }
@@ -128,7 +127,6 @@ namespace VIBN_Tools.ContainerGeneration.Models
                 entry.IsManuallyEdited = state.IsManuallyEdited;
                 entry.ReviewState = state.ReviewState;
                 entry.ReviewMessage = state.ReviewMessage;
-                entry.IsChangeAcknowledged = state.IsChangeAcknowledged;
             }
 
             foreach (var entry in EnumerateEntries())
@@ -152,6 +150,5 @@ namespace VIBN_Tools.ContainerGeneration.Models
         public bool IsManuallyEdited { get; set; }
         public ContainerEntryReviewState ReviewState { get; set; }
         public string ReviewMessage { get; set; } = string.Empty;
-        public bool IsChangeAcknowledged { get; set; }
     }
 }

@@ -39,14 +39,6 @@ namespace VIBN_Tools
                 return;
             }
 
-            if (ContainerGeneration.Models.ContainerGenerationExceptionPolicy.IsContainerGenerationUiFailure(args.Exception))
-            {
-                Application.ApplicationLogService.Instance.Error("ContainerGeneration",
-                    "Ein Fehler der ContainerGeneration-Oberfläche wurde abgefangen. Vorgang abgebrochen; Arbeitsstand prüfen.", args.Exception);
-                args.Handled = true;
-                return;
-            }
-
             Application.ApplicationLogService.Instance.Error(
                 "Unbehandelter UI-Fehler",
                 "Die WPF-Oberfläche hat eine unbehandelte Ausnahme ausgelöst.",

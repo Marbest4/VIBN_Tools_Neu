@@ -13,7 +13,6 @@
              xmlns:local="clr-namespace:VIBN_Tools.Application.View"
              xmlns:behaviors="clr-namespace:VIBN_Tools.Application.Behaviors"
              mc:Ignorable="d" 
-             IsEnabled="{Binding CanEditWorkspace}"
              d:DesignHeight="1000" d:DesignWidth="1600">
 
     <UserControl.InputBindings>
@@ -58,7 +57,6 @@
             </Style>
 
             <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
-            <behaviors:BindingProxy x:Key="ViewModelProxy" Data="{Binding}"/>
 
             <Style x:Key="ReviewEntryTextBoxStyle" TargetType="TextBox">
                 <Setter Property="BorderBrush" Value="White"/>
@@ -82,20 +80,6 @@
                     </DataTrigger>
                     <DataTrigger Binding="{Binding ReviewState}" Value="ManuallyEdited">
                         <Setter Property="Background" Value="#FFFFF8E1"/>
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding HasUnconfirmedChange}" Value="True">
-                        <Setter Property="Background" Value="#FFFFF3CD"/>
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding IsChangeAcknowledged}" Value="True">
-                        <Setter Property="Background" Value="White"/>
-                        <Setter Property="BorderBrush" Value="White"/>
-                        <Setter Property="BorderThickness" Value="1"/>
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding ReviewState}" Value="NeedsReview">
-                        <Setter Property="Background" Value="#FFFFE0B2"/>
-                    </DataTrigger>
-                    <DataTrigger Binding="{Binding HasAssignmentWarning}" Value="True">
-                        <Setter Property="Background" Value="#FFFFE0B2"/>
                     </DataTrigger>
                     <DataTrigger Binding="{Binding HasValidationError}" Value="True">
                         <Setter Property="Background" Value="#FFFFCDD2"/>
@@ -345,11 +329,6 @@
                             Margin="5,0,0,0"
                             Padding="10,2"/>
                 </StackPanel>
-                <CheckBox Content="Neue Details einblenden" IsChecked="{Binding IsReimportDetailsVisible, Mode=TwoWay}"
-                          Margin="10,4" VerticalAlignment="Center" ToolTip="Blendet die Spalte Reimport-Änderung ein oder aus; Markierungen bleiben sichtbar."/>
-                <Button Content="Änderungen bestätigen" Command="{Binding ConfirmAppliedChanges}"
-                        IsEnabled="{Binding HasUnconfirmedChanges}" Padding="10,2" Margin="5,2"
-                        ToolTip="Bestätigt die Änderungsmarkierungen im gesamten Arbeitsstand. Fehler und Warnungen bleiben erhalten. Rückgängig ist möglich."/>
                 <TextBlock Margin="8,5" Text="{Binding ContainerList.Count, NotifyOnSourceUpdated=True, StringFormat={}Containers - {0}}" HorizontalAlignment="Center"
                            Style="{StaticResource TextRobotoLightStyle}" VerticalAlignment="Center"/>
                 <TextBlock Margin="8,5" Text="{Binding AssignedSignals, NotifyOnSourceUpdated=True, StringFormat={}Assigned Signals - {0}}" HorizontalAlignment="Center"
@@ -516,8 +495,8 @@
 
             <!-- Row 3 - Container data -->
             <DataGrid x:Name="ContainerListDataGrid" Grid.Row="3" Margin="5" AutoGenerateColumns="False" CanUserAddRows="True" Height="Auto" MinColumnWidth="100" MinRowHeight="25" ItemsSource="{Binding ContainerList}"
-                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Standard" EnableRowVirtualization="True" EnableColumnVirtualization="True" ScrollViewer.CanContentScroll="True"
-                      SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True" IsEnabled="{Binding CanEditWorkspace}">
+                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" EnableRowVirtualization="True" EnableColumnVirtualization="True" ScrollViewer.CanContentScroll="True"
+                      SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True">
                 <i:Interaction.Triggers>
                     <i:EventTrigger EventName="SelectionChanged">
                         <i:InvokeCommandAction Command="{Binding SelectionChangedExecuted}" CommandParameter="{Binding SelectedItems, ElementName=ContainerListDataGrid}" />
@@ -531,9 +510,6 @@
                     <i:EventTrigger EventName="Drop">
                         <i:InvokeCommandAction Command="{Binding DataGridDrop}" PassEventArgsToCommand="True" />
                     </i:EventTrigger>
-                    <i:EventTrigger EventName="PreviewMouseLeftButtonDown">
-                        <i:InvokeCommandAction Command="{Binding DataGridMouseDown}" PassEventArgsToCommand="True" />
-                    </i:EventTrigger>
                     <i:EventTrigger EventName="MouseMove">
                         <i:InvokeCommandAction Command="{Binding DataGridMouseMove}" PassEventArgsToCommand="True" />
                     </i:EventTrigger>
@@ -543,28 +519,21 @@
                     <Style TargetType="DataGridRow">
                         <Setter Property="Background" Value="White"/>
                         <Style.Triggers>
-                            <DataTrigger Binding="{Binding ManuallyChecked}" Value="True">
-                                <Setter Property="Background" Value="#FFE8F5E9"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding HasAcknowledgedChanges}" Value="True">
-                                <Setter Property="Background" Value="White"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding HasDetectedChanges}" Value="True">
-                                <Setter Property="Background" Value="#FFFFF3CD"/>
-                            </DataTrigger>
                             <DataTrigger Binding="{Binding RequiresReview}" Value="True">
                                 <Setter Property="Background" Value="#FFFFF3CD"/>
                                 <Setter Property="BorderBrush" Value="#FFFFC107"/>
                                 <Setter Property="BorderThickness" Value="0,1,0,1"/>
                             </DataTrigger>
-                            <DataTrigger Binding="{Binding HasWarnings}" Value="True">
-                                <Setter Property="Background" Value="#FFFFE0B2"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding HasErrors}" Value="True">
+                            <DataTrigger Binding="{Binding IsValid}" Value="False">
                                 <Setter Property="Background" Value="#FFFFE1E1"/>
                                 <Setter Property="BorderBrush" Value="#FFE74C3C"/>
                                 <Setter Property="BorderThickness" Value="0,2,0,2"/>
                                 <Setter Property="Margin" Value="0,0,0,2"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding ManuallyChecked}" Value="True">
+                                <Setter Property="Background" Value="#FFE8F5E9"/>
+                                <Setter Property="BorderBrush" Value="#FF66BB6A"/>
+                                <Setter Property="BorderThickness" Value="0,1,0,1"/>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -591,7 +560,7 @@
                                         <ItemsPanelTemplate>
                                             <VirtualizingStackPanel 
                                                 IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                                VirtualizationMode="Recycling" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -668,7 +637,7 @@
                                         <ItemsPanelTemplate>
                                             <VirtualizingStackPanel 
                                                 IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                                VirtualizationMode="Recycling" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -702,7 +671,7 @@
                                         <ItemsPanelTemplate>
                                             <VirtualizingStackPanel 
                                                 IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                                VirtualizationMode="Recycling" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -736,7 +705,7 @@
                                         <ItemsPanelTemplate>
                                             <VirtualizingStackPanel 
                                                 IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                                VirtualizationMode="Recycling" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -763,7 +732,6 @@
                     </DataGridTemplateColumn>
 
                     <DataGridTemplateColumn Header="Reimport-Änderung"
-                                            Visibility="{Binding Data.IsReimportDetailsVisible, Source={StaticResource ViewModelProxy}, Converter={StaticResource BooleanToVisibilityConverter}}"
                                             IsReadOnly="True"
                                             Width="320">
                         <DataGridTemplateColumn.CellTemplate>
@@ -797,7 +765,7 @@
                                         <ItemsPanelTemplate>
                                             <VirtualizingStackPanel 
                                                 IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                                VirtualizationMode="Recycling" />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -891,7 +859,7 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="0" ItemsSource="{Binding UnassignedEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedUnassignedEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" AutoGeneratingColumn="AuxiliaryGrid_AutoGeneratingColumn" IsEnabled="{Binding CanEditWorkspace}" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True"
+                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True"
                           ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
@@ -910,32 +878,12 @@
                                     <Setter Property="BorderBrush" Value="#FFEF6C00"/>
                                     <Setter Property="BorderThickness" Value="2"/>
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding HasUnconfirmedChange}" Value="True">
-                                    <Setter Property="Background" Value="#FFFFF3CD"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding IsChangeAcknowledged}" Value="True">
-                                    <Setter Property="Background" Value="White"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ReviewState}" Value="NeedsReview">
-                                    <Setter Property="Background" Value="#FFFFE0B2"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding HasAssignmentWarning}" Value="True">
-                                    <Setter Property="Background" Value="#FFFFE0B2"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding HasValidationError}" Value="True">
-                                    <Setter Property="Background" Value="#FFFFCDD2"/>
-                                    <Setter Property="ToolTip" Value="{Binding ValidationError}"/>
-                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </DataGrid.RowStyle>
                     <i:Interaction.Triggers>
                         <i:EventTrigger EventName="Drop">
                             <i:InvokeCommandAction Command="{Binding DataGridDrop}" PassEventArgsToCommand="True" />
-                        </i:EventTrigger>
-                        <i:EventTrigger EventName="PreviewMouseLeftButtonDown">
-                            <i:InvokeCommandAction Command="{Binding DataGridMouseDown}" PassEventArgsToCommand="True" />
                         </i:EventTrigger>
                         <i:EventTrigger EventName="MouseMove">
                             <i:InvokeCommandAction Command="{Binding DataGridMouseMove}" PassEventArgsToCommand="True" />
@@ -962,7 +910,7 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="2" ItemsSource="{Binding FilteredEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedFilteredEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" AutoGeneratingColumn="AuxiliaryGrid_AutoGeneratingColumn" IsEnabled="{Binding CanEditWorkspace}" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
+                          MinColumnWidth="100" AutoGenerateColumns="True" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
                           ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
@@ -981,32 +929,12 @@
                                     <Setter Property="BorderBrush" Value="#FFEF6C00"/>
                                     <Setter Property="BorderThickness" Value="2"/>
                                 </DataTrigger>
-                                <DataTrigger Binding="{Binding HasUnconfirmedChange}" Value="True">
-                                    <Setter Property="Background" Value="#FFFFF3CD"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding IsChangeAcknowledged}" Value="True">
-                                    <Setter Property="Background" Value="White"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding ReviewState}" Value="NeedsReview">
-                                    <Setter Property="Background" Value="#FFFFE0B2"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding HasAssignmentWarning}" Value="True">
-                                    <Setter Property="Background" Value="#FFFFE0B2"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding HasValidationError}" Value="True">
-                                    <Setter Property="Background" Value="#FFFFCDD2"/>
-                                    <Setter Property="ToolTip" Value="{Binding ValidationError}"/>
-                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </DataGrid.RowStyle>
                     <i:Interaction.Triggers>
                         <i:EventTrigger EventName="Drop">
                             <i:InvokeCommandAction Command="{Binding DataGridDrop}" PassEventArgsToCommand="True" />
-                        </i:EventTrigger>
-                        <i:EventTrigger EventName="PreviewMouseLeftButtonDown">
-                            <i:InvokeCommandAction Command="{Binding DataGridMouseDown}" PassEventArgsToCommand="True" />
                         </i:EventTrigger>
                         <i:EventTrigger EventName="MouseMove">
                             <i:InvokeCommandAction Command="{Binding DataGridMouseMove}" PassEventArgsToCommand="True" />

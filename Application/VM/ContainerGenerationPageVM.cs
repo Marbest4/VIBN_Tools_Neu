@@ -32,7 +32,7 @@ namespace VIBN_Tools.Application.VM
     /// generation, validation, review, undo/redo and export. The domain rules
     /// remain in <c>ContainerGeneration/BusinessLogic</c>.
     /// </summary>
-    public partial class ContainerGenerationPageVM : MvvmBase
+    public class ContainerGenerationPageVM : MvvmBase
     {
         private System.Xml.XmlElement? _feeInventory;
 
@@ -42,50 +42,50 @@ namespace VIBN_Tools.Application.VM
         // B I N D I N G S   -   B U T T O N S   /   C O M M A N D S
         //===========================================================================================================================
 
-        public ICommand OpenInterfaceFile => GuardedAsyncCommand(Open_InterfaceFile);
-        public ICommand OpenRequirementsXml => GuardedAsyncCommand(Open_RequirementsXml);
+        public ICommand OpenInterfaceFile => GetCommandBindingAsync(Open_InterfaceFile);
+        public ICommand OpenRequirementsXml => GetCommandBindingAsync(Open_RequirementsXml);
 
-        public ICommand LoadSettings => GuardedAsyncCommand(Load_Settings);
-        public ICommand SaveSettings => GuardedCommand(Save_Settings);
+        public ICommand LoadSettings => GetCommandBindingAsync(Load_Settings);
+        public ICommand SaveSettings => GetCommandBinding(Save_Settings);
 
-        public ICommand GenerateContainers => GuardedAsyncCommand(Generate_Containers);
-        public ICommand ValidateWorkspace => GuardedCommand(Validate_Workspace);
-        public ICommand ExportContainers => GuardedCommand(Export_Containers);
-        public ICommand CompareContainerFiles => GuardedCommand(Compare_ContainerFiles);
-        public ICommand LoadContainerFile => GuardedCommand(Load_ContainerFile);
+        public ICommand GenerateContainers => GetCommandBindingAsync(Generate_Containers);
+        public ICommand ValidateWorkspace => GetCommandBinding(Validate_Workspace);
+        public ICommand ExportContainers => GetCommandBinding(Export_Containers);
+        public ICommand CompareContainerFiles => GetCommandBinding(Compare_ContainerFiles);
+        public ICommand LoadContainerFile => GetCommandBinding(Load_ContainerFile);
 
-        public ICommand LoadData => GuardedCommand(Load_Data);
+        public ICommand LoadData => GetCommandBinding(Load_Data);
 
-        public ICommand SaveData => GuardedCommand(Save_Data);
-
-
+        public ICommand SaveData => GetCommandBinding(Save_Data);
 
 
-        public ICommand DeleteItem => GuardedCommand(Delete_Item);
-        public ICommand UndoLastAction => GuardedCommand(Undo_LastAction);
-        public ICommand RedoLastAction => GuardedCommand(Redo_LastAction);
-        public ICommand ClearActivityLog => GuardedCommand(Clear_ActivityLog);
-        public ICommand ApplyReimportSelection => GuardedCommand(Apply_ReimportSelection);
-        public ICommand CancelReimportSelection => GuardedCommand(Cancel_ReimportSelection);
-        public ICommand SelectAllReimportChanges => GuardedCommand(
+
+
+        public ICommand DeleteItem => GetCommandBinding(Delete_Item);
+        public ICommand UndoLastAction => GetCommandBinding(Undo_LastAction);
+        public ICommand RedoLastAction => GetCommandBinding(Redo_LastAction);
+        public ICommand ClearActivityLog => GetCommandBinding(Clear_ActivityLog);
+        public ICommand ApplyReimportSelection => GetCommandBinding(Apply_ReimportSelection);
+        public ICommand CancelReimportSelection => GetCommandBinding(Cancel_ReimportSelection);
+        public ICommand SelectAllReimportChanges => GetCommandBinding(
             () => SetAllReimportChanges(true));
-        public ICommand SelectNoReimportChanges => GuardedCommand(
+        public ICommand SelectNoReimportChanges => GetCommandBinding(
             () => SetAllReimportChanges(false));
-        public ICommand ToggleGroupingHelp => GuardedCommand(() =>
+        public ICommand ToggleGroupingHelp => GetCommandBinding(() =>
             IsGroupingHelpVisible = !IsGroupingHelpVisible);
-        public ICommand UseAddressGroupingExample => GuardedCommand(ApplyAddressGroupingExample);
-        public ICommand UseIdGroupingExample => GuardedCommand(ApplyIdGroupingExample);
-        public ICommand HideReimportComparison => GuardedCommand(() =>
+        public ICommand UseAddressGroupingExample => GetCommandBinding(ApplyAddressGroupingExample);
+        public ICommand UseIdGroupingExample => GetCommandBinding(ApplyIdGroupingExample);
+        public ICommand HideReimportComparison => GetCommandBinding(() =>
             IsReimportComparisonVisible = false);
-        public ICommand ShowReimportComparison => GuardedCommand(() =>
+        public ICommand ShowReimportComparison => GetCommandBinding(() =>
             IsReimportComparisonVisible = true);
-        public ICommand AcceptReimportChange => GuardedCommand(parameter =>
+        public ICommand AcceptReimportChange => GetCommandBinding(parameter =>
             SetReimportChangeDecision(parameter, true));
-        public ICommand RejectReimportChange => GuardedCommand(parameter =>
+        public ICommand RejectReimportChange => GetCommandBinding(parameter =>
             SetReimportChangeDecision(parameter, false));
-        public ICommand OpenAutoSaveFolder => GuardedCommand(OpenAutoSaveDirectory);
-        public ICommand OpenGroupingPresetFolder => GuardedCommand(OpenGroupingPresetDirectory);
-        public ICommand ReloadGroupingPresets => GuardedCommand(() => ReloadGroupingPresetFiles(true));
+        public ICommand OpenAutoSaveFolder => GetCommandBinding(OpenAutoSaveDirectory);
+        public ICommand OpenGroupingPresetFolder => GetCommandBinding(OpenGroupingPresetDirectory);
+        public ICommand ReloadGroupingPresets => GetCommandBinding(() => ReloadGroupingPresetFiles(true));
 
 
 
@@ -145,10 +145,10 @@ namespace VIBN_Tools.Application.VM
 
 
 
-        public ICommand ContainerDataGridPreviewKeyDown => GuardedCommand(ContainerGrid_OnPreviewKeyDown);
-        public ICommand ContainerDataGridDragOver => GuardedCommand(ContainerGrid_OnDragOver);
-        public ICommand DataGridDrop => GuardedCommand(Datagrid_OnDrop);
-        public ICommand DataGridMouseMove => GuardedCommand(Datagrid_OnMouseMove);
+        public ICommand ContainerDataGridPreviewKeyDown => GetCommandBinding(ContainerGrid_OnPreviewKeyDown);
+        public ICommand ContainerDataGridDragOver => GetCommandBinding(ContainerGrid_OnDragOver);
+        public ICommand DataGridDrop => GetCommandBinding(Datagrid_OnDrop);
+        public ICommand DataGridMouseMove => GetCommandBinding(Datagrid_OnMouseMove);
 
 
 
@@ -166,9 +166,7 @@ namespace VIBN_Tools.Application.VM
             get => _filteredEntries;
             set
             {
-                _filteredEntries.CollectionChanged -= UpdateUICount;
                 _filteredEntries = value;
-                _filteredEntries.CollectionChanged += UpdateUICount;
                 OnPropertyChanged(nameof(FilteredEntries));
             }
         }
@@ -232,11 +230,9 @@ namespace VIBN_Tools.Application.VM
             get => _containerList;
             set
             {
-                foreach (var container in _containerList) UnsubscribeContainer(container);
-                _containerList.CollectionChanged -= ContainerList_CollectionChanged;
+                _containerList.CollectionChanged -= UpdateUICount;
                 _containerList = value;
-                _containerList.CollectionChanged += ContainerList_CollectionChanged;
-                foreach (var container in _containerList) SubscribeContainer(container);
+                _containerList.CollectionChanged += UpdateUICount;
                 OnPropertyChanged(nameof(ContainerList));
             }
         }
@@ -257,7 +253,7 @@ namespace VIBN_Tools.Application.VM
         }
 
 
-        public ICommand SelectionChangedExecuted => GuardedCommand(SelectionChanged_Executed);
+        public ICommand SelectionChangedExecuted => GetCommandBinding(SelectionChanged_Executed);
 
 
 
@@ -358,7 +354,7 @@ namespace VIBN_Tools.Application.VM
 
 
         // DispatcherTimer for filtering SimObjects with Debounce
-        // ActionLogger writes each completed workspace action as one JSONL batch.
+        // ── ActionLogger: protokolliert jede Drag-and-Drop-Aktion sofort auf Disk ──
         // Speicherort: {ExeOrdner}\vibn_ai_data\actions\YYYYMMDD.jsonl
         // Die Logs werden beim naechsten Training/Check automatisch eingelesen.
         private readonly ActionLogger _actionLogger = new ActionLogger();
@@ -388,7 +384,7 @@ namespace VIBN_Tools.Application.VM
         private ReimportSummary? _pendingReimportSummary;
         private bool _pendingComparisonIsContainerFile;
 
-        public VIBN_Tools.Core.Collections.RangeObservableCollection<ReimportDifference> PendingReimportChanges { get; } = [];
+        public ObservableCollection<ReimportDifference> PendingReimportChanges { get; } = [];
         public ICollectionView PendingReimportChangesView { get; }
         public ObservableCollection<string> ReimportCriteria { get; } = ["Alle"];
         public ObservableCollection<WorkspaceActivityLogEntry> ActivityLog { get; } = [];
@@ -631,7 +627,7 @@ namespace VIBN_Tools.Application.VM
 
                 _selectedReviewFilter = value;
                 OnPropertyChanged();
-                ExecuteGuarded("Containerfilter", FilterContainerGrid);
+                FilterContainerGrid();
             }
         }
 
@@ -785,6 +781,7 @@ namespace VIBN_Tools.Application.VM
             FilteredEntries = new ObservableCollection<ContainerEntry>();
             UnassignedEntries = new ObservableCollection<ContainerEntry>();
             ContainerList = new ObservableCollection<ContainerData>();
+            ContainerList.CollectionChanged += ContainerList_CollectionChanged;
             PendingReimportChangesView = CollectionViewSource.GetDefaultView(PendingReimportChanges);
             PendingReimportChangesView.Filter = FilterReimportDifference;
             PendingReimportChanges.CollectionChanged += (_, _) => RefreshReimportCriteria();
@@ -799,21 +796,21 @@ namespace VIBN_Tools.Application.VM
             _debounceTimerContainerData.Tick += (sender, eventArgs) =>
             {
                 _debounceTimerContainerData.Stop();
-                ExecuteGuarded("Containerfilter", FilterContainerGrid);
+                FilterContainerGrid();
             };
 
             _debounceTimerUnassignedData = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _debounceTimerUnassignedData.Tick += (sender, eventArgs) =>
             {
                 _debounceTimerUnassignedData.Stop();
-                ExecuteGuarded("Signalfilter", FilterUnassignedEntriesGrid);
+                FilterUnassignedEntriesGrid();
             };
 
             _debounceTimerFilteredData = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
             _debounceTimerFilteredData.Tick += (sender, eventArgs) =>
             {
                 _debounceTimerFilteredData.Stop();
-                ExecuteGuarded("Filterliste", FilterFilteredEntriesGrid);
+                FilterFilteredEntriesGrid();
             };
 
             _autoSaveTimer.Tick += AutoSaveTimer_Tick;
@@ -951,44 +948,37 @@ namespace VIBN_Tools.Application.VM
                 return;
             }
 
-            var inputsCommitted = false;
-            try
+            var importedZuli = new ZuLiDefault();
+            var importedRequirements = new RequirementsXml();
+
+            var resultZuli = await importedZuli.ReadFromFileAsync(Settings.PathZuli);
+            if (!resultZuli.IsSuccess)
             {
-                var importedZuli = new ZuLiDefault();
-                var importedRequirements = new RequirementsXml();
-
-                var resultZuli = await importedZuli.ReadFromFileAsync(Settings.PathZuli);
-                if (!resultZuli.IsSuccess)
-                {
-                    StatusText = resultZuli.ErrorMessage;
-                    return;
-                }
-
-                var resultRequirements = await importedRequirements.ReadFromFileAsync(Settings.PathRequirementsXml);
-                if (!resultRequirements.IsSuccess)
-                {
-                    StatusText = resultRequirements.ErrorMessage;
-                    return;
-                }
-
-                inputsCommitted = true;
-                Zuli = importedZuli;
-                EnsureSignalIds(Zuli.Items);
-                RequirementsFile = importedRequirements;
-                RequirementsProvider.RequirementsFile = RequirementsFile;
-
-                ComponentTypes.Clear();
-                foreach (var component in RequirementsFile.GetComponentTypes().OrderBy(x => x))
-                    ComponentTypes.Add(component);
-
-                CommitSuccessfulImport(importMode, "Projekt-Einstellungen");
-                OnPropertyChanged(nameof(CanGenerate));
-                OnPropertyChanged(nameof(GenerateUnavailableReason));
+                Settings.SetSettings(previousSettings);
+                StatusText = resultZuli.ErrorMessage;
+                return;
             }
-            finally
+
+            var resultRequirements = await importedRequirements.ReadFromFileAsync(Settings.PathRequirementsXml);
+            if (!resultRequirements.IsSuccess)
             {
-                if (!inputsCommitted) Settings.SetSettings(previousSettings);
+                Settings.SetSettings(previousSettings);
+                StatusText = resultRequirements.ErrorMessage;
+                return;
             }
+
+            Zuli = importedZuli;
+            EnsureSignalIds(Zuli.Items);
+            RequirementsFile = importedRequirements;
+            RequirementsProvider.RequirementsFile = RequirementsFile;
+
+            ComponentTypes.Clear();
+            foreach (var component in RequirementsFile.GetComponentTypes().OrderBy(x => x))
+                ComponentTypes.Add(component);
+
+            CommitSuccessfulImport(importMode, "Projekt-Einstellungen");
+            OnPropertyChanged(nameof(CanGenerate));
+            OnPropertyChanged(nameof(GenerateUnavailableReason));
         }
 
 
@@ -1090,7 +1080,13 @@ namespace VIBN_Tools.Application.VM
                                 _pendingGeneratedFiltered = generatedFiltered;
                                 _pendingReimportSummary = summary;
 
-                                ReplacePendingReimportChanges(summary.Differences);
+                                PendingReimportChanges.Clear();
+                                foreach (var difference in summary.Differences)
+                                {
+                                    PendingReimportChanges.Add(difference);
+                                    difference.PropertyChanged +=
+                                        PendingReimportChange_PropertyChanged;
+                                }
 
                                 OnPropertyChanged(nameof(HasPendingReimportChanges));
                                 IsReimportComparisonVisible = true;
@@ -1174,13 +1170,13 @@ namespace VIBN_Tools.Application.VM
                     "Bitte Regex vereinfachen oder genauer eingrenzen. Der bisherige Arbeitsstand blieb erhalten.";
                 WasGenerated = false;
             }
-            catch (Exception ex) when (ContainerGenerationExceptionPolicy.IsRecoverable(ex))
+            catch (Exception ex)
             {
                 measurement.MarkFailed();
                 Logger.Error(ex, "Container generation failed.");
                 StatusText =
                     $"Die Generierung konnte nicht abgeschlossen werden: {ex.Message}. " +
-                    "Bitte den Arbeitsstand und das Protokoll prüfen.";
+                    "Der bisherige Arbeitsstand blieb erhalten.";
                 WasGenerated = false;
             }
             finally
@@ -1441,7 +1437,7 @@ namespace VIBN_Tools.Application.VM
                         ConfigureAutoSaveTimer();
                         StatusText = $"Arbeitsstand gespeichert: {FoundFiles[0]}";
                     }
-                    catch (Exception ex) when (ContainerGenerationExceptionPolicy.IsRecoverable(ex))
+                    catch (Exception ex)
                     {
                         Logger.Error(ex, "Could not save workspace to {FilePath}.", FoundFiles[0]);
                         StatusText = "Der Arbeitsstand konnte nicht gespeichert werden. Details stehen im Protokoll.";
@@ -1509,7 +1505,7 @@ namespace VIBN_Tools.Application.VM
                         WasGenerated = true;
                         StatusText = "Gespeicherter Arbeitsstand wurde geladen.";
                     }
-                    catch (Exception ex) when (ContainerGenerationExceptionPolicy.IsRecoverable(ex))
+                    catch (Exception ex)
                     {
                         Logger.Error(ex, "Could not load workspace from {FilePath}.", FoundFiles[0]);
                         MessageBox.Show(
@@ -1615,7 +1611,7 @@ namespace VIBN_Tools.Application.VM
                 });
                 StatusText = $"Arbeitsstand-Ordner geöffnet: {directory}";
             }
-            catch (Exception exception) when (ContainerGenerationExceptionPolicy.IsRecoverable(exception))
+            catch (Exception exception)
             {
                 Logger.Error(exception, "Could not open the workspace autosave directory.");
                 StatusText = "Der Arbeitsstand-Ordner konnte nicht geöffnet werden. Details stehen im Protokoll.";
@@ -1646,7 +1642,11 @@ namespace VIBN_Tools.Application.VM
             _pendingGeneratedFiltered = candidateFiltered;
             _pendingReimportSummary = summary;
             _pendingComparisonIsContainerFile = true;
-            ReplacePendingReimportChanges(summary.Differences);
+            foreach (var difference in summary.Differences)
+            {
+                PendingReimportChanges.Add(difference);
+                difference.PropertyChanged += PendingReimportChange_PropertyChanged;
+            }
 
             OnPropertyChanged(nameof(HasPendingReimportChanges));
             IsReimportComparisonVisible = true;
@@ -1719,7 +1719,7 @@ namespace VIBN_Tools.Application.VM
 
         private async void AutoSaveTimer_Tick(object? sender, EventArgs eventArgs)
         {
-            if (_isAutoSaveRunning || _isWorkspaceOperationBusy ||
+            if (_isAutoSaveRunning ||
                 !Settings.AutoSaveEnabled ||
                 string.IsNullOrWhiteSpace(WorkspaceDataPath))
             {
@@ -1738,7 +1738,7 @@ namespace VIBN_Tools.Application.VM
                     targetPath);
                 StatusText = $"AutoSave abgeschlossen: {Path.GetFileName(targetPath)}";
             }
-            catch (Exception ex) when (ContainerGenerationExceptionPolicy.IsRecoverable(ex))
+            catch (Exception ex)
             {
                 Logger.Error(ex, "AutoSave failed for {FilePath}.", WorkspaceDataPath);
                 StatusText = "AutoSave fehlgeschlagen. Details stehen im Protokoll.";
@@ -1760,6 +1760,7 @@ namespace VIBN_Tools.Application.VM
             }
 
             var comparisonLabel = _pendingComparisonIsContainerFile ? "ContainerFile-Vergleich" : "Reimport";
+            CaptureUndo($"{comparisonLabel}-Auswahl anwenden");
             var decisions = PendingReimportChanges.ToList();
             var accepted = PendingReimportChanges.Count(change => change.IsAccepted);
             var rejected = PendingReimportChanges.Count - accepted;
@@ -1768,18 +1769,27 @@ namespace VIBN_Tools.Application.VM
             var changedSignals = decisions.Count(
                 change => change.Kind == ReimportChangeKind.SourceChanged);
 
-            if (!RunWorkspaceAction($"{comparisonLabel}-Auswahl anwenden", () =>
+            _suppressUndoCapture = true;
+            try
             {
-                GenerationWorkspaceReconciler.ApplyDecisions(_pendingReimportSummary,
-                    _pendingGeneratedContainers, _pendingGeneratedUnassigned, _pendingGeneratedFiltered);
-                foreach (var container in _pendingGeneratedContainers) ConfigureContainer(container);
-                ReplaceWorkspace(_pendingGeneratedContainers, _pendingGeneratedUnassigned, _pendingGeneratedFiltered);
+                GenerationWorkspaceReconciler.ApplyDecisions(
+                    _pendingReimportSummary,
+                    _pendingGeneratedContainers,
+                    _pendingGeneratedUnassigned,
+                    _pendingGeneratedFiltered);
+
+                foreach (var container in _pendingGeneratedContainers)
+                    ConfigureContainer(container);
+
+                ReplaceWorkspace(
+                    _pendingGeneratedContainers,
+                    _pendingGeneratedUnassigned,
+                    _pendingGeneratedFiltered);
                 ReattachAllSlotChangedHandlers();
-            }))
+            }
+            finally
             {
-                ClearPendingReimportResult();
-                WasGenerated = false;
-                return;
+                _suppressUndoCapture = false;
             }
 
             _pendingReimportSnapshot = null;
@@ -1880,7 +1890,7 @@ namespace VIBN_Tools.Application.VM
                 });
                 StatusText = $"Grouping-Vorlagenordner geöffnet: {GroupingPresetDirectory}";
             }
-            catch (Exception exception) when (ContainerGenerationExceptionPolicy.IsRecoverable(exception))
+            catch (Exception exception)
             {
                 Logger.Error(exception, "Could not open grouping preset directory {Directory}.", GroupingPresetDirectory);
                 StatusText = "Der Grouping-Vorlagenordner konnte nicht geöffnet werden. Details stehen im Protokoll.";
@@ -1997,39 +2007,101 @@ namespace VIBN_Tools.Application.VM
             }
         }
 
-        private void Undo_LastAction(object parameter) => RestoreHistory(_undoHistory, _redoHistory, "Rückgängig");
-        private void Redo_LastAction(object parameter) => RestoreHistory(_redoHistory, _undoHistory, "Wiederholen");
-
-        private void RestoreHistory(List<WorkspaceUndoState> from, List<WorkspaceUndoState> to, string action)
+        private void Undo_LastAction(object parameter)
         {
-            if (from.Count == 0) return;
-            var state = from[^1];
-            var current = WorkspaceUndoState.Capture(state.Description, ContainerList, UnassignedEntries, FilteredEntries, _feeInventory);
-            _isRestoringWorkspace = _suppressUndoCapture = _isWorkspaceBatch = true;
+            if (_undoHistory.Count == 0)
+                return;
+
+            var state = _undoHistory[^1];
+            _undoHistory.RemoveAt(_undoHistory.Count - 1);
+            _redoHistory.Add(
+                WorkspaceUndoState.Capture(
+                    state.Description,
+                    ContainerList,
+                    UnassignedEntries,
+                    FilteredEntries, _feeInventory));
+            TrimHistory(_redoHistory);
+            _isRestoringWorkspace = true;
+            _suppressUndoCapture = true;
             try
             {
-                RestoreWorkspaceState(state);
-                foreach (var container in ContainerList) ConfigureContainer(container);
-                from.RemoveAt(from.Count - 1);
-                to.Add(current);
-                TrimHistory(to);
-            }
-            catch (Exception exception) when (ContainerGenerationExceptionPolicy.IsRecoverable(exception))
-            {
-                RestoreWorkspaceState(current);
-                ReportOperationFailure(action, exception);
-                return;
+                _feeInventory = state.FeeInventory;
+                ReplaceWorkspace(
+                    state.Containers,
+                    state.Unassigned,
+                    state.Filtered);
+                foreach (var container in ContainerList)
+                    ConfigureContainer(container);
+                ReattachAllSlotChangedHandlers();
             }
             finally
             {
-                _isRestoringWorkspace = _suppressUndoCapture = _isWorkspaceBatch = false;
-                UpdateUICount(null, new System.Collections.Specialized.NotifyCollectionChangedEventArgs(
-                    System.Collections.Specialized.NotifyCollectionChangedAction.Reset));
-                NotifyUndoStateChanged();
+                _suppressUndoCapture = false;
+                _isRestoringWorkspace = false;
             }
+
             WasGenerated = HasWorkspaceData;
-            AddActivity(action, state.Description, "Arbeitsstand wiederhergestellt.");
-            StatusText = $"{action} ausgeführt: {state.Description}.";
+            RefreshAllWorkspaceFilters();
+            NotifyUndoStateChanged();
+            if (state.Description.Contains("Reimport", StringComparison.OrdinalIgnoreCase))
+            {
+                ReimportNotice =
+                    "Die letzte Übernahme des Reimports wurde rückgängig gemacht.";
+            }
+            AddActivity(
+                "Rückgängig",
+                state.Description,
+                "Der vorherige Arbeitsstand wurde vollständig wiederhergestellt.");
+            StatusText = $"Rückgängig ausgeführt: {state.Description}.";
+        }
+
+        private void Redo_LastAction(object parameter)
+        {
+            if (_redoHistory.Count == 0)
+                return;
+
+            var state = _redoHistory[^1];
+            _redoHistory.RemoveAt(_redoHistory.Count - 1);
+            _undoHistory.Add(
+                WorkspaceUndoState.Capture(
+                    state.Description,
+                    ContainerList,
+                    UnassignedEntries,
+                    FilteredEntries, _feeInventory));
+            TrimHistory(_undoHistory);
+
+            _isRestoringWorkspace = true;
+            _suppressUndoCapture = true;
+            try
+            {
+                _feeInventory = state.FeeInventory;
+                ReplaceWorkspace(
+                    state.Containers,
+                    state.Unassigned,
+                    state.Filtered);
+                foreach (var container in ContainerList)
+                    ConfigureContainer(container);
+                ReattachAllSlotChangedHandlers();
+            }
+            finally
+            {
+                _suppressUndoCapture = false;
+                _isRestoringWorkspace = false;
+            }
+
+            WasGenerated = HasWorkspaceData;
+            RefreshAllWorkspaceFilters();
+            NotifyUndoStateChanged();
+            if (state.Description.Contains("Reimport", StringComparison.OrdinalIgnoreCase))
+            {
+                ReimportNotice =
+                    "Die zuvor rückgängig gemachte Reimport-Übernahme wurde wiederholt.";
+            }
+            AddActivity(
+                "Wiederholen",
+                state.Description,
+                "Der rückgängig gemachte Arbeitsstand wurde erneut angewendet.");
+            StatusText = $"Wiederholen ausgeführt: {state.Description}.";
         }
 
         private void CaptureUndo(string description)
@@ -2050,48 +2122,34 @@ namespace VIBN_Tools.Application.VM
             NotifyUndoStateChanged();
         }
 
-        private bool RunWorkspaceAction(string description, Action action, string? details = null)
+        private void RunWorkspaceAction(
+            string description,
+            Action action,
+            string? details = null)
         {
-            var checkpoint = WorkspaceUndoState.Capture(description, ContainerList, UnassignedEntries, FilteredEntries, _feeInventory);
-            using var measurement = PerformanceMeasurementService.Instance.Start("ContainerGeneration", description);
-            using var actionLog = _actionLogger.BeginBatch();
-            var previousSuppression = _suppressUndoCapture;
+            var before =
+                $"{ContainerList.Count} Container, {AssignedSignals} zugeordnet, " +
+                $"{UnassignedEntries.Count} nicht zugeordnet, {FilteredEntries.Count} gefiltert";
+            CaptureUndo(description);
             _suppressUndoCapture = true;
-            _isWorkspaceBatch = true;
             try
             {
-                using (new ContainerUpdateBatch(ContainerList)) action();
-                RefreshAllWorkspaceFilters();
-                _undoHistory.Add(checkpoint);
-                TrimHistory(_undoHistory);
-                _redoHistory.Clear();
-                actionLog.Complete();
-            }
-            catch (Exception exception) when (ContainerGenerationExceptionPolicy.IsRecoverable(exception))
-            {
-                measurement.MarkFailed();
-                RestoreWorkspaceState(checkpoint);
-                ReportOperationFailure(description, exception);
-                return false;
+                action();
             }
             finally
             {
-                _isWorkspaceBatch = false;
-                _suppressUndoCapture = previousSuppression;
-                UpdateUICount(null, new System.Collections.Specialized.NotifyCollectionChangedEventArgs(
-                    System.Collections.Specialized.NotifyCollectionChangedAction.Reset));
-                NotifyUndoStateChanged();
+                _suppressUndoCapture = false;
             }
-            AddActivity("Bearbeitung", description, details ?? "Arbeitsaktion abgeschlossen.");
-            return true;
-        }
 
-        private void RestoreWorkspaceState(WorkspaceUndoState state)
-        {
-            _feeInventory = state.FeeInventory;
-            ReplaceWorkspace(state.Containers, state.Unassigned, state.Filtered);
-            ReattachAllSlotChangedHandlers();
             RefreshAllWorkspaceFilters();
+            var after =
+                $"{ContainerList.Count} Container, {AssignedSignals} zugeordnet, " +
+                $"{UnassignedEntries.Count} nicht zugeordnet, {FilteredEntries.Count} gefiltert";
+            AddActivity(
+                "Bearbeitung",
+                description,
+                $"{(string.IsNullOrWhiteSpace(details) ? string.Empty : details + " | ")}" +
+                $"Bestand vorher: {before}; danach: {after}.");
         }
 
         private void NotifyUndoStateChanged()
@@ -2231,46 +2289,28 @@ namespace VIBN_Tools.Application.VM
             IEnumerable<ContainerEntry> unassigned,
             IEnumerable<ContainerEntry> filtered)
         {
-            var newContainers = containers.ToArray();
-            var newUnassigned = unassigned.ToArray();
-            var newFiltered = filtered.ToArray();
-            var oldContainers = ContainerList.ToArray();
-            var oldUnassigned = UnassignedEntries.ToArray();
-            var oldFiltered = FilteredEntries.ToArray();
-            try { ApplyRows(newContainers, newUnassigned, newFiltered); }
-            catch (Exception exception) when (ContainerGenerationExceptionPolicy.IsRecoverable(exception))
+            ClearData();
+
+            foreach (var container in containers)
             {
-                try { ApplyRows(oldContainers, oldUnassigned, oldFiltered); }
-                catch (Exception restoreError) when (ContainerGenerationExceptionPolicy.IsRecoverable(restoreError))
-                { throw new AggregateException("Arbeitsstand konnte nicht vollständig wiederhergestellt werden.", exception, restoreError); }
-                throw;
+                EnsureSignalIds(container.DataList);
+                ContainerList.Add(container);
             }
 
-            void ApplyRows(ContainerData[] containerRows, ContainerEntry[] unassignedRows, ContainerEntry[] filteredRows)
+            foreach (var entry in unassigned)
             {
-                ClearData();
-
-                foreach (var container in containerRows)
-                {
-                    EnsureSignalIds(container.DataList);
-                    ContainerList.Add(container);
-                }
-
-                foreach (var entry in unassignedRows)
-                {
-                    entry.EnsureSignalId();
-                    UnassignedEntries.Add(entry);
-                }
-
-                foreach (var entry in filteredRows)
-                {
-                    entry.EnsureSignalId();
-                    FilteredEntries.Add(entry);
-                }
-
-                OnPropertyChanged(nameof(CanCompareContainerFile));
-                OnPropertyChanged(nameof(CompareContainerFileUnavailableReason));
+                entry.EnsureSignalId();
+                UnassignedEntries.Add(entry);
             }
+
+            foreach (var entry in filtered)
+            {
+                entry.EnsureSignalId();
+                FilteredEntries.Add(entry);
+            }
+
+            OnPropertyChanged(nameof(CanCompareContainerFile));
+            OnPropertyChanged(nameof(CompareContainerFileUnavailableReason));
         }
 
         private static void EnsureSignalIds(IEnumerable<ContainerEntry> entries)
@@ -2307,10 +2347,7 @@ namespace VIBN_Tools.Application.VM
             foreach (var handler in _containerPropertyChangedHandlers)
                 handler.Key.PropertyChanged -= handler.Value;
             foreach (var handler in _containerEntryCollectionHandlers)
-            {
                 handler.Key.DataList.CollectionChanged -= handler.Value;
-                handler.Key.DataList.CollectionChanged -= UpdateUICount;
-            }
 
             _slotChangedHandlers.Clear();
             _signalClearedHandlers.Clear();
@@ -2539,7 +2576,7 @@ namespace VIBN_Tools.Application.VM
                 {
                     return type;
                 }
-                current = GetUiParent(current);
+                current = VisualTreeHelper.GetParent(current);
             }
             return null;
         }
@@ -2552,10 +2589,7 @@ namespace VIBN_Tools.Application.VM
         /// <param name="message">Log message.</param>
         private void CustomTarget_LogReceived(object? sender, string message)
         {
-            var dispatcher = System.Windows.Application.Current?.Dispatcher;
-            if (dispatcher?.HasShutdownStarted == true || dispatcher?.HasShutdownFinished == true) return;
-            if (dispatcher is null || dispatcher.CheckAccess()) StatusText = message;
-            else dispatcher.BeginInvoke(new Action(() => StatusText = message));
+            StatusText = message;
         }
 
 
@@ -2565,8 +2599,15 @@ namespace VIBN_Tools.Application.VM
 
         private void UpdateUICount(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
-            if (_isWorkspaceBatch) return;
-            OnPropertyChanged(nameof(HasUnconfirmedChanges));
+            if (sender is IEnumerable<ContainerData> ContainerList)
+            {
+                foreach (ContainerData t_Data in ContainerList)
+                {
+                    t_Data.DataList.CollectionChanged -= UpdateUICount;
+                    t_Data.DataList.CollectionChanged += UpdateUICount;
+                }
+            }
+
             OnPropertyChanged(nameof(AssignedSignals));
             OnPropertyChanged(nameof(PercentComplete));
             OnPropertyChanged(nameof(CanCompareContainerFile));
@@ -2598,9 +2639,21 @@ namespace VIBN_Tools.Application.VM
                     "Ausgewählte Container leeren",
                     () =>
                     {
-                        var entries = containersToClear.SelectMany(container => container.DataList).Distinct().ToArray();
-                        GenerationWorkspaceEditor.MoveToUnassignedBatch(entries, ContainerList, UnassignedEntries, FilteredEntries);
-                        foreach (var item in entries) MarkAsManual(item, "Manuell aus dem Container entfernt.");
+                        foreach (var selectedContainer in containersToClear)
+                        {
+                            foreach (var item in selectedContainer.DataList.ToList())
+                            {
+                                GenerationWorkspaceEditor.MoveToUnassigned(
+                                    item,
+                                    item.Signal,
+                                    ContainerList,
+                                    UnassignedEntries,
+                                    FilteredEntries);
+                                MarkAsManual(
+                                    item,
+                                    "Manuell aus dem Container entfernt.");
+                            }
+                        }
                     },
                     $"{containersToClear.Count} Container mit {signalCount} Signalen");
 
@@ -2633,9 +2686,8 @@ namespace VIBN_Tools.Application.VM
         {
             if (e != null && e.AddedItems.Count > 0)
             {
-                if (e.Source is ComboBox { DataContext: ContainerData data })
+                if (((ComboBox)e.Source).DataContext is ContainerData data)
                 {
-                    using var updates = data.DeferUpdates();
                     data.Slots.Clear();
 
                     foreach (var slot in RequirementsFile.GetSlotNames(data.Type))
@@ -2671,9 +2723,7 @@ namespace VIBN_Tools.Application.VM
                 return;
             }
 
-            customTarget.LogReceived -= CustomTarget_LogReceived;
             customTarget.LogReceived += CustomTarget_LogReceived;
-            ConfigureAutoSaveTimer();
         }
 
 
@@ -2697,17 +2747,13 @@ namespace VIBN_Tools.Application.VM
                 return;
 
             var dataGrid = FindAncestor<DataGrid>(source);
-            if (dataGrid is null || !ReferenceEquals(dataGrid, _dragGrid) || _dragItem is null) return;
-            var position = e.GetPosition(dataGrid);
-            if (Math.Abs(position.X - _dragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
-                Math.Abs(position.Y - _dragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-            var capturedItem = _dragItem;
-            _dragItem = null; // one drag for this mouse-down, including nested drop dispatch
+            if (dataGrid is null)
+                return;
 
             // Inside a container only the dedicated Signal-ID list is a drag source.
             var signalIdList = FindAncestor<ListBox>(source);
             if (signalIdList?.Tag as string == "SignalIdDragSource" &&
-                capturedItem is ContainerEntry selectedEntry)
+                FindDataContext<ContainerEntry>(source) is { } selectedEntry)
             {
                 var dataObject = new DataObject(selectedEntry);
                 dataObject.SetData(typeof(ContainerEntry[]), new[] { selectedEntry });
@@ -2716,7 +2762,8 @@ namespace VIBN_Tools.Application.VM
                 return;
             }
 
-            if (capturedItem is ContainerEntry entry)
+            var dataGridRow = FindAncestor<DataGridRow>(source);
+            if (dataGridRow?.Item is ContainerEntry entry)
             {
                 if (!dataGrid.SelectedItems.Contains(entry))
                     return;
@@ -2732,7 +2779,7 @@ namespace VIBN_Tools.Application.VM
                 return;
             }
 
-            if (capturedItem is not ContainerData container ||
+            if (dataGridRow?.Item is not ContainerData container ||
                 FindAncestor<TextBox>(source) is not null ||
                 FindAncestor<ComboBox>(source) is not null ||
                 FindAncestor<Button>(source) is not null)
@@ -2752,7 +2799,7 @@ namespace VIBN_Tools.Application.VM
 
         private static T? FindDataContext<T>(DependencyObject source) where T : class
         {
-            for (var current = source; current is not null; current = GetUiParent(current))
+            for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
             {
                 if (current is FrameworkElement { DataContext: T value })
                     return value;
@@ -2830,9 +2877,13 @@ namespace VIBN_Tools.Application.VM
                     "Signal als gefiltert einordnen",
                     () =>
                     {
-                        GenerationWorkspaceEditor.MoveToFilteredBatch(dataItems, ContainerList, UnassignedEntries, FilteredEntries);
                         foreach (var data in dataItems)
                         {
+                            GenerationWorkspaceEditor.MoveToFiltered(
+                                data,
+                                ContainerList,
+                                UnassignedEntries,
+                                FilteredEntries);
                             MarkAsManual(data, "Manuell als gefiltert eingeordnet.");
                         }
                     },
@@ -2844,9 +2895,14 @@ namespace VIBN_Tools.Application.VM
                     "Signal als nicht zugeordnet einordnen",
                     () =>
                     {
-                        GenerationWorkspaceEditor.MoveToUnassignedBatch(dataItems, ContainerList, UnassignedEntries, FilteredEntries);
                         foreach (var data in dataItems)
                         {
+                            GenerationWorkspaceEditor.MoveToUnassigned(
+                                data,
+                                data.Signal,
+                                ContainerList,
+                                UnassignedEntries,
+                                FilteredEntries);
                             MarkAsManual(data, "Manuell als nicht zugeordnet eingeordnet.");
                         }
                     },
@@ -2906,30 +2962,119 @@ namespace VIBN_Tools.Application.VM
 
         private void MoveDataBatch(DataGridRow? targetRow, IReadOnlyList<ContainerEntry> entries)
         {
-            if (targetRow is not null && targetRow.Item is not ContainerData && targetRow.Item != CollectionView.NewItemPlaceholder)
+            if (targetRow?.Item is ContainerData)
+            {
+                foreach (var entry in entries)
+                    MoveData(targetRow, entry);
                 return;
-            var target = targetRow?.Item as ContainerData ?? new ContainerData
-            {
-                Id = $"manual-{Guid.NewGuid():N}", Component = CreateContainerName(entries.First())
-            };
-            var selected = entries.ToHashSet();
-            var owners = new Dictionary<ContainerEntry, ContainerData>();
-            foreach (var container in ContainerList)
-            foreach (var entry in container.DataList)
-                if (selected.Contains(entry)) owners.TryAdd(entry, container);
-            var moving = entries.Where(entry => !owners.TryGetValue(entry, out var owner) || !ReferenceEquals(owner, target)).ToArray();
-            if (moving.Length == 0) return;
-            using var targetUpdates = target.DeferUpdates();
-            var sourceKey = GetActionLogSourceKey();
-            foreach (var entry in moving)
-                if (owners.TryGetValue(entry, out var owner)) _actionLogger.LogRemoved(owner.Component, owner.Type, entry, sourceKey);
-            GenerationWorkspaceEditor.MoveToContainerBatch(moving, target, ContainerList, UnassignedEntries, FilteredEntries);
-            foreach (var entry in moving)
-            {
-                MarkAsManual(entry, "Manuell einem Container zugeordnet.");
-                _actionLogger.LogAdded(target.Component, target.Type, entry, entry.Slot, null, null, sourceKey);
             }
-            target.ManuallyChecked = false;
+
+            if (targetRow is not null && targetRow.Item != CollectionView.NewItemPlaceholder)
+                return;
+
+            var first = entries.First();
+            var createdContainer = new ContainerData
+            {
+                Id = $"manual-{Guid.NewGuid():N}",
+                Component = CreateContainerName(first)
+            };
+
+            foreach (var entry in entries)
+            {
+                GenerationWorkspaceEditor.MoveToContainer(
+                    entry,
+                    createdContainer,
+                    ContainerList,
+                    UnassignedEntries,
+                    FilteredEntries);
+                AttachSlotChangedHandler(createdContainer, entry);
+                MarkAsManual(entry, "Manuell einem neuen Container zugeordnet.");
+                _actionLogger.LogAdded(
+                    createdContainer.Component,
+                    createdContainer.Type,
+                    entry,
+                    entry.Slot,
+                    null,
+                    null,
+                    GetActionLogSourceKey());
+            }
+
+            createdContainer.ManuallyChecked = false;
+        }
+
+
+        /// <summary>
+        ///  Logic to move data between collections (e.g. after a DragAndDrop operation).
+        /// </summary>
+        /// <param name="targetRow">Row in the target grid.</param>
+        /// <param name="data">Data entry to add.</param>
+        private void MoveData(DataGridRow? targetRow, ContainerEntry data)
+        {
+            if (targetRow?.Item is ContainerData targetData)
+            {
+                // Quell-Container ermitteln (fuer Log: welcher Container verliert das Signal?)
+                var sourceContainer = ContainerList.FirstOrDefault(c => c.DataList.Contains(data));
+
+                if (sourceContainer == targetData)
+                    return;
+
+                if (sourceContainer != null && sourceContainer != targetData)
+                {
+                    _actionLogger.LogRemoved(
+                        sourceContainer.Component,
+                        sourceContainer.Type,
+                        data,
+                        GetActionLogSourceKey());
+                }
+
+                GenerationWorkspaceEditor.MoveToContainer(
+                    data,
+                    targetData,
+                    ContainerList,
+                    UnassignedEntries,
+                    FilteredEntries);
+                AttachSlotChangedHandler(targetData, data);
+                MarkAsManual(data, "Manuell einem Container zugeordnet.");
+                targetData.ManuallyChecked = false;
+
+                // ActionLog: Signal wurde von sourceContainer nach targetData verschoben
+                _actionLogger.LogAdded(
+                    containerName: targetData.Component,
+                    componentType: targetData.Type,
+                    entry: data,
+                    ruleSuggestion: data.Slot,
+                    mlTop1: null,
+                    mlScore: null,
+                    sourceKey: GetActionLogSourceKey());
+
+            }
+            else if (targetRow is null || targetRow.Item == CollectionView.NewItemPlaceholder)
+            {
+                ContainerData CreatedContainerData = new ContainerData
+                {
+                    Id = $"manual-{Guid.NewGuid():N}",
+                    Component = CreateContainerName(data)
+                };
+                GenerationWorkspaceEditor.MoveToContainer(
+                    data,
+                    CreatedContainerData,
+                    ContainerList,
+                    UnassignedEntries,
+                    FilteredEntries);
+                AttachSlotChangedHandler(CreatedContainerData, data);
+                MarkAsManual(data, "Manuell einem neuen Container zugeordnet.");
+                CreatedContainerData.ManuallyChecked = false;
+
+                _actionLogger.LogAdded(
+                    containerName: CreatedContainerData.Component,
+                    componentType: CreatedContainerData.Type,
+                    entry: data,
+                    ruleSuggestion: data.Slot,
+                    mlTop1: null,
+                    mlScore: null,
+                    sourceKey: GetActionLogSourceKey());
+
+            }
         }
 
         private static string CreateContainerName(ContainerEntry entry)
@@ -2968,8 +3113,6 @@ namespace VIBN_Tools.Application.VM
 
         private void SubscribeContainer(ContainerData container)
         {
-            container.DataList.CollectionChanged -= UpdateUICount;
-            container.DataList.CollectionChanged += UpdateUICount;
             if (!_containerChangingHandlers.ContainsKey(container))
             {
                 EventHandler<WorkspaceValueChangingEventArgs> changingHandler =
@@ -2982,8 +3125,6 @@ namespace VIBN_Tools.Application.VM
             {
                 PropertyChangedEventHandler propertyHandler = (_, args) =>
                 {
-                    if (!_isWorkspaceBatch && args.PropertyName == nameof(ContainerData.HasDetectedChanges))
-                        OnPropertyChanged(nameof(HasUnconfirmedChanges));
                     if (args.PropertyName is nameof(ContainerData.RequiresReview) or
                         nameof(ContainerData.HasDetectedChanges) or
                         nameof(ContainerData.IsValid) or
@@ -3025,7 +3166,6 @@ namespace VIBN_Tools.Application.VM
 
         private void UnsubscribeContainer(ContainerData container)
         {
-            container.DataList.CollectionChanged -= UpdateUICount;
             if (_containerChangingHandlers.Remove(container, out var changingHandler))
                 container.WorkspaceValueChanging -= changingHandler;
             if (_containerPropertyChangedHandlers.Remove(container, out var propertyHandler))
@@ -3106,7 +3246,6 @@ namespace VIBN_Tools.Application.VM
                 else if (sender is ContainerData container &&
                          args.PropertyName != nameof(ContainerData.ManuallyChecked))
                 {
-                    using var updates = container.DeferUpdates();
                     container.ManuallyChecked = false;
                     foreach (var containerEntry in container.DataList)
                         MarkAsManual(containerEntry, $"{description}.");
@@ -3256,7 +3395,6 @@ namespace VIBN_Tools.Application.VM
 
         private static void MarkAsManual(ContainerEntry entry, string message)
         {
-            entry.IsChangeAcknowledged = false;
             entry.IsManuallyEdited = true;
             entry.ReviewState = ContainerEntryReviewState.ManuallyEdited;
             entry.ReviewMessage = message;

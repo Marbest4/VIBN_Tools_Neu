@@ -20,7 +20,7 @@ public sealed class FileSystemProjectDocumentsService : IViCoProjectDocumentsSer
                     cancellationToken.ThrowIfCancellationRequested();
                     var files = new List<string>();
                     foreach (var path in Directory.EnumerateFiles(folder, "*", new EnumerationOptions
-                             { RecurseSubdirectories = false, IgnoreInaccessible = false, AttributesToSkip = 0 }))
+                             { RecurseSubdirectories = true, IgnoreInaccessible = false, AttributesToSkip = 0 }))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
                         files.Add(Path.GetRelativePath(folder, path));

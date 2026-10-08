@@ -12,8 +12,8 @@ namespace VIBN_Tools.ContainerGeneration.AI;
 ///   Vorher: %AppData%\VIBN_Tools\ContainerGeneration\AI\learning\actions\
 ///   Jetzt:  {ExeDir}\vibn_ai_data\actions\   (via ModelPaths.ActionsDir)
 ///
-/// Einzeländerungen werden sofort gespeichert. Eine abgeschlossene Arbeitsaktion
-/// schreibt ihre JSONL-Zeilen gemeinsam; abgebrochene Aktionen werden verworfen.
+/// Jede relevante strukturierte Änderung wird sofort per File.AppendAllText()
+/// als JSONL-Zeile gespeichert – kein Puffer, kein Delay.
 /// Eine Datei pro Tag: YYYYMMDD.jsonl
 ///
 /// WANN werden Aktionen gespeichert?
@@ -26,10 +26,6 @@ public sealed class ActionLogger
 {
     private readonly string _logDir;
     private readonly object _writeLock = new();
-    private readonly List<UserActionEvent> _batchEvents = [];
-    private int _batchDepth;
-    private bool _batchAborted;
-    public Exception? LastWriteError { get; private set; }
 
     // Fasst Remove→Add Paare innerhalb von 500ms zu einer MOVE-Aktion zusammen
     private readonly ConcurrentDictionary<string, PendingMove> _pending = new();
@@ -39,6 +35,7 @@ public sealed class ActionLogger
     {
         // Zentraler Pfad aus ModelPaths – relativ zur .exe
         _logDir = ModelPaths.ActionsDir;
+        Directory.CreateDirectory(_logDir);
     }
 
     /// <summary>
@@ -47,42 +44,10 @@ public sealed class ActionLogger
     public ActionLogger(string customLogDir)
     {
         _logDir = customLogDir;
+        Directory.CreateDirectory(_logDir);
     }
 
     public string LogDirectory => _logDir;
-
-    public ActionBatch BeginBatch()
-    {
-        lock (_writeLock)
-        {
-            if (_batchDepth++ == 0)
-            {
-                _batchEvents.Clear(); _pending.Clear(); _batchAborted = false;
-                LastWriteError = null;
-            }
-        }
-        return new ActionBatch(this);
-    }
-
-    public sealed class ActionBatch(ActionLogger owner) : IDisposable
-    {
-        private ActionLogger? _owner = owner;
-        private bool _completed;
-        public void Complete() => _completed = true;
-        public void Dispose()
-        {
-            var current = Interlocked.Exchange(ref _owner, null);
-            if (current is null) return;
-            lock (current._writeLock)
-            {
-                current._batchAborted |= !_completed;
-                if (--current._batchDepth > 0) return;
-                if (!current._batchAborted && current._batchEvents.Count > 0)
-                    current.WriteEvents(current._batchEvents);
-                current._batchEvents.Clear(); current._pending.Clear();
-            }
-        }
-    }
 
     // ── Aufruf bei REMOVE (Signal wird aus Container gezogen) ─────────
     public void LogRemoved(
@@ -107,7 +72,7 @@ public sealed class ActionLogger
     {
         var now = DateTime.UtcNow;
         var signalId = entry.EnsureSignalId();
-        if (_pending.TryRemove(signalId, out var prev) && (_batchDepth > 0 || (now - prev.Timestamp) <= _window))
+        if (_pending.TryRemove(signalId, out var prev) && (now - prev.Timestamp) <= _window)
         {
             // Remove→Add innerhalb 500ms = als MOVE protokollieren
             Write(new UserActionEvent(
@@ -202,27 +167,9 @@ public sealed class ActionLogger
     // ── Sofortige Disk-Schreibung ─────────────────────────────────────
     private void Write(UserActionEvent evt)
     {
+        var file = Path.Combine(_logDir, $"{DateTime.UtcNow:yyyyMMdd}.jsonl");
         lock (_writeLock)
-        {
-            if (_batchDepth > 0) _batchEvents.Add(evt);
-            else WriteEvents([evt]);
-        }
-    }
-
-    private void WriteEvents(IEnumerable<UserActionEvent> events)
-    {
-        try
-        {
-            Directory.CreateDirectory(_logDir);
-            var file = Path.Combine(_logDir, $"{DateTime.UtcNow:yyyyMMdd}.jsonl");
-            File.AppendAllText(file, string.Join(Environment.NewLine, events.Select(item => JsonSerializer.Serialize(item))) + Environment.NewLine);
-            LastWriteError = null;
-        }
-        catch (Exception exception) when (Models.ContainerGenerationExceptionPolicy.IsRecoverable(exception))
-        {
-            LastWriteError = exception;
-            NLog.LogManager.GetCurrentClassLogger().Warn(exception, "ContainerGeneration action log could not be written.");
-        }
+            File.AppendAllText(file, JsonSerializer.Serialize(evt) + Environment.NewLine);
     }
 
     private record PendingMove(

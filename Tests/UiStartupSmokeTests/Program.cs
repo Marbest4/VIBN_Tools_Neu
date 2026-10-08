@@ -152,7 +152,6 @@ internal static partial class Program
             if (containerGenerationViewModel.CanCompareContainerFile)
                 throw new InvalidOperationException("ContainerFile comparison must require an active workspace.");
             VerifyContainerReviewFilterScope(containerGenerationViewModel);
-            VerifyContainerGenerationWorkflowRegressions();
 
             var rockwellPage = new RockwellPage();
             if (rockwellPage.DataContext is not RockwellPageVM rockwellViewModel)

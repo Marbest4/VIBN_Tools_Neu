@@ -14,14 +14,10 @@ internal static class ProjectDocumentsSmokeTests
         var service = new FileSystemProjectDocumentsService();
         var result = await service.ReadAsync(simulation);
         Assert(result.Status == ViCoProjectDocumentsStatus.Available && result.FolderPath == folder &&
-            result.Files.SequenceEqual(new[] { "Readme.txt" }),
-            "Documents did not use the simulation project path or included files from subfolders.");
+            result.Files.SequenceEqual(new[] { Path.Combine("Nested", "Drawing.pdf"), "Readme.txt" }),
+            "Documents did not use the simulation project path or preserve nested relative filenames.");
         var empty = Path.Combine(root, "documents", "Empty"); Directory.CreateDirectory(Path.Combine(empty, "00_Documents"));
         Assert((await service.ReadAsync(empty)).Status == ViCoProjectDocumentsStatus.Empty, "An empty folder was reported as missing.");
-        Directory.CreateDirectory(Path.Combine(empty, "00_Documents", "Nested"));
-        await File.WriteAllTextAsync(Path.Combine(empty, "00_Documents", "Nested", "Hidden.pdf"), "pdf");
-        Assert((await service.ReadAsync(empty)).Status == ViCoProjectDocumentsStatus.Empty,
-            "A folder with only nested files must be empty for the direct documents listing.");
         Assert((await service.ReadAsync(Path.Combine(root, "documents", "Missing"))).Status == ViCoProjectDocumentsStatus.Missing, "A missing folder failed silently.");
         using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
         try { await service.ReadAsync(simulation, cancelled.Token); throw new InvalidOperationException("Cancelled document scanning ran."); }
