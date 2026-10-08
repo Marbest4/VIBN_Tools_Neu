@@ -13,6 +13,9 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// </summary>
 internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
 {
+    internal IReadOnlyList<VisualFeeSignalLink> KnownLinks { get; private set; } = [];
+    internal IReadOnlyList<string> ReadSignalGuids { get; private set; } = [];
+    internal IReadOnlyList<(FeeAbstractObject Object, string ContainerId)> CreatedObjects { get; private set; } = [];
     public Task<VisualExecutionResult> ExecuteAsync(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
@@ -35,6 +38,9 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         bool helperParentIsAmbiguous,
         CancellationToken cancellationToken)
     {
+        KnownLinks = [];
+        ReadSignalGuids = [];
+        CreatedObjects = [];
         var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan);
         if (selectedIds.Count == 0)
             return new VisualExecutionResult(true, "Keine Container ausgewählt; keine Signalverknüpfungen geändert.", []);
@@ -69,11 +75,14 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                     "FEE aktualisieren und erneut versuchen. Es wurden keine bestehenden Routen verändert oder Hilfsobjekte erzeugt.")]);
         var variableGuids = runtimeInterfaces.Values.SelectMany(item => item.Signals ?? []).Select(item => item.Guid).ToHashSet();
         var linker = new ExistingSignalEndpointLinker(discovery.Links, sceneObjects, containerObjects, variableGuids, logger);
+        ReadSignalGuids = signalPlan.ExistingBindings.Select(item => item.ExistingSignal.GuidString).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var logicResolver = new ExistingContainerLogicResolver(sceneObjects);
+        var requestsByContainer = requests.ToLookup(request => request.ContainerId, StringComparer.Ordinal);
         var issues = new List<VisualIssue>();
         foreach (var bound in binding.Containers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var containerRequests = requests.Where(request => request.ContainerId == bound.PlanNode.Id).ToArray();
+            var containerRequests = requestsByContainer[bound.PlanNode.Id].ToArray();
             if (containerRequests.Length == 0) continue;
             try
             {
@@ -88,11 +97,11 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                 }
                 else if (container is ILogicOwner or ILogicSimObjectOwner)
                 {
-                    ContainerMetadataCatalog.TryGet(bound.PlanNode.TypeName, out var descriptor);
-                    var matches = sceneObjects.OfType<FeeLogic>().Where(logic =>
-                        string.Equals(logic.Name, container.ComponentName, StringComparison.OrdinalIgnoreCase) &&
-                        ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, logic.LogicDefinitionName)).ToArray();
-                    if (matches.Length != 1)
+                    var assigned = plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId)?.ContainerId == bound.PlanNode.Id)
+                        .Select(assignment => runtimeObjects.GetValueOrDefault(assignment.FeeObjectId))
+                        .Where(item => item is not null).Cast<FeeAbstractObject>();
+                    var matches = logicResolver.Find(bound.PlanNode, assigned);
+                    if (matches.Count != 1)
                     {
                         issues.Add(new VisualIssue(VisualIssueSeverity.Error, "EXISTING_LOGIC_NOT_UNIQUE",
                             $"Logik '{container.ComponentName}' fehlt oder ist nicht eindeutig; keine Signalrouten geändert.", bound.PlanNode.Id));
@@ -134,6 +143,8 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                 if (helperFailure) logger.Warning(message); else logger.Error(message, exception);
             }
         }
+        KnownLinks = linker.KnownLinks;
+        CreatedObjects = linker.CreatedObjects.ToArray();
         return new VisualExecutionResult(issues.All(issue => issue.Severity != VisualIssueSeverity.Error),
             $"{linker.LinkedCount} fehlende Signalverknüpfung(en) ergänzt; {linker.SkippedCount} vorhandene Verknüpfung(en) übersprungen. " +
             "Nur erforderliche technische Hilfsobjekte werden erzeugt; vorhandene Variablen bleiben erhalten.", issues);
@@ -149,11 +160,15 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         for (var index = 0; index < targets.Length; index++)
         {
             var explicitAssignments = plan.Assignments.Where(item => item.TargetId == targets[index].Id).ToArray();
+            var scopedAssignments = explicitAssignments.Where(item => objects.ContainsKey(item.FeeObjectId)).ToArray();
+            if (explicitAssignments.Length > 0 && scopedAssignments.Length == 0)
+                return new VisualIssue(VisualIssueSeverity.Warning, "SIGNAL_OWNER_OUTSIDE_SELECTED_ROOTS",
+                    $"Signalziel '{container.Name}' liegt nicht in den ausgewählten FEE-Roots; übersprungen.", container.Id);
             var candidates = explicitAssignments.Length > 0
-                ? explicitAssignments.Select(item => objects.GetValueOrDefault(item.FeeObjectId)).Where(item => item is not null).Cast<FeeAbstractObject>().ToArray()
+                ? scopedAssignments.Select(item => objects[item.FeeObjectId]).DistinctBy(item => item.Guid).ToArray()
                 : objects.Values.Where(item => string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
                     runtimeTargets[index].AllowedType.IsInstanceOfType(item)).ToArray();
-            if (candidates.Length == 0 || explicitAssignments.Length > 0 && candidates.Length != explicitAssignments.Length ||
+            if (candidates.Length == 0 ||
                 !targets[index].AllowMultiSelect && candidates.Length > 1 || candidates.Any(item => !runtimeTargets[index].AllowedType.IsInstanceOfType(item)))
                 return new VisualIssue(VisualIssueSeverity.Error, "EXISTING_SIGNAL_OWNER_NOT_UNIQUE",
                     $"Vorhandenes Signalziel '{container.Name}' ({runtimeTargets[index].AllowedType.Name}) fehlt oder ist nicht eindeutig. Einen konkreten Treffer zuordnen.", container.Id);

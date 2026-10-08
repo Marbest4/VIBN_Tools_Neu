@@ -159,6 +159,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0" Padding="10" BorderBrush="#D0D0D0" BorderThickness="1" CornerRadius="4">
@@ -580,8 +581,7 @@
 
                     <Expander Grid.Row="5" Margin="0,8,0,0" MaxHeight="260"
                               Header="Technische Verknüpfungen (Details)" IsExpanded="False">
-                        <Grid MinHeight="190">
-                            <Grid.RowDefinitions><RowDefinition Height="2*"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Grid MinHeight="150">
                         <DataGrid ItemsSource="{Binding VisibleEdges}" AutoGenerateColumns="False"
                                   IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False"
                                   HeadersVisibility="Column" SelectionMode="Single"
@@ -597,16 +597,6 @@
                                 <DataGridTextColumn Header="Bedeutung" Binding="{Binding Description, Mode=OneWay}" Width="3*" MinWidth="150" />
                             </DataGrid.Columns>
                         </DataGrid>
-                            <TextBlock Grid.Row="1" Margin="0,7,0,3" FontWeight="SemiBold" Text="Vorgangsprotokoll" />
-                            <ListBox Grid.Row="2" ItemsSource="{Binding OperationDetails}" ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Margin="2" TextTrimming="CharacterEllipsis" ToolTip="{Binding ToolTipText}">
-                                            <Run Text="{Binding TimestampText, Mode=OneWay}"/><Run Text=" · "/><Run FontWeight="SemiBold" Text="{Binding Category, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Message, Mode=OneWay}"/>
-                                        </TextBlock>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
                         </Grid>
                     </Expander>
                 </Grid>
@@ -912,7 +902,21 @@
             </Grid>
         </Grid>
 
-        <Grid Grid.Row="3" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Expander Grid.Row="3" Margin="0,7,0,0" Header="Vorgangsprotokoll" IsExpanded="False">
+            <ListBox ItemsSource="{Binding OperationDetails}" MinHeight="70" MaxHeight="170"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Margin="2" TextWrapping="Wrap" ToolTip="{Binding ToolTipText}">
+                            <Run Text="{Binding TimestampText, Mode=OneWay}"/><Run Text=" · "/><Run FontWeight="SemiBold" Text="{Binding Category, Mode=OneWay}"/><Run Text=" · "/><Run Text="{Binding Message, Mode=OneWay}"/>
+                        </TextBlock>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Expander>
+
+        <Grid Grid.Row="4" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
             <ProgressBar Height="7" Minimum="0" Maximum="100"
                          Value="{Binding GenerationProgress, Mode=OneWay}"
@@ -920,7 +924,7 @@
             <TextBlock Grid.Row="1" Margin="0,3,0,0" Text="{Binding GenerationProgressText}" TextWrapping="Wrap" />
         </Grid>
 
-        <Grid Grid.Row="4" Margin="0,7,0,0">
+        <Grid Grid.Row="5" Margin="0,7,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />

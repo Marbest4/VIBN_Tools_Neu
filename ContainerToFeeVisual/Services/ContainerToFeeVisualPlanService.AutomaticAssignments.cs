@@ -1,3 +1,4 @@
+using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
@@ -5,11 +6,71 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 public sealed partial class ContainerToFeeVisualPlanService
 {
     private HashSet<string>? _selectedSimObjectRootGuids;
+    private IReadOnlyList<FeeAbstractObject>? _scopedSceneCache;
+    private ExistingContainerLogicResolver? _logicResolverCache;
+
+    private IReadOnlyList<FeeAbstractObject> ScopedSceneObjects() => _scopedSceneCache ??=
+        _selectedSimObjectRootGuids is null ? _runtimeSceneObjects : _runtimeSceneObjects
+            .Where(item => _selectedSimObjectRootGuids.Contains(FeeSimObjectDiscovery.ResolveRoot(item).GuidString)).ToArray();
+
+    private ExistingContainerLogicResolver ScopedLogicResolver => _logicResolverCache ??= new(ScopedSceneObjects());
+
+    private void InvalidateRootScope()
+    {
+        _scopedSceneCache = null;
+        _logicResolverCache = null;
+    }
+
+    private IReadOnlyList<VisualFeeContainerObject> ScopedContainerObjects()
+    {
+        if (_selectedSimObjectRootGuids is null) return _feeContainerObjects;
+        var guids = ScopedSceneObjects().Select(item => item.GuidString).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return _feeContainerObjects.Where(item => guids.Contains(item.GuidString)).ToArray();
+    }
+
+    public IReadOnlyList<VisualFeeContainerObject> FindExistingContainerLogics(string containerId)
+    {
+        var plan = CurrentPlan;
+        var container = plan?.FindNode(containerId);
+        if (plan is null || container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor)) return [];
+        if (_runtimeSceneObjects.Count == 0)
+            return ScopedContainerObjects().Where(item => item.Kind == VisualFeeContainerObjectKind.Logic &&
+                string.Equals(item.Name.Trim(), container.Name.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, item.Definition)).ToArray();
+        var targets = plan.Targets.Where(target => target.ContainerId == containerId).Select(target => target.Id).ToHashSet(StringComparer.Ordinal);
+        var objects = plan.Assignments.Where(assignment => targets.Contains(assignment.TargetId))
+            .Select(assignment => _runtimeObjects.GetValueOrDefault(assignment.FeeObjectId))
+            .Where(item => item is not null && (_selectedSimObjectRootGuids is null ||
+                _selectedSimObjectRootGuids.Contains(FeeSimObjectDiscovery.ResolveRoot(item).GuidString))).Cast<FeeAbstractObject>();
+        return ScopedLogicResolver.Find(container, objects).Select(item => new VisualFeeContainerObject(item.GuidString,
+            item.Name ?? "", VisualFeeContainerObjectKind.Logic, item.LogicDefinitionName ?? "")).ToArray();
+    }
+
+    private async Task EnsureLinkSnapshotAsync(bool includeInterfaces, CancellationToken token)
+    {
+        var revision = Services.Connection?.ConnectionRevision ?? -1;
+        if (!_hasDiscoveredFeeObjects || _feeObjectConnectionRevision != revision)
+            await DiscoverFeeObjectsAsync(token);
+        if (includeInterfaces && (!_hasDiscoveredFeeInterfaces || _feeInterfaceConnectionRevision != revision))
+            await DiscoverFeeInterfacesAsync(token);
+        token.ThrowIfCancellationRequested();
+    }
+
+    private void ApplyConfirmedSimObjectLinks(IEnumerable<VisualFeeObjectLink> confirmed)
+    {
+        var links = confirmed.ToArray();
+        if (links.Length == 0) return;
+        _feeSimObjectLinks = _feeSimObjectLinks.Concat(links).Distinct().ToArray();
+        _hasDiscoveredFeeSimObjectLinks = true;
+    }
 
     public IReadOnlyDictionary<Guid, string> DiscoveredTopLevelBasicFrames => _topLevelBasicFrames;
 
-    public void SetSimObjectRoots(IEnumerable<string> rootGuids) =>
+    public void SetSimObjectRoots(IEnumerable<string> rootGuids)
+    {
         _selectedSimObjectRootGuids = rootGuids.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        InvalidateRootScope();
+    }
 
     public bool IsFeeObjectInSelectedRoots(VisualFeeObject item) =>
         _selectedSimObjectRootGuids is null || _selectedSimObjectRootGuids.Contains(item.RootGuidString);
@@ -25,13 +86,23 @@ public sealed partial class ContainerToFeeVisualPlanService
         var selected = plan.ExistingInterfaceSelections.Select(item => item.InterfaceGuid)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (selected.Count == 0) return 0;
-        var scoped = _feeSignals.Where(signal => selected.Contains(signal.InterfaceGuidString)).ToArray();
+        var scoped = _feeSignals.Where(signal => selected.Contains(signal.InterfaceGuidString))
+            .DistinctBy(signal => signal.GuidString, StringComparer.OrdinalIgnoreCase).ToArray();
+        var byName = scoped.ToLookup(signal => signal.Tag.Trim(), StringComparer.OrdinalIgnoreCase);
+        var byLocation = scoped.SelectMany(signal => new[] { signal.Address, signal.Path }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => (Key: VisualSignalAssignmentMatcher.NormalizeLocation(value), Signal: signal)))
+            .ToLookup(item => item.Key, item => item.Signal, StringComparer.Ordinal);
         var assignedNodes = assignments.Select(item => item.SignalNodeId).ToHashSet(StringComparer.Ordinal);
         var added = 0;
         foreach (var node in plan.Nodes.Where(node => node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
                      !plan.IsSignalRemoved(node.Id) && !assignedNodes.Contains(node.Id)))
         {
-            var matches = scoped.Where(signal => VisualSignalAssignmentMatcher.Matches(node, signal)).ToArray();
+            var matches = byName[node.Name.Trim()].Where(signal => VisualSignalAssignmentMatcher.Matches(node, signal)).ToArray();
+            if (matches.Length == 0 && !string.IsNullOrWhiteSpace(node.SourceLocation))
+                matches = byLocation[VisualSignalAssignmentMatcher.NormalizeLocation(node.SourceLocation)]
+                    .Where(signal => VisualSignalAssignmentMatcher.HasCompatibleType(node.TypeName, signal.DataType))
+                    .DistinctBy(signal => signal.GuidString, StringComparer.OrdinalIgnoreCase).ToArray();
             if (matches.Length > 1 && _hasDiscoveredFeeSignalLinks)
                 matches = matches.Where(signal => GetSignalConnectionState(node.Id, signal.GuidString).IsVerified).ToArray();
             if (matches.Length != 1) continue;
@@ -57,11 +128,8 @@ public sealed partial class ContainerToFeeVisualPlanService
         {
             if (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor) ||
                 errors.Any(issue => issue.NodeId == container.Id || plan.FindNode(issue.NodeId!)?.ContainerId == container.Id)) continue;
-            if (!string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) && _feeContainerObjects.Count(item =>
-                    item.Kind == VisualFeeContainerObjectKind.Logic &&
-                    string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
-                    ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, item.Definition)) != 1) continue;
-            if (!string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType) && _feeContainerObjects.Count(item =>
+            if (!string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) && FindExistingContainerLogics(container.Id).Count != 1) continue;
+            if (!string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType) && ScopedContainerObjects().Count(item =>
                     item.Kind == VisualFeeContainerObjectKind.CabinetElement &&
                     string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
                     NormalizeToken(item.Definition) == NormalizeToken(descriptor.ExpectedCabinetElementType)) != 1) continue;
@@ -91,7 +159,8 @@ internal static class VisualSignalAssignmentMatcher
     internal static bool Matches(VisualNode node, VisualFeeSignal signal) =>
         string.Equals(node.Name.Trim(), signal.Tag.Trim(), StringComparison.OrdinalIgnoreCase) &&
         HasCompatibleType(node.TypeName, signal.DataType) &&
-        (string.IsNullOrWhiteSpace(node.SourceLocation) || SameLocation(node.SourceLocation, signal.Location));
+        (string.IsNullOrWhiteSpace(node.SourceLocation) || SameLocation(node.SourceLocation, signal.Address) ||
+            SameLocation(node.SourceLocation, signal.Path));
 
     internal static bool SameLocation(string left, string right) => NormalizeLocation(left) == NormalizeLocation(right);
 
@@ -102,6 +171,14 @@ internal static class VisualSignalAssignmentMatcher
         return Normalize(left) == Normalize(right);
     }
 
-    private static string NormalizeLocation(string value) => new(value.Where(character =>
-        !char.IsWhiteSpace(character) && character != '%').Select(char.ToUpperInvariant).ToArray());
+    internal static string NormalizeLocation(string value)
+    {
+        var normalized = new string(value.Where(character =>
+            !char.IsWhiteSpace(character) && character != '%').Select(char.ToUpperInvariant).ToArray());
+        // Siemens uses E/A in German projects and I/Q in international projects.
+        // Only translate address prefixes, not the first letter of symbolic paths.
+        if (normalized.Length > 1 && char.IsDigit(normalized[1]))
+            normalized = normalized[0] switch { 'E' => "I" + normalized[1..], 'A' => "Q" + normalized[1..], _ => normalized };
+        return normalized;
+    }
 }

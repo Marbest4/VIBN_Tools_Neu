@@ -202,8 +202,8 @@ public static class SignalResolutionPlanner
         var byTag = string.IsNullOrWhiteSpace(requested.Tag)
             ? []
             : available.Where(item => string.Equals(
-                    item.Signal.Tag,
-                    requested.Tag,
+                    item.Signal.Tag?.Trim(),
+                    requested.Tag.Trim(),
                     StringComparison.OrdinalIgnoreCase))
                 .ToArray();
 
@@ -302,8 +302,8 @@ public static class SignalResolutionPlanner
         var hasAddress = !string.IsNullOrWhiteSpace(right.Address);
         var hasPath = !string.IsNullOrWhiteSpace(right.Path);
         return (hasAddress || hasPath) &&
-               (!hasAddress || string.Equals(left.Address, right.Address, StringComparison.OrdinalIgnoreCase)) &&
-               (!hasPath || string.Equals(left.Path, right.Path, StringComparison.OrdinalIgnoreCase));
+               (!hasAddress || VisualSignalAssignmentMatcher.SameLocation(left.Address ?? "", right.Address)) &&
+               (!hasPath || VisualSignalAssignmentMatcher.SameLocation(left.Path ?? "", right.Path));
     }
 
     private static string SignalIdentity(FeeInterfaceSignal signal) =>

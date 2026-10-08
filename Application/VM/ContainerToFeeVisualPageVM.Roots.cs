@@ -41,6 +41,8 @@ public sealed partial class ContainerToFeeVisualPageVM
         _planService.SetSimObjectRoots(AvailableFeeRoots.Where(root => root.IsSelected).Select(root => root.GuidString));
         OnPropertyChanged(nameof(SelectedFeeRootsSummary));
         FeeObjectsView.Refresh();
+        ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
+        ApplyDiscoveredSimObjectStates();
     }
 
     private void RefreshCompletedContainerSelection()

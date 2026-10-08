@@ -14,6 +14,7 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// </summary>
 internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
 {
+    internal IReadOnlyList<VisualFeeObjectLink> ConfirmedLinks { get; private set; } = [];
     public Task<VisualExecutionResult> ExecuteAsync(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
@@ -27,9 +28,12 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
         IReadOnlyList<FeeAbstractObject> sceneObjects,
         CancellationToken cancellationToken)
     {
-        var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan);
+        ConfirmedLinks = [];
+        var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan).Where(id => plan.Assignments.Any(assignment =>
+            plan.FindTarget(assignment.TargetId)?.ContainerId == id && runtimeObjects.ContainsKey(assignment.FeeObjectId)))
+            .ToHashSet(StringComparer.Ordinal);
         if (selectedIds.Count == 0)
-            return new VisualExecutionResult(true, "Keine Container ausgewählt; keine SimObject-Verknüpfungen geändert.", []);
+            return new VisualExecutionResult(true, "Keine SimObject-Zuordnungen in den ausgewählten Roots; keine Verknüpfungen geändert.", []);
         if (Services.Connection?.CanUseFeeFeatures != true)
             return Failure(FeeConnectionService.MissingConnectionMessage, "FEE_NOT_CONNECTED");
 
@@ -46,11 +50,15 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects,
-                includedContainerIds: selectedIds, includeSignals: false);
+                includedContainerIds: selectedIds, includeSignals: false,
+                includedFeeObjectIds: runtimeObjects.Keys.ToHashSet(StringComparer.Ordinal));
             if (!binding.Success)
                 return new VisualExecutionResult(false, binding.Issue!.Message, [binding.Issue]);
 
-            var logicObjects = modelObjects.OfType<FeeLogic>().ToArray();
+            var logicResolver = new ExistingContainerLogicResolver(modelObjects);
+            var byGuid = modelObjects.DistinctBy(item => item.Guid).ToDictionary(item => item.Guid);
+            var confirmed = new List<VisualFeeObjectLink>();
+            ConfirmedLinks = confirmed;
             var work = new List<(FeeLogic Logic, string ContainerName, IReadOnlyList<RequiredSimObjectLink> Links)>();
             var issues = new List<VisualIssue>();
             foreach (var bound in binding.Containers.Where(item =>
@@ -66,15 +74,10 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
                     continue;
                 }
 
-                var matchingLogics = logicObjects
-                    .Where(logic => string.Equals(
-                        logic.Name,
-                        bound.RuntimeContainer.ComponentName,
-                        StringComparison.OrdinalIgnoreCase) &&
-                        ContainerMetadataCatalog.TryGet(bound.PlanNode.TypeName, out var descriptor) &&
-                        ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, logic.LogicDefinitionName))
-                    .ToArray();
-                if (matchingLogics.Length == 0)
+                var selectable = (ISimObjectFindOrSelect)bound.RuntimeContainer;
+                var assigned = selectable.GetSimObjectTargets().SelectMany(target => target.GetObjects()).ToArray();
+                var matchingLogics = logicResolver.Find(bound.PlanNode, assigned);
+                if (matchingLogics.Count == 0)
                 {
                     return Failure(
                         $"Für '{bound.PlanNode.Name}' wurde kein bestehendes FEE-LogicObject mit " +
@@ -83,7 +86,7 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
                         "EXISTING_LOGIC_NOT_FOUND",
                         bound.PlanNode.Id);
                 }
-                if (matchingLogics.Length > 1)
+                if (matchingLogics.Count > 1)
                 {
                     return Failure(
                         $"Für '{bound.PlanNode.Name}' existieren mehrere gleichnamige FEE-LogicObjects. " +
@@ -101,7 +104,8 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
                         bound.PlanNode.Id);
                 }
                 logicProperty.SetValue(bound.RuntimeContainer, matchingLogics[0]);
-                var selectable = (ISimObjectFindOrSelect)bound.RuntimeContainer;
+                logger.Information($"{bound.PlanNode.Name}: bestehende Logik '{matchingLogics[0].Name}', " +
+                    $"Objekt-GUID {matchingLogics[0].Guid:D}, Definition '{matchingLogics[0].LogicDefinitionName}' gebunden.");
                 var required = selectable.GetSimObjectTargets().SelectMany(target => target.GetObjects().SelectMany((item, index) =>
                     SimObjectLinkMap.Create(bound.PlanNode.TypeName, item, index))).ToArray();
                 if (required.Length == 0)
@@ -125,19 +129,23 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 foreach (var joint in item.Links.Where(link => link.ObjectSlot == "InTarget")
-                             .Select(link => sceneObjects.FirstOrDefault(scene => scene.Guid == link.ObjectGuid)).OfType<FeeJoint>().DistinctBy(joint => joint.Guid))
+                             .Select(link => byGuid.GetValueOrDefault(link.ObjectGuid)).OfType<FeeJoint>().DistinctBy(joint => joint.Guid))
                     await ContainerSlotLinkService.EnsurePositionControlAsync(joint, cancellationToken);
                 foreach (var floor in item.Links.Where(link => link.ObjectSlot == "Collision")
-                             .Select(link => sceneObjects.FirstOrDefault(scene => scene.Guid == link.ObjectGuid)).OfType<FeeFloor>())
+                             .Select(link => byGuid.GetValueOrDefault(link.ObjectGuid)).OfType<FeeFloor>())
                     if (!floor.UseCollisionSlot)
                         await ContainerSlotLinkService.EnsureFloorCollisionSlotEnabledAsync(floor, item.ContainerName, cancellationToken);
                 foreach (var group in item.Links.GroupBy(link => link.LogicSlot, StringComparer.OrdinalIgnoreCase))
+                {
                     await ContainerSlotLinkService.AssignAndVerifyAsync(
-                        new[] { (item.Logic.Guid, group.Key) }.Concat(group.Select(link => (link.ObjectGuid, link.ObjectSlot))).ToArray(),
+                        SimObjectLinkMap.Endpoints(item.Logic.Guid, group.ToArray()),
                         $"{item.ContainerName}: {group.Key}", cancellationToken);
+                    confirmed.AddRange(group.Select(link => new VisualFeeObjectLink(link.ObjectGuid.ToString("D"),
+                        link.ObjectSlot, item.Logic.GuidString, link.LogicSlot)));
+                }
             }
 
-            var message = $"{work.Count} bestehende SimObject-Verknüpfung(en) wurden aktualisiert; " +
+            var message = $"{confirmed.Count} bestehende SimObject-Verknüpfung(en) bestätigt; " +
                           "es wurden keine Container neu erzeugt.";
             logger.Information(message);
             return new VisualExecutionResult(true, message, issues);

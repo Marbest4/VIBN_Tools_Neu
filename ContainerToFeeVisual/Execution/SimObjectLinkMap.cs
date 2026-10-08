@@ -59,4 +59,12 @@ internal static class SimObjectLinkMap
             string.Equals(link.LinkedSlotName, expected.ObjectSlot, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(link.ObjectGuidString, logicGuid, StringComparison.OrdinalIgnoreCase) &&
             string.Equals(link.SlotName, expected.LogicSlot, StringComparison.OrdinalIgnoreCase));
+
+    internal static IReadOnlyList<(Guid ObjectGuid, string SlotName)> Endpoints(Guid logicGuid,
+        IReadOnlyList<RequiredSimObjectLink> links)
+    {
+        if (links.Count == 1 && links[0].ObjectSlot is "OutValue" or "Channel1" or "Feedback")
+            return [(links[0].ObjectGuid, links[0].ObjectSlot), (logicGuid, links[0].LogicSlot)];
+        return new[] { (logicGuid, links[0].LogicSlot) }.Concat(links.Select(link => (link.ObjectGuid, link.ObjectSlot))).ToArray();
+    }
 }

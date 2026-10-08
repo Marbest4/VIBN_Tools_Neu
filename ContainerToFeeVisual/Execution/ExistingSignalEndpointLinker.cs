@@ -12,6 +12,19 @@ internal sealed class ExistingSignalEndpointLinker(
     IVisualPlanLogger logger)
 {
     private readonly HashSet<(Guid Variable, Guid Object, string Slot)> _completed = new();
+    private readonly HashSet<VisualFeeSignalLink> _knownLinks = new(links);
+    private readonly Dictionary<string, HashSet<VisualFeeSignalLink>> _directLinksByVariable = links.Where(link => !link.IsIndirect)
+        .GroupBy(link => link.SignalGuidString, StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(group => group.Key, group => group.ToHashSet(), StringComparer.OrdinalIgnoreCase);
+    private readonly List<(FeeAbstractObject Object, string ContainerId)> _createdObjects = [];
+    private readonly HashSet<string> _scopedObjectGuids = sceneObjects.Select(item => item.GuidString).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<(Guid ObjectGuid, string[] SlotNames)>> _variableAssignments =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<(Guid Variable, Guid Object, string Slot)> _linkedEndpoints = links
+        .Where(link => Guid.TryParse(link.SignalGuidString, out _) && Guid.TryParse(link.ObjectGuidString, out _))
+        .Select(link => (Guid.Parse(link.SignalGuidString), Guid.Parse(link.ObjectGuidString), link.SlotName.ToUpperInvariant())).ToHashSet();
+    internal IReadOnlyList<VisualFeeSignalLink> KnownLinks => _knownLinks.ToArray();
+    internal IReadOnlyList<(FeeAbstractObject Object, string ContainerId)> CreatedObjects => _createdObjects;
     public int LinkedCount { get; private set; }
     public int SkippedCount { get; private set; }
 
@@ -21,7 +34,7 @@ internal sealed class ExistingSignalEndpointLinker(
     {
         var type = bound.RuntimeContainer is ContainerToFee.General.SimpleNot_Container ? typeof(FeeSimpleNot) : typeof(FeeSimpleMove);
         var requestGuids = requests.Select(request => request.Signal.Guid.ToString("D")).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var connectedGuids = links.Where(link => requestGuids.Contains(link.SignalGuidString) && !link.IsIndirect)
+        var connectedGuids = requestGuids.SelectMany(DirectLinks)
             .Select(link => link.ObjectGuidString).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var connected = sceneObjects.Where(item => type.IsInstanceOfType(item) && connectedGuids.Contains(item.GuidString)).ToArray();
         var identified = containerObjects.Where(item => item.Kind == VisualFeeContainerObjectKind.TechnicalHelper &&
@@ -47,8 +60,14 @@ internal sealed class ExistingSignalEndpointLinker(
         FeeAbstractObject helper = type == typeof(FeeSimpleNot) ? new FeeSimpleNot() : new FeeSimpleMove();
         helper.Name = bound.PlanNode.Name;
         helper.Parent = parent;
-        await helper.CreateAsync();
-        await helper.SendAndWaitAsync();
+        if (!await helper.CreateAsync() || !await helper.SendAndWaitAsync())
+        {
+            Warn(issues, bound.PlanNode.Id, "TECHNICAL_HELPER_SKIPPED",
+                $"{bound.PlanNode.Name}: FEE hat das neue Hilfsobjekt nicht bestätigt; mit Warnung übersprungen.");
+            return null;
+        }
+        _createdObjects.Add((helper, bound.PlanNode.Id));
+        _scopedObjectGuids.Add(helper.GuidString);
         await ContainerObjectProvenance.WriteNewObjectAsync(helper, bound.RuntimeContainer);
         logger.Information($"Fehlendes technisches Hilfsobjekt {helper.FeeType} für '{bound.PlanNode.Name}' erzeugt.");
         return helper;
@@ -71,10 +90,7 @@ internal sealed class ExistingSignalEndpointLinker(
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var key = (request.Signal.Guid, target.Guid, group.Key.ToUpperInvariant());
-                    if (_completed.Contains(key) || links.Any(link =>
-                            string.Equals(link.SignalGuidString, request.Signal.GuidString, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(link.ObjectGuidString, target.GuidString, StringComparison.OrdinalIgnoreCase) &&
-                            string.Equals(link.SlotName, group.Key, StringComparison.OrdinalIgnoreCase)))
+                    if (_completed.Contains(key) || _linkedEndpoints.Contains(key))
                     { SkippedCount++; continue; }
                     if (target.Slots?.TryGetValue(group.Key, out var occupiedGuid) == true &&
                         variableGuids.Contains(occupiedGuid) && occupiedGuid != request.Signal.Guid)
@@ -89,8 +105,11 @@ internal sealed class ExistingSignalEndpointLinker(
                     }
                     else
                         await ContainerSlotLinkService.AssignVariableAndVerifyAsync(target.Guid, group.Key, request.Signal.Guid,
-                            $"{bound.PlanNode.Name}: {group.Key}", cancellationToken);
+                            $"{bound.PlanNode.Name}: {group.Key}", cancellationToken, CurrentAssignments(request.Signal.GuidString));
                     _completed.Add(key);
+                    _linkedEndpoints.Add(key);
+                    Remember(new VisualFeeSignalLink(request.Signal.GuidString, target.GuidString,
+                        target.FeeType ?? "", group.Key, fanIn));
                     LinkedCount++;
                 }
         }
@@ -99,8 +118,7 @@ internal sealed class ExistingSignalEndpointLinker(
     private async Task<bool> LinkFanInAsync(BoundVisualContainer bound, SignalResolutionRequest request,
         FeeAbstractObject target, string slot, List<VisualIssue> issues, CancellationToken cancellationToken)
     {
-        var outputs = links.Where(link => !link.IsIndirect &&
-                string.Equals(link.SignalGuidString, request.Signal.GuidString, StringComparison.OrdinalIgnoreCase) &&
+        var outputs = DirectLinks(request.Signal.GuidString).Where(link => _scopedObjectGuids.Contains(link.ObjectGuidString) &&
                 string.Equals(link.SlotName, "Output 01", StringComparison.OrdinalIgnoreCase) &&
                 VisualFeeTechnicalHelperResolver.IsExpectedType("Move-Bit-Hilfslogik", link.ObjectType))
             .Select(link => Guid.Parse(link.ObjectGuidString)).Distinct().ToArray();
@@ -114,18 +132,48 @@ internal sealed class ExistingSignalEndpointLinker(
         if (outputs.Length == 1) moveGuid = outputs[0];
         else
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var move = new FeeSimpleMove { Name = $"{bound.PlanNode.Name} {slot} {request.Signal.Tag}", Parent = target.Parent };
-            await move.CreateAsync();
-            await move.SendAndWaitAsync();
+            if (!await move.CreateAsync() || !await move.SendAndWaitAsync())
+            {
+                Warn(issues, bound.PlanNode.Id, "TECHNICAL_HELPER_SKIPPED",
+                    $"{bound.PlanNode.Name}: FEE hat die neue MoveBit-Route nicht bestätigt; mit Warnung übersprungen.");
+                return false;
+            }
+            _createdObjects.Add((move, bound.PlanNode.Id));
+            _scopedObjectGuids.Add(move.GuidString);
             await ContainerObjectProvenance.WriteNewObjectAsync(move, bound.RuntimeContainer);
             await ContainerSlotLinkService.AssignVariableAndVerifyAsync(move.Guid, "Output 01", request.Signal.Guid,
-                $"{bound.PlanNode.Name}: MoveBit Output 01", cancellationToken);
+                $"{bound.PlanNode.Name}: MoveBit Output 01", cancellationToken, CurrentAssignments(request.Signal.GuidString));
+            Remember(new VisualFeeSignalLink(request.Signal.GuidString, move.GuidString,
+                move.FeeType ?? "MoveBit", "Output 01", false));
             moveGuid = move.Guid;
         }
         await ContainerSlotLinkService.AssignAndVerifyAsync(
             [(target.Guid, slot), (moveGuid, "Input 01")], $"{bound.PlanNode.Name}: fehlende MoveBit-Route {slot}", cancellationToken);
         return true;
     }
+
+    private void Remember(VisualFeeSignalLink link)
+    {
+        _knownLinks.Add(link);
+        if (!link.IsIndirect)
+        {
+            if (!_directLinksByVariable.TryGetValue(link.SignalGuidString, out var direct))
+                _directLinksByVariable[link.SignalGuidString] = direct = [];
+            direct.Add(link);
+            _variableAssignments.Remove(link.SignalGuidString);
+        }
+    }
+
+    private IEnumerable<VisualFeeSignalLink> DirectLinks(string variableGuid) =>
+        _directLinksByVariable.TryGetValue(variableGuid, out var direct) ? direct : [];
+
+    private IReadOnlyList<(Guid ObjectGuid, string[] SlotNames)> CurrentAssignments(string variableGuid) =>
+        _variableAssignments.TryGetValue(variableGuid, out var cached) ? cached :
+        _variableAssignments[variableGuid] = DirectLinks(variableGuid).Where(link => Guid.TryParse(link.ObjectGuidString, out _))
+            .GroupBy(link => Guid.Parse(link.ObjectGuidString))
+            .Select(group => (group.Key, group.Select(link => link.SlotName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())).ToArray();
 
     private void Warn(List<VisualIssue> issues, string nodeId, string code, string message)
     {

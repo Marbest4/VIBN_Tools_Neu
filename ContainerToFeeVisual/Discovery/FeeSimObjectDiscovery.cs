@@ -30,7 +30,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
             .ToArray();
         cancellationToken.ThrowIfCancellationRequested();
         var runtimeObjects = allObjects
-            .Where(item => item is IAssignableSimObject)
+            .Where(item => item is IAssignableSimObject or FeeLogic)
             .ToArray();
 
         var uniqueRuntimeObjects = runtimeObjects
@@ -107,7 +107,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
             .ToDictionary(group => group.Key, group => group.First().Name ?? string.Empty);
 
         logger.Information(
-            $"{objects.Count} zuweisbare FEE-SimObjects, {containerObjects.Length} vorhandene Logik-/Cabinet-Objekte " +
+            $"{objects.Count} verfügbare FEE-SimObjects/Logiken, {containerObjects.Length} vorhandene Logik-/Cabinet-Objekte " +
             $"und {topLevelBasicFrames.Count} Root(s) in {stopwatch.Elapsed.TotalSeconds:F1} s gelesen (schlanker Snapshot).");
         return new VisualFeeDiscoveryResult(objects, byId, containerObjects, topLevelBasicFrames, allObjects);
     }
@@ -182,6 +182,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
 
     private static string CreateIdentity(FeeAbstractObject item) => string.Join(
         "\u001f",
+        item is FeeLogic ? "LogicObject" : "SimObject",
         item.Name?.Trim() ?? string.Empty,
         ResolveParentScope(item).Name.Trim());
 

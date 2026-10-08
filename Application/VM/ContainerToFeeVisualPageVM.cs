@@ -916,6 +916,8 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         StatusText = count > 0
             ? $"{count} FEE-SimObject-/Signalzuordnung(en) automatisch erkannt."
             : "Keine weiteren eindeutigen Namens-/Typzuordnungen gefunden.";
+        if (_planService.CurrentPlan is { ExistingInterfaceSelections.Count: 0 } && AvailableFeeSignals.Count > 0)
+            StatusText += " Für Signale bitte mindestens ein vorhandenes Interface auswählen.";
         _log.Information(LogArea, StatusText);
         AddOperationDetail("Automatische Zuordnung", StatusText);
     }
@@ -1160,10 +1162,11 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                     await _planService.LinkExistingAssignmentsOnlyAsync(cancellationToken);
                 PublishIssues(result.Issues);
                 StatusText = result.Message;
+                RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
+                ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
+                ApplyDiscoveredSimObjectStates();
                 if (result.Success)
                 {
-                    await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
-                    ApplyDiscoveredSimObjectStates();
                     RefreshCompletedContainerSelection();
                     _log.Information(LogArea, result.Message);
                 }
@@ -1190,15 +1193,12 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                     await _planService.LinkExistingSignalsOnlyAsync(cancellationToken);
                 PublishIssues(result.Issues);
                 StatusText = result.Message;
+                ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
+                ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+                RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
+                RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
                 if (result.Success)
                 {
-                    await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
-                    await _planService.DiscoverFeeObjectsAsync(cancellationToken);
-                    RefreshFeeRootProjection();
-                    ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
-                    ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
-                    RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
-                    await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
                     RefreshCompletedContainerSelection();
                     _log.Information(LogArea, result.Message);
                 }
@@ -2484,16 +2484,11 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                     explicitAssignment.FeeSignalGuid,
                     StringComparison.OrdinalIgnoreCase));
             var matches = signals.Where(signal => string.Equals(
-                    signal.Tag,
-                    node.Name,
+                    signal.Tag.Trim(),
+                    node.Name.Trim(),
                     StringComparison.OrdinalIgnoreCase))
                 .ToArray();
-            var exactMatches = string.IsNullOrWhiteSpace(node.SourceLocation)
-                ? matches
-                : matches.Where(signal => string.Equals(
-                    signal.Location,
-                    node.SourceLocation,
-                    StringComparison.OrdinalIgnoreCase)).ToArray();
+            var exactMatches = matches.Where(signal => VisualSignalAssignmentMatcher.Matches(node.Model, signal)).ToArray();
             var resolvedSignal = explicitlyAssignedSignal ?? (exactMatches.Length == 1 ? exactMatches[0] : null);
             var state = resolvedSignal is not null
                 ? _planService.GetSignalConnectionState(node.Id, resolvedSignal.GuidString).IsVerified
@@ -2543,11 +2538,15 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         var plan = _planService.CurrentPlan;
         if (plan is null)
             return;
-        var presenceByNode = VisualFeeContainerPresenceResolver.Resolve(plan, objects);
+        var logics = new Dictionary<string, IReadOnlyList<VisualFeeContainerObject>>(StringComparer.Ordinal);
+        var presenceByNode = VisualFeeContainerPresenceResolver.Resolve(plan, objects, id =>
+            logics.TryGetValue(id, out var cached) ? cached : logics[id] = _planService.FindExistingContainerLogics(id));
         foreach (var node in TreeRoots.SelectMany(root => root.SelfAndDescendants()))
         {
             if (!presenceByNode.TryGetValue(node.Id, out var presence))
                 continue;
+            if (node.Kind == VisualNodeKind.Logic && node.ContainerId is { } containerId && logics.TryGetValue(containerId, out var matches))
+                node.ApplyFeeObjectIdentity(matches.Count == 1 ? FeeSimObjectDiscovery.CreateFeeObjectId(matches[0].GuidString) : null);
             var state = presence.Kind switch
             {
                 VisualFeeNodePresenceKind.Found => ContainerToFeeVisualNodeState.Verified,
@@ -2591,8 +2590,13 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         RefreshAggregateTreeStates();
     }
 
-    private static string? ResolveAssignedFeeObjectId(VisualNode node, VisualPlan plan)
+    private string? ResolveAssignedFeeObjectId(VisualNode node, VisualPlan plan)
     {
+        if (node.Kind == VisualNodeKind.Logic && node.ContainerId is { } containerId)
+        {
+            var logics = _planService.FindExistingContainerLogics(containerId);
+            return logics.Count == 1 ? FeeSimObjectDiscovery.CreateFeeObjectId(logics[0].GuidString) : null;
+        }
         if (node.Kind != VisualNodeKind.SimObject || string.IsNullOrWhiteSpace(node.ParentId))
             return null;
         return plan.Assignments.FirstOrDefault(assignment =>
@@ -3231,9 +3235,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                 .ToHashSet(StringComparer.OrdinalIgnoreCase) ??
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var feeSignal in AvailableFeeSignals.Where(feeSignal => scopedSignalNodes.Any(signalNode =>
-                         string.Equals(signalNode.Name, feeSignal.Tag, StringComparison.OrdinalIgnoreCase) &&
-                         (string.IsNullOrWhiteSpace(signalNode.SourceLocation) ||
-                          string.Equals(signalNode.SourceLocation, feeSignal.Location, StringComparison.OrdinalIgnoreCase)))))
+                         VisualSignalAssignmentMatcher.Matches(signalNode.Model, feeSignal.Model))))
             {
                 feeSignalGuids.Add(feeSignal.GuidString);
             }
@@ -3270,9 +3272,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             if (node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal)
                 preferredFeeSignal ??= AvailableFeeSignals.FirstOrDefault(item =>
                     item.AssignedNodeIds.Contains(node.Id) ||
-                    string.Equals(item.Tag, node.Name, StringComparison.OrdinalIgnoreCase) &&
-                    (string.IsNullOrWhiteSpace(node.SourceLocation) ||
-                     string.Equals(item.Location, node.SourceLocation, StringComparison.OrdinalIgnoreCase)));
+                    VisualSignalAssignmentMatcher.Matches(node.Model, item.Model));
             preferredTarget = Targets.FirstOrDefault(item => item.Id == preferredTarget?.Id) ??
                 Targets.FirstOrDefault(item => item.Id == (node.Kind == VisualNodeKind.SimObject ? node.ParentId : node.Id));
             preferredSignalSlot = SignalSlots.FirstOrDefault(item =>
@@ -3580,6 +3580,12 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
     }
     public IReadOnlyList<string> AllowedSlots { get; private set; }
     public string? FeeObjectId { get; private set; }
+    internal void ApplyFeeObjectIdentity(string? id)
+    {
+        if (FeeObjectId == id) return;
+        FeeObjectId = id;
+        OnPropertyChanged(nameof(FeeObjectId));
+    }
     public string? ParentId => Model.ParentId;
     public bool HasDuplicateIdentity { get; private set; }
     public bool IsDuplicateConfirmed { get; private set; }

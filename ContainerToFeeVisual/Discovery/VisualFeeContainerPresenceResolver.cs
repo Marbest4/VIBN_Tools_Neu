@@ -9,7 +9,8 @@ public static class VisualFeeContainerPresenceResolver
 {
     public static IReadOnlyDictionary<string, VisualFeeNodePresence> Resolve(
         VisualPlan plan,
-        IEnumerable<VisualFeeContainerObject> inventory)
+        IEnumerable<VisualFeeContainerObject> inventory,
+        Func<string, IReadOnlyList<VisualFeeContainerObject>>? findLogics = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -21,9 +22,9 @@ public static class VisualFeeContainerPresenceResolver
             var container = FindContainer(plan, node);
             if (container is null)
                 continue;
-            var matches = objects.Where(item =>
+            var matches = findLogics?.Invoke(container.Id) ?? objects.Where(item =>
                     item.Kind == VisualFeeContainerObjectKind.Logic &&
-                    string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Name.Trim(), container.Name.Trim(), StringComparison.OrdinalIgnoreCase) &&
                     ContainerMetadataCatalog.IsSameLogicDefinition(node.Name, item.Definition))
                 .ToArray();
             result[node.Id] = CreatePresence(

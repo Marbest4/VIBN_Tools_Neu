@@ -27,7 +27,8 @@ internal static class RuntimeVisualPlanBinder
         bool omitInvalidObjectAssignments = false,
         IReadOnlySet<string>? includedContainerIds = null,
         bool bindSimObjects = true,
-        bool includeSignals = true)
+        bool includeSignals = true,
+        IReadOnlySet<string>? includedFeeObjectIds = null)
     {
         var effectiveDocument = CreateEffectiveDocument(plan, omitInvalidSlotEntries);
         if (includedContainerIds is not null)
@@ -104,6 +105,8 @@ internal static class RuntimeVisualPlanBinder
                 var assignedRuntimeObjects = new List<FeeAbstractObject>();
                 foreach (var assignment in plan.Assignments.Where(item => item.TargetId == visualTarget.Id))
                 {
+                    if (includedFeeObjectIds is not null && !includedFeeObjectIds.Contains(assignment.FeeObjectId))
+                        continue;
                     if (!runtimeObjects.TryGetValue(assignment.FeeObjectId, out var runtimeObject))
                     {
                         if (omitInvalidObjectAssignments)
