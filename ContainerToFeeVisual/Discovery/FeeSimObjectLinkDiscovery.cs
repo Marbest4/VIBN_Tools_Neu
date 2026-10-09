@@ -16,43 +16,47 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
 {
     public async Task<VisualFeeObjectLinkDiscoveryResult> DiscoverAsync(
         IEnumerable<FeeAbstractObject> objects,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<FeeAbstractObject>? sceneObjects = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<string>>? requiredSlots = null,
+        Func<Guid, string, Task<IReadOnlyList<(string SceneObjectGuid, string[] SlotNames)>>>? readSlotLinks = null,
+        IEnumerable<Guid>? variableGuids = null)
     {
+        readSlotLinks ??= async (guid, slot) => (await Services.ApiInstance.Interface.GetSlotSlotAssignmentAsync(guid, slot) ?? []).ToArray();
         var candidates = objects.Where(item => item.Guid != Guid.Empty)
             .DistinctBy(item => item.Guid)
             .ToArray();
-        var links = new List<VisualFeeObjectLink>();
+        var variables = (variableGuids ?? []).ToHashSet();
+        var links = new FeeSlotSnapshot(sceneObjects ?? candidates, variables).ObjectLinks(candidates).ToList();
         var failures = 0;
         var resolvedSlotCount = 0;
         foreach (var item in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            foreach (var direct in item.Slots ?? new Dictionary<string, Guid>())
-            {
-                if (direct.Value != Guid.Empty)
-                {
-                    links.Add(new VisualFeeObjectLink(
-                        item.Guid.ToString("D"), direct.Key, direct.Value.ToString("D"), string.Empty));
-                }
-            }
-
-            foreach (var slotName in GetRelevantSlotNames(item))
+            var slots = requiredSlots is null ? GetRelevantSlotNames(item) :
+                (item.Slots?.Keys ?? Enumerable.Empty<string>()).Concat(requiredSlots.GetValueOrDefault(item.Guid) ?? [])
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var slotName in slots)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (item.Slots is { } populatedSlots && populatedSlots.TryGetValue(slotName, out var assignedGuid) && variables.Contains(assignedGuid))
+                    continue; // Variable assignments are read by signal discovery, not as object links.
+                if (links.Any(link => string.Equals(link.ObjectGuidString, item.GuidString, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(link.SlotName, slotName, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(link.LinkedSlotName)))
+                    continue; // The current XML snapshot already contains both real endpoints of this group.
                 // AssignedGuid in the XML can identify a slot group rather
                 // than its final scene-object endpoints. Resolve populated
                 // slots too; otherwise the list sees a link but the tree
                 // cannot find the actual container logic behind that group.
                 try
                 {
-                    var assignments = await Services.ApiInstance.Interface
-                        .GetSlotSlotAssignmentAsync(item.Guid, slotName);
+                    var assignments = await readSlotLinks(item.Guid, slotName);
                     if (assignments is null)
                         continue;
                     var resolvedLinks = new List<VisualFeeObjectLink>();
                     foreach (var (linkedGuid, linkedSlots) in assignments)
                     {
-                        if (!Guid.TryParse(linkedGuid, out var parsedGuid))
+                        if (!Guid.TryParse(linkedGuid, out var parsedGuid) || parsedGuid == Guid.Empty)
                             continue;
                         foreach (var linkedSlot in linkedSlots ?? [])
                         {

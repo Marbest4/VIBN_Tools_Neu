@@ -9,14 +9,21 @@ internal sealed class ExistingContainerLogicResolver(IEnumerable<FeeAbstractObje
         .Where(item => item.Guid != Guid.Empty).DistinctBy(item => item.Guid)
         .ToLookup(item => item.Name?.Trim() ?? "", StringComparer.OrdinalIgnoreCase);
 
-    internal IReadOnlyList<FeeLogic> Find(VisualNode container, IEnumerable<FeeAbstractObject>? assignedObjects = null)
+    internal IReadOnlyList<FeeLogic> Find(VisualNode container, IEnumerable<FeeAbstractObject>? assignedObjects = null,
+        IReadOnlyList<VisualFeeObjectLink>? liveLinks = null)
     {
         if (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor)) return [];
         var matches = _byName[container.Name.Trim()].Where(logic =>
             ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, logic.LogicDefinitionName)).ToArray();
         if (matches.Length > 1 && assignedObjects is not null)
         {
-            var roots = assignedObjects.Select(item => FeeSimObjectDiscovery.ResolveRoot(item).GuidString)
+            var assigned = assignedObjects.ToArray();
+            var guids = assigned.Select(item => item.GuidString).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var linked = matches.Where(logic => (liveLinks ?? []).Any(link => !string.IsNullOrWhiteSpace(link.LinkedSlotName) &&
+                (string.Equals(link.ObjectGuidString, logic.GuidString, StringComparison.OrdinalIgnoreCase) && guids.Contains(link.LinkedObjectGuidString) ||
+                 string.Equals(link.LinkedObjectGuidString, logic.GuidString, StringComparison.OrdinalIgnoreCase) && guids.Contains(link.ObjectGuidString)))).ToArray();
+            if (linked.Length == 1) return linked;
+            var roots = assigned.Select(item => FeeSimObjectDiscovery.ResolveRoot(item).GuidString)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
             var sameRoot = matches.Where(item => roots.Contains(FeeSimObjectDiscovery.ResolveRoot(item).GuidString)).ToArray();
             if (sameRoot.Length == 1) return sameRoot;

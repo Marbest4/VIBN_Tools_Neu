@@ -19,6 +19,7 @@ internal static partial class Program
     {
         VerifyFeeRootReadFailures();
         VerifyVisualLinkWorkflowRegressions();
+        VerifyLiveLinkStateRegressions();
         VerifyAutomaticSignalsAndRootScope();
         VerifyLiveStructureOverridesHistory();
         VerifyExistingHelperLinksAreSkipped();

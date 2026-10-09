@@ -39,7 +39,8 @@ public sealed record VisualIssue(
     VisualIssueSeverity Severity,
     string Code,
     string Message,
-    string? NodeId = null);
+    string? NodeId = null,
+    IReadOnlyList<string>? RelatedIds = null);
 
 /// <summary>One object, signal or technical helper in the generation plan.</summary>
 public sealed class VisualNode
@@ -311,6 +312,7 @@ public enum VisualSimObjectConnectionKind
     NotRequired,
     Linked,
     LinkMissing,
+    NotFound,
 }
 
 public sealed record VisualSimObjectConnectionState(

@@ -19,14 +19,16 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlyList<FeeAbstractObject> sceneObjects,
-        CancellationToken cancellationToken) => FeeMutationScope.RunAsync(
-        () => ExecuteCoreAsync(plan, runtimeObjects, sceneObjects, cancellationToken), cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyList<VisualFeeObjectLink>? liveLinks = null) => FeeMutationScope.RunAsync(
+        () => ExecuteCoreAsync(plan, runtimeObjects, sceneObjects, cancellationToken, liveLinks), cancellationToken);
 
     private async Task<VisualExecutionResult> ExecuteCoreAsync(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlyList<FeeAbstractObject> sceneObjects,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<VisualFeeObjectLink>? liveLinks)
     {
         ConfirmedLinks = [];
         var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan).Where(id => plan.Assignments.Any(assignment =>
@@ -46,6 +48,8 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
                 "FEE_MODEL_CACHE_EMPTY");
         }
 
+        string? activeContainerId = null;
+        IReadOnlyList<string> activeObjectIds = [];
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -59,7 +63,7 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
             var byGuid = modelObjects.DistinctBy(item => item.Guid).ToDictionary(item => item.Guid);
             var confirmed = new List<VisualFeeObjectLink>();
             ConfirmedLinks = confirmed;
-            var work = new List<(FeeLogic Logic, string ContainerName, IReadOnlyList<RequiredSimObjectLink> Links)>();
+            var work = new List<(FeeLogic Logic, string ContainerName, string ContainerId, IReadOnlyList<RequiredSimObjectLink> Links)>();
             var issues = new List<VisualIssue>();
             foreach (var bound in binding.Containers.Where(item =>
                          plan.IsGenerationSelected(item.PlanNode.Id) &&
@@ -67,6 +71,7 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
                              plan.FindTarget(assignment.TargetId)?.ContainerId == item.PlanNode.Id)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                activeContainerId = bound.PlanNode.Id;
                 if (bound.RuntimeContainer is not ILogicSimObjectOwner)
                 {
                     issues.Add(new VisualIssue(VisualIssueSeverity.Info, "LINK_ONLY_NOT_REQUIRED",
@@ -76,7 +81,7 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
 
                 var selectable = (ISimObjectFindOrSelect)bound.RuntimeContainer;
                 var assigned = selectable.GetSimObjectTargets().SelectMany(target => target.GetObjects()).ToArray();
-                var matchingLogics = logicResolver.Find(bound.PlanNode, assigned);
+                var matchingLogics = logicResolver.Find(bound.PlanNode, assigned, liveLinks);
                 if (matchingLogics.Count == 0)
                 {
                     return Failure(
@@ -114,7 +119,7 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
                         $"{bound.PlanNode.Name}: keine unterstützten SimObject-Endpunkte; mit Warnung übersprungen.", bound.PlanNode.Id));
                     continue;
                 }
-                work.Add((matchingLogics[0], bound.PlanNode.Name, required));
+                work.Add((matchingLogics[0], bound.PlanNode.Name, bound.PlanNode.Id, required));
             }
 
             if (work.Count == 0)
@@ -128,6 +133,9 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
             foreach (var item in work)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                activeContainerId = item.ContainerId;
+                activeObjectIds = item.Links.Select(link => "fee:" + link.ObjectGuid.ToString("D"))
+                    .Append("fee:" + item.Logic.GuidString).Distinct(StringComparer.Ordinal).ToArray();
                 foreach (var joint in item.Links.Where(link => link.ObjectSlot == "InTarget")
                              .Select(link => byGuid.GetValueOrDefault(link.ObjectGuid)).OfType<FeeJoint>().DistinctBy(joint => joint.Guid))
                     await ContainerSlotLinkService.EnsurePositionControlAsync(joint, cancellationToken);
@@ -160,7 +168,7 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
             return new VisualExecutionResult(
                 false,
                 "Verknüpfung fehlgeschlagen. Details stehen im Protokoll.",
-                [new VisualIssue(VisualIssueSeverity.Error, "LINK_ONLY_EXECUTION_FAILED", exception.Message)]);
+                [new VisualIssue(VisualIssueSeverity.Error, "LINK_ONLY_EXECUTION_FAILED", exception.Message, activeContainerId, activeObjectIds)]);
         }
     }
 

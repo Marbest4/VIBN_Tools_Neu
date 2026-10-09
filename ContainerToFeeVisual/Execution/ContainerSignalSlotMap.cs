@@ -1,9 +1,11 @@
 using VIBN_Tools.ContainerToFee;
+using System.Collections.Concurrent;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
 
 internal static class ContainerSignalSlotMap
 {
+    private static readonly ConcurrentDictionary<(string Type, string Slot), string> RuntimeSlots = new();
     internal static string RuntimeSlot(ContainerBaseClass container, string xmlType, string xmlSlot) => xmlType switch
     {
         "ReturnCircuit" or "SafeArea" => xmlSlot == "PLC_OUT_Signal" ? "Input 01" : "Output 01",
@@ -24,7 +26,7 @@ internal static class ContainerSignalSlotMap
     internal static bool Matches(string xmlType, string xmlSlot, string runtimeSlot)
     {
         if (!ContainerMetadataCatalog.TryGet(xmlType, out var descriptor)) return false;
-        var container = descriptor.Factory();
-        return string.Equals(RuntimeSlot(container, xmlType, xmlSlot), runtimeSlot, StringComparison.OrdinalIgnoreCase);
+        var expected = RuntimeSlots.GetOrAdd((xmlType, xmlSlot), key => RuntimeSlot(descriptor.Factory(), key.Type, key.Slot));
+        return string.Equals(expected.Trim(), runtimeSlot.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 }

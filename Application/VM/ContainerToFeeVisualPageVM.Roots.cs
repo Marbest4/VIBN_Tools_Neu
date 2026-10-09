@@ -33,7 +33,11 @@ public sealed partial class ContainerToFeeVisualPageVM
 
     private void OnFeeRootSelectionChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(ContainerToFeeVisualFeeRootVM.IsSelected)) CommitFeeRootSelection();
+        if (args.PropertyName == nameof(ContainerToFeeVisualFeeRootVM.IsSelected))
+        {
+            CommitFeeRootSelection();
+            QueueScopeLinkRefresh();
+        }
     }
 
     private void CommitFeeRootSelection()
@@ -43,6 +47,9 @@ public sealed partial class ContainerToFeeVisualPageVM
         FeeObjectsView.Refresh();
         ApplyDiscoveredContainerObjectStates(_planService.DiscoveredFeeContainerObjects);
         ApplyDiscoveredSimObjectStates();
+        ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
+        RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
+        RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
     }
 
     private void RefreshCompletedContainerSelection()

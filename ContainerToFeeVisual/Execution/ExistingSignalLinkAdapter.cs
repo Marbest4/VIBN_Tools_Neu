@@ -24,9 +24,10 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         IReadOnlyList<VisualFeeContainerObject> containerObjects,
         FeeAbstractObject? helperParent,
         bool helperParentIsAmbiguous,
-        CancellationToken cancellationToken) => FeeMutationScope.RunAsync(
+        CancellationToken cancellationToken,
+        IReadOnlyList<VisualFeeObjectLink>? liveLinks = null) => FeeMutationScope.RunAsync(
         () => ExecuteCoreAsync(plan, runtimeObjects, runtimeInterfaces, sceneObjects, containerObjects,
-            helperParent, helperParentIsAmbiguous, cancellationToken), cancellationToken);
+            helperParent, helperParentIsAmbiguous, cancellationToken, liveLinks), cancellationToken);
 
     private async Task<VisualExecutionResult> ExecuteCoreAsync(
         VisualPlan plan,
@@ -36,7 +37,8 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         IReadOnlyList<VisualFeeContainerObject> containerObjects,
         FeeAbstractObject? helperParent,
         bool helperParentIsAmbiguous,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<VisualFeeObjectLink>? liveLinks)
     {
         KnownLinks = [];
         ReadSignalGuids = [];
@@ -68,12 +70,13 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
         var liveSignals = signalPlan.ExistingBindings.Select(item => new VisualFeeSignal(item.ExistingSignal.GuidString,
             item.ExistingInterface.GuidString, item.ExistingInterface.Name ?? "", item.ExistingSignal.Tag ?? "",
             item.ExistingSignal.Address ?? "", item.ExistingSignal.Path ?? "", item.ExistingSignal.IOTypeString ?? "", item.ExistingSignal.UsageString ?? ""));
-        var discovery = await new FeeSignalLinkDiscovery(logger).DiscoverAsync(liveSignals, cancellationToken);
+        var variableGuids = runtimeInterfaces.Values.SelectMany(item => item.Signals ?? []).Select(item => item.Guid).ToHashSet();
+        var discovery = await new FeeSignalLinkDiscovery(logger).DiscoverAsync(liveSignals, cancellationToken, sceneObjects,
+            liveLinks, variableGuids);
         if (discovery.FailedSignalCount > 0)
             return new VisualExecutionResult(true, "Signalrouten konnten nicht vollständig gelesen werden; Reparatur mit Warnung übersprungen.",
                 [new VisualIssue(VisualIssueSeverity.Warning, "SIGNAL_LINK_READ_INCOMPLETE",
                     "FEE aktualisieren und erneut versuchen. Es wurden keine bestehenden Routen verändert oder Hilfsobjekte erzeugt.")]);
-        var variableGuids = runtimeInterfaces.Values.SelectMany(item => item.Signals ?? []).Select(item => item.Guid).ToHashSet();
         var linker = new ExistingSignalEndpointLinker(discovery.Links, sceneObjects, containerObjects, variableGuids, logger);
         ReadSignalGuids = signalPlan.ExistingBindings.Select(item => item.ExistingSignal.GuidString).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var logicResolver = new ExistingContainerLogicResolver(sceneObjects);
@@ -100,7 +103,7 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                     var assigned = plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId)?.ContainerId == bound.PlanNode.Id)
                         .Select(assignment => runtimeObjects.GetValueOrDefault(assignment.FeeObjectId))
                         .Where(item => item is not null).Cast<FeeAbstractObject>();
-                    var matches = logicResolver.Find(bound.PlanNode, assigned);
+                    var matches = logicResolver.Find(bound.PlanNode, assigned, liveLinks);
                     if (matches.Count != 1)
                     {
                         issues.Add(new VisualIssue(VisualIssueSeverity.Error, "EXISTING_LOGIC_NOT_UNIQUE",
@@ -139,7 +142,9 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                     exception is NullReferenceException;
                 var severity = helperFailure ? VisualIssueSeverity.Warning : VisualIssueSeverity.Error;
                 var message = $"{bound.PlanNode.Name}: Signalreparatur übersprungen: {exception.Message}";
-                issues.Add(new VisualIssue(severity, helperFailure ? "TECHNICAL_HELPER_SKIPPED" : "EXISTING_SIGNAL_LINK_FAILED", message, bound.PlanNode.Id));
+                issues.Add(new VisualIssue(severity, helperFailure ? "TECHNICAL_HELPER_SKIPPED" : "EXISTING_SIGNAL_LINK_FAILED", message, bound.PlanNode.Id,
+                    containerRequests.Select(request => request.NodeId ?? request.ContainerId)
+                        .Concat(containerRequests.Select(request => request.Signal.GuidString)).Distinct(StringComparer.Ordinal).ToArray()));
                 if (helperFailure) logger.Warning(message); else logger.Error(message, exception);
             }
         }
