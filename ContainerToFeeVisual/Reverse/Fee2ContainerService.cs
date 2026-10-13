@@ -23,13 +23,19 @@ public sealed record Fee2ContainerRoot(
     int IgnoredObjectCount = 0,
     IReadOnlyList<FeeContainerReconstructionIssue>? ReconstructionIssues = null,
     IReadOnlyList<FeeContainerUnmappedObject>? NonContainerObjects = null,
-    IReadOnlyList<FeeContainerObjectAssociation>? ObjectAssociations = null)
+    IReadOnlyList<FeeContainerObjectAssociation>? ObjectAssociations = null,
+    IReadOnlyList<FeeContainerObjectDetails>? ObjectDetails = null,
+    IReadOnlyList<FeeContainerLiveVariable>? LiveVariables = null,
+    IReadOnlyList<FeeContainerLiveAssignment>? LiveAssignments = null)
 {
     public bool HasProvenance => Provenance is not null && UsesExactProvenance;
     public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : "FEE-Struktur (rekonstruiert)";
     public int ContainerCount => Provenance?.ContainerCount ?? 0;
     public int SignalCount => Provenance?.SignalCount ?? 0;
 }
+
+public sealed record FeeContainerObjectDetails(Guid Guid, string Name, string FeeType,
+    string ParentName, string LogicDefinitionName, string ConnectionText, bool IsSpecialDevice = false);
 
 public sealed record Fee2ContainerExportResult(
     FeeContainerProvenanceSnapshot Snapshot,
@@ -465,6 +471,7 @@ public sealed class Fee2ContainerService
                 () => Services.FeeObjects.ReadFeeSceneObjectsForDiscoveryAsync(cancellationToken), cancellationToken))
             .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item)).DistinctBy(item => item.Guid).ToArray();
         EnsureLiveConnection(connectionRevision);
+        await FeeLogicSlotSnapshot.PopulateAsync(allObjects, cancellationToken);
         var roots = allObjects.OfType<FeeBasicFrame>().Where(IsTopLevelInSnapshot)
             .OrderBy(frame => frame.Name, StringComparer.OrdinalIgnoreCase).ThenBy(frame => frame.Guid).ToArray();
         var ownerByObject = allObjects.ToDictionary(item => item.Guid, item =>
@@ -499,6 +506,7 @@ public sealed class Fee2ContainerService
                 allObjects.Select(item => item.Guid).ToHashSet(), cancellationToken, progress, allObjects), cancellationToken);
         var objectLinks = new FeeSlotSnapshot(allObjects, liveVariables.Select(signal => signal.VariableGuid))
             .ObjectLinks(allObjects).Concat(assignmentRead.ObjectLinks ?? []).Distinct().ToArray();
+        var details = CreateObjectDetails(allObjects, liveVariables, assignmentRead.Assignments, objectLinks);
         var relatedObjects = objectLinks.SelectMany(link => new[] {
             (Object: Guid.Parse(link.ObjectGuidString), Related: Guid.Parse(link.LinkedObjectGuidString)),
             (Object: Guid.Parse(link.LinkedObjectGuidString), Related: Guid.Parse(link.ObjectGuidString)) })
@@ -525,13 +533,18 @@ public sealed class Fee2ContainerService
             var root = roots[index];
             progress?.Report(new Fee2ContainerProgress(roots.Length == 0 ? 90 : 30 + index * 65 / roots.Length,
                 $"Root {index + 1} von {roots.Length} wird live rekonstruiert: {root.Name}"));
-            var scoped = scopedByRoot.GetValueOrDefault(root.Guid) ?? [];
-            var assignments = assignmentsByRoot.GetValueOrDefault(root.Guid) ?? [];
+            var scoped = (scopedByRoot.GetValueOrDefault(root.Guid) ?? [])
+                .Where(item => !FeeContainerReadPolicy.IsIgnored(item.FeeType, item.Name)).ToArray();
+            var scopedGuids = scoped.Select(item => item.Guid).ToHashSet();
+            var assignments = (assignmentsByRoot.GetValueOrDefault(root.Guid) ?? [])
+                .Where(item => scopedGuids.Contains(item.TargetObjectGuid)).ToArray();
             try
             {
                 var liveObjects = scoped.Select(item => ToLiveObject(item, hints.GetValueOrDefault(item.Guid), relatedObjects[item.Guid].Distinct().ToArray())).ToArray();
                 var reconstructed = FeeContainerLiveReconstructor.Reconstruct(root.Guid, root.Name, liveObjects, liveVariables, assignments, requirements);
-                var associations = FeeContainerAssociationProjection.Apply(reconstructed.Snapshot, reconstructed, scoped);
+                var associations = FeeContainerAssociationProjection.Apply(reconstructed.Snapshot, reconstructed, scoped)
+                    .Select(item => item with { ParentName = details[item.ObjectGuid].ParentName,
+                        LogicDefinitionName = details[item.ObjectGuid].LogicDefinitionName, ConnectionText = details[item.ObjectGuid].ConnectionText }).ToArray();
                 var rootVariables = assignments.Select(item => item.VariableGuid).ToHashSet();
                 AttachInventory(reconstructed.Snapshot, scoped, liveVariables.Where(variable => rootVariables.Contains(variable.VariableGuid)).ToArray());
                 if (requirements is not null)
@@ -541,7 +554,9 @@ public sealed class Fee2ContainerService
                 resultRoots.Add(new Fee2ContainerRoot(root.Guid, root.Name, reconstructed.Snapshot,
                     reconstructed.Snapshot.SignalCount, 0, reconstructed.Snapshot.SignalCount, 0,
                     UsesExactProvenance: false, reconstructed.InspectedObjectCount, reconstructed.IgnoredObjectCount,
-                    rootIssues, reconstructed.UnmappedObjects, associations));
+                    rootIssues, reconstructed.UnmappedObjects, associations,
+                    scoped.Select(item => details[item.Guid]).ToArray(),
+                    liveVariables.Where(variable => rootVariables.Contains(variable.VariableGuid)).ToArray(), assignments));
                 resultIssues.AddRange(reconstructed.Issues.Select(issue =>
                     new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, root.Name, issue.Message)));
             }
@@ -661,7 +676,35 @@ public sealed class Fee2ContainerService
             provenance.ContainerId,
             provenance.ContainerType,
             item.Parent?.Guid,
-            linkedObjects ?? []);
+            linkedObjects ?? [],
+            item is FeeLogic logic && VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(logic.LogicDefinitionName));
+    }
+
+    internal static IReadOnlyDictionary<Guid, FeeContainerObjectDetails> CreateObjectDetails(
+        IReadOnlyList<FeeAbstractObject> objects, IReadOnlyList<FeeContainerLiveVariable> variables,
+        IReadOnlyList<FeeContainerLiveAssignment> assignments, IReadOnlyList<VisualFeeObjectLink> objectLinks)
+    {
+        var scene = objects.ToDictionary(item => item.GuidString, StringComparer.OrdinalIgnoreCase);
+        var signals = variables.ToDictionary(item => item.VariableGuid);
+        var signalDetails = assignments.ToLookup(item => item.TargetObjectGuid);
+        var objectDetails = objectLinks.SelectMany(link => new[]
+        {
+            (Guid: link.ObjectGuidString, Text: $"{link.SlotName} ↔ {scene.GetValueOrDefault(link.LinkedObjectGuidString)?.Name ?? link.LinkedObjectGuidString}/{link.LinkedSlotName}"),
+            (Guid: link.LinkedObjectGuidString, Text: $"{link.LinkedSlotName} ↔ {scene.GetValueOrDefault(link.ObjectGuidString)?.Name ?? link.ObjectGuidString}/{link.SlotName}")
+        }).ToLookup(item => item.Guid, item => item.Text, StringComparer.OrdinalIgnoreCase);
+        return objects.ToDictionary(item => item.Guid, item =>
+        {
+            var parent = item.Parent;
+            var visited = new HashSet<Guid>();
+            if (item is FeeCabinetElement)
+                while (parent is not null && parent is not FeeCabinet && visited.Add(parent.Guid)) parent = parent.Parent;
+            parent ??= item.Parent;
+            var logic = (item as FeeLogic)?.LogicDefinitionName ?? "";
+            var connected = signalDetails[item.Guid].Select(link => $"{link.TargetSlot} ↔ Signal {signals.GetValueOrDefault(link.VariableGuid)?.Signal ?? link.VariableGuid.ToString("D")}")
+                .Concat(objectDetails[item.GuidString]).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(text => text, StringComparer.OrdinalIgnoreCase);
+            return new FeeContainerObjectDetails(item.Guid, item.Name ?? "", item.FeeType ?? "", parent?.Name ?? "",
+                logic, string.Join("; ", connected), VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(logic));
+        });
     }
 
     private static IReadOnlyDictionary<Guid, string> ResolveSlotsFromSnapshot(

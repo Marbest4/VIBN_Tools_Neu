@@ -44,6 +44,15 @@ public sealed partial class ContainerToFeeVisualPlanService
                     assignmentKind: source?.Attribute("assignment")?.Value ??
                         (string.Equals(assignment.FeeObjectName, node.Name, StringComparison.OrdinalIgnoreCase) ? "Automatic" : "Manual")));
             }
+            foreach (var assignment in plan.Assignments.Where(item => plan.FindNode(item.TargetId) is { Kind: VisualNodeKind.Logic } logic && logic.ContainerId == node.Id))
+            {
+                var discovered = FindFeeObject(assignment.FeeObjectId);
+                if (discovered is null) continue;
+                foreach (var old in objects.Elements("SimObject").Where(item => string.Equals(item.Element("Guid")?.Value, discovered.GuidString, StringComparison.OrdinalIgnoreCase)).ToArray()) old.Remove();
+                objects.Add(ContainerFileXml.Object(discovered.GuidString, discovered.Name, "LogicObject", "Primary", "Logic",
+                    discovered.TypeName, _runtimeObjects.GetValueOrDefault(assignment.FeeObjectId)?.Slots?.Select(slot => new ContainerFeeSlot
+                    { Name = slot.Key, AssignedGuid = slot.Value.ToString("D") }), assignmentKind: "Manual"));
+            }
             foreach (var item in _feeContainerObjects.Where(item =>
                          item.ProvenanceContainerId == node.Id ||
                          string.Equals(item.Name, node.Name, StringComparison.OrdinalIgnoreCase)))

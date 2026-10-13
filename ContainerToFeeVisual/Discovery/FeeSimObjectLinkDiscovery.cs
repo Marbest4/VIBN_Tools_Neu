@@ -34,7 +34,7 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var slots = requiredSlots is null ? GetRelevantSlotNames(item) :
-                (item.Slots?.Keys ?? Enumerable.Empty<string>()).Concat(requiredSlots.GetValueOrDefault(item.Guid) ?? [])
+                GetRelevantSlotNames(item).Concat(requiredSlots.GetValueOrDefault(item.Guid) ?? [])
                     .Distinct(StringComparer.OrdinalIgnoreCase);
             foreach (var slotName in slots)
             {

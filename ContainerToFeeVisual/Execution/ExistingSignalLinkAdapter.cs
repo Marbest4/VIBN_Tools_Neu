@@ -103,7 +103,8 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                     var assigned = plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId)?.ContainerId == bound.PlanNode.Id)
                         .Select(assignment => runtimeObjects.GetValueOrDefault(assignment.FeeObjectId))
                         .Where(item => item is not null).Cast<FeeAbstractObject>();
-                    var matches = logicResolver.Find(bound.PlanNode, assigned, liveLinks);
+                    var matches = logicResolver.Find(bound.PlanNode, assigned, liveLinks,
+                        ExistingContainerLogicResolver.ExplicitAssignment(plan, bound.PlanNode.Id, runtimeObjects));
                     if (matches.Count != 1)
                     {
                         issues.Add(new VisualIssue(VisualIssueSeverity.Error, "EXISTING_LOGIC_NOT_UNIQUE",

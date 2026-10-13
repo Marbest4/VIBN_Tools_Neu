@@ -132,8 +132,8 @@ internal static partial class Program
             var container = plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container);
             var rootA = new FeeBasicFrame { Name = "Root A" }; var rootB = new FeeBasicFrame { Name = "Root B" };
             var sensor = new FeeSensor { Name = "Station", Parent = rootA };
-            var first = new FeeLogic { Name = " Station ", LogicDefinitionName = "Grob_Sensor", LogicDefinitionGuid = Guid.NewGuid(), Parent = rootA };
-            var second = new FeeLogic { Name = "Station", LogicDefinitionName = "Grob_Sensor", LogicDefinitionGuid = Guid.NewGuid(), Parent = rootB };
+            var first = new FeeLogic { Name = " Station ", LogicDefinitionName = "Grob_Sensor", LogicDefinitionGuid = Guid.NewGuid(), Parent = rootA, Slots = new() { ["PLC_IN_PartPresent_Ch1"] = Guid.Empty } };
+            var second = new FeeLogic { Name = "Station", LogicDefinitionName = "Grob_Sensor", LogicDefinitionGuid = Guid.NewGuid(), Parent = rootB, Slots = new() { ["PLC_IN_PartPresent_Ch1"] = Guid.Empty } };
             var objects = new[] { SnapshotObject(sensor, rootA), SnapshotObject(first, rootA), SnapshotObject(second, rootB) };
             SetPrivateField(service, "_feeObjects", objects);
             SetPrivateField(service, "_runtimeObjects", objects.Zip(new FeeAbstractObject[] { sensor, first, second })

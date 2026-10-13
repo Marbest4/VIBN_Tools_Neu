@@ -29,6 +29,7 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
             .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item))
             .ToArray();
         cancellationToken.ThrowIfCancellationRequested();
+        await FeeLogicSlotSnapshot.PopulateAsync(allObjects, cancellationToken);
         var runtimeObjects = allObjects
             .Where(item => item is IAssignableSimObject or FeeLogic)
             .ToArray();

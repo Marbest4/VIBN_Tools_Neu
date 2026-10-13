@@ -11,14 +11,25 @@
         <vm:Fee2ContainerPageVM />
     </UserControl.DataContext>
     <UserControl.Resources>
+        <Style TargetType="DataGrid">
+            <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True" />
+            <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+            <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+            <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+            <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto" />
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto" />
+            <Setter Property="CanUserResizeColumns" Value="True" />
+            <Setter Property="CanUserReorderColumns" Value="True" />
+        </Style>
         <Style x:Key="ResponsiveColumnHeader" TargetType="DataGridColumnHeader">
             <Setter Property="Padding" Value="5,4" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
     </UserControl.Resources>
 
-    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <Grid Margin="20" MinWidth="860">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
+    <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -32,7 +43,7 @@
         <StackPanel>
             <TextBlock FontSize="24" FontWeight="SemiBold" Text="FEE2Container" />
             <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
-                       Text="Liest alle FEE-Objekte außer Decoration. BasicFrames und Projektobjekte ohne BasicFrame bilden die auswählbaren Bereiche. Container zeigen Signale und FEE-Objekte getrennt. Für einen gemeinsamen Export alle gewünschten FEE-Roots sowie deren Container und Signale unter Export markieren. Eindeutige gleichnamige Objekte werden automatisch zugeordnet; andere und mehrdeutige Objekte bleiben für die manuelle Zuordnung verfügbar." />
+                       Text="Liest die aktuelle FEE-Struktur; Decoration, SceneObjectCompounder, CADAssembly und Roboterachsen j1–j9 bleiben ausgeblendet. SpecialDevices werden separat angezeigt. BasicFrames und Projektobjekte ohne BasicFrame bilden die auswählbaren Bereiche. Container zeigen Signale und FEE-Objekte getrennt. Für einen gemeinsamen Export alle gewünschten FEE-Roots sowie deren Container und Signale unter Export markieren. Eindeutige gleichnamige Objekte werden automatisch zugeordnet; andere und mehrdeutige Objekte bleiben für die manuelle Zuordnung verfügbar." />
         </StackPanel>
 
         <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
@@ -92,67 +103,123 @@
         <Grid Grid.Row="4" Margin="0,10,0,0">
             <Grid.Resources>
                 <Style x:Key="Fee2RelatedRowStyle" TargetType="DataGridRow">
-                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Background" Value="White" />
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsRelatedToSelection}" Value="True">
-                            <Setter Property="Background" Value="#FFD9ECFF" />
-                            <Setter Property="Foreground" Value="#FF102A43" />
-                        </DataTrigger>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="#FF2B579A" />
-                            <Setter Property="Foreground" Value="White" />
-                        </Trigger>
+                        <DataTrigger Binding="{Binding IsRelatedToSelection}" Value="True"><Setter Property="Background" Value="#FFD9ECFF" /></DataTrigger>
+                        <Trigger Property="IsSelected" Value="True"><Setter Property="Foreground" Value="Black" /><Setter Property="Background" Value="#FFD9ECFF" /></Trigger>
                     </Style.Triggers>
                 </Style>
-                <Style x:Key="Fee2ContainerDropRowStyle"
-                       TargetType="DataGridRow"
-                       BasedOn="{StaticResource Fee2RelatedRowStyle}">
+                <Style x:Key="Fee2ContainerDropRowStyle" TargetType="DataGridRow" BasedOn="{StaticResource Fee2RelatedRowStyle}">
                     <Setter Property="behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget" Value="True" />
                     <Setter Property="behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget" Value="{Binding}" />
                     <Setter Property="behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand"
                             Value="{Binding DataContext.AssignObjectToContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ManuallyChecked}" Value="True"><Setter Property="Background" Value="#FFE8F5E9" /></DataTrigger>
+                        <DataTrigger Binding="{Binding HasWarnings}" Value="True"><Setter Property="Background" Value="#FFFFE0B2" /></DataTrigger>
+                        <DataTrigger Binding="{Binding HasErrors}" Value="True"><Setter Property="Background" Value="#FFFFE1E1" /></DataTrigger>
+                    </Style.Triggers>
                 </Style>
             </Grid.Resources>
             <Grid.RowDefinitions>
-                <RowDefinition Height="2*" />
-                <RowDefinition Height="8" />
-                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" /><RowDefinition Height="3*" MinHeight="120" />
+                <RowDefinition Height="8" /><RowDefinition Height="2*" MinHeight="100" />
             </Grid.RowDefinitions>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" MinWidth="220" />
-                <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="3*" MinWidth="280" />
-            </Grid.ColumnDefinitions>
-            <GroupBox Header="Erkannte Container">
+            <Expander Header="Grouping / Container zusammenfügen" Margin="0,0,0,5">
+                <WrapPanel Margin="5">
+                    <CheckBox Margin="0,0,12,0" Content="Component" IsChecked="{Binding GroupingSettings.GroupByComponent}" />
+                    <CheckBox Margin="0,0,12,0" Content="Type" IsChecked="{Binding GroupingSettings.GroupByType}" />
+                    <CheckBox Margin="0,0,6,0" Content="ID" IsChecked="{Binding GroupingSettings.GroupById}" />
+                    <TextBox Width="150" Margin="0,0,12,0" Text="{Binding GroupingSettings.RegexId, UpdateSourceTrigger=PropertyChanged}" ToolTip="Capture-Gruppen für ID, wie in ContainerGeneration" />
+                    <CheckBox Margin="0,0,6,0" Content="Address" IsChecked="{Binding GroupingSettings.GroupByAddress}" />
+                    <TextBox Width="150" Margin="0,0,12,0" Text="{Binding GroupingSettings.RegexAddress, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Content="Grouping übernehmen" Padding="10,4" Click="CommitPendingEdits" Command="{Binding GroupContainersCommand}" />
+                </WrapPanel>
+            </Expander>
+            <GroupBox Grid.Row="1" Header="Erkannte Container">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <TextBox Margin="4" Padding="6,3" Text="{Binding ContainerSearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Container nach Komponente, Typ oder Anzahl der Signale durchsuchen." />
-                <DataGrid Grid.Row="1" ItemsSource="{Binding FoundContainersView}" SelectedItem="{Binding SelectedFoundContainer}"
-                          ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Item"
-                          behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
-                          RowStyle="{StaticResource Fee2ContainerDropRowStyle}"
-                          AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
-                          CanUserResizeRows="True" CanUserReorderColumns="True"
-                          MinColumnWidth="100" CanUserResizeColumns="True" ColumnHeaderStyle="{StaticResource ResponsiveColumnHeader}"
-                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                          VirtualizingPanel.IsVirtualizing="True"
-                          VirtualizingPanel.VirtualizationMode="Recycling"
-                          EnableRowVirtualization="True" EnableColumnVirtualization="True">
-                    <DataGrid.Columns>
-                        <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
-                        <DataGridTextColumn Header="Komponente" Binding="{Binding Component}" Width="190" />
-                        <DataGridTemplateColumn Header="Typ" Width="145">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <ComboBox ItemsSource="{Binding DataContext.SupportedContainerTypes, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
-                                              SelectedItem="{Binding Type, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              IsEditable="False" MinWidth="100" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
+                    <DockPanel Margin="4">
+                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="8,3" Command="{Binding ShowLinkedSignalsCommand}">
+                            <TextBlock Text="{Binding LinkedUnassignedSignalCount, StringFormat='Verknüpfte Signale ohne Zuordnung ({0})'}" />
+                        </Button>
+                        <TextBox Padding="6,3" Text="{Binding ContainerSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Container filtern" />
+                    </DockPanel>
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding FoundContainersView}" SelectedItem="{Binding SelectedFoundContainer}"
+                              behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
+                              RowStyle="{StaticResource Fee2ContainerDropRowStyle}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False" EnableRowVirtualization="True" EnableColumnVirtualization="True">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="70" />
+                            <DataGridTextColumn Header="Component" Binding="{Binding Component}" Width="190" />
+                            <DataGridTemplateColumn Header="Type" Width="160"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ComboBox ItemsSource="{Binding DataContext.SupportedContainerTypes, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                          SelectedItem="{Binding Type, UpdateSourceTrigger=PropertyChanged}" IsEditable="False" />
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="ID" Width="170">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ItemsControl ItemsSource="{Binding DataList}">
+                                    <ItemsControl.ItemTemplate><DataTemplate>
+                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
+                                                 Text="{Binding SignalId, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" Width="100" IsReadOnly="True" />
+                        <DataGridTemplateColumn Header="Address" Width="160">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ItemsControl ItemsSource="{Binding DataList}">
+                                    <ItemsControl.ItemTemplate><DataTemplate>
+                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
+                                                 Text="{Binding Address, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="DataType" Width="100">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ItemsControl ItemsSource="{Binding DataList}">
+                                    <ItemsControl.ItemTemplate><DataTemplate>
+                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
+                                                 Text="{Binding DataType, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Signal" Width="230">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ItemsControl ItemsSource="{Binding DataList}">
+                                    <ItemsControl.ItemTemplate><DataTemplate>
+                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
+                                                 Text="{Binding Signal, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Slot" Width="200">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ItemsControl ItemsSource="{Binding DataList}">
+                                    <ItemsControl.ItemTemplate><DataTemplate>
+                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
+                                                 Text="{Binding Slot, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="Prüfhinweise" Width="240">
+                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <ItemsControl ItemsSource="{Binding DataList}">
+                                    <ItemsControl.ItemTemplate><DataTemplate>
+                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
+                                                 Text="{Binding Note, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
+                                    </DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+
+                            <DataGridTextColumn Header="Prüfstatus" Binding="{Binding ValidationError}" IsReadOnly="True" Width="160" />
+                            <DataGridCheckBoxColumn Header="Manually Checked / geprüft" Binding="{Binding ManuallyChecked, UpdateSourceTrigger=PropertyChanged}" Width="150" />
+                            <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" IsReadOnly="True" Width="95" />
                         <DataGridTemplateColumn Header="Zugeordnete FEE-Objekte" Width="240" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
@@ -180,29 +247,28 @@
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
-                        <DataGridTextColumn Header="Ursprüngliche Einträge" Binding="{Binding OriginalSignalCount}" Width="Auto" IsReadOnly="True" />
-                        <DataGridTemplateColumn Header="Aktion" Width="Auto">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <Button Content="Entfernen" Padding="7,2"
-                                            Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
-                                            CommandParameter="{Binding}" />
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                    </DataGrid.Columns>
-                </DataGrid>
+
+                            <DataGridTextColumn Header="Verknüpfung" Binding="{Binding ConnectionText}" Width="300" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Parent / Cabinet" Binding="{Binding ParentName}" Width="160" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="200" IsReadOnly="True" />
+                            <DataGridTemplateColumn Header="Verknüpft, nicht zugeordnet" Width="180"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <Button Content="{Binding LinkedUnassignedSignalCount, StringFormat='Signale anzeigen ({0})'}" Padding="6,3"
+                                        Command="{Binding DataContext.ShowLinkedSignalsCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Aktion" Width="100"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </Grid>
             </GroupBox>
-            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" ResizeDirection="Columns"
-                          ResizeBehavior="PreviousAndNext" ShowsPreview="True" />
-            <GroupBox Grid.Column="2" Header="Erkannte Signalzuordnungen">
-                <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <TextBox Margin="4" Padding="6,3" Text="{Binding SignalSearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Signalzuordnungen nach Container, Signal, Slot, Adresse, Datentyp, ID oder Status durchsuchen." />
-                <DataGrid Grid.Row="1" ItemsSource="{Binding FoundSignalsView}" SelectedItem="{Binding SelectedFoundSignal}"
-                          ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Item"
+            <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" />
+            <TabControl Grid.Row="3" SelectedIndex="{Binding SelectedResultTabIndex}">
+                <TabItem Header="Erkannte Signalzuordnungen">
+                    <DockPanel>
+                        <TextBox DockPanel.Dock="Top" Margin="4" Padding="6,3" Text="{Binding SignalSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Signalzuordnungen filtern" />
+                <DataGrid ItemsSource="{Binding FoundSignalsView}" SelectedItem="{Binding SelectedFoundSignal}"
+                          ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel"
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding SignalRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
                           AutoGenerateColumns="False" IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
@@ -232,16 +298,19 @@
                         </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
-                </Grid>
-            </GroupBox>
-
-            <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" VerticalAlignment="Stretch" HorizontalAlignment="Stretch"
-                          ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" ShowsPreview="True" />
-            <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="FEE-Objekte ohne eindeutige Containerzuordnung – vollständig prüfen und bei Bedarf manuell zuordnen">
-                <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                    <TextBox Margin="4" Padding="6,3" Text="{Binding ObjectSearchText, UpdateSourceTrigger=PropertyChanged}"
-                             ToolTip="Nicht zugeordnete Objekte nach Name, FEE-Typ, Grund oder Zielcontainer durchsuchen." />
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="Ohne eindeutige Containerzuordnung">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                        <DockPanel Margin="4">
+                            <Expander DockPanel.Dock="Right" Header="FEE-Typen ein-/ausblenden" Margin="8,0,0,0">
+                                <ItemsControl ItemsSource="{Binding ObjectTypeFilters}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate><DataTemplate><CheckBox Margin="5,2" Content="{Binding FeeType}" IsChecked="{Binding IsVisible, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate></ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Expander>
+                            <TextBox Padding="6,3" Text="{Binding ObjectSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name, Typ, Parent, Logik oder Verknüpfung filtern" />
+                        </DockPanel>
                 <DataGrid Grid.Row="1" ItemsSource="{Binding NonContainerObjectsView}" AutoGenerateColumns="False"
                           SelectionMode="Extended" SelectionUnit="FullRow"
                           IsReadOnly="False" CanUserAddRows="False" CanUserDeleteRows="False"
@@ -258,7 +327,7 @@
                                 <DataTemplate>
                                     <Border Padding="8,2" Cursor="Hand"
                                             behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
-                                            ToolTip="Ausgewählte FEE-Objekte gemeinsam auf einen Container mit demselben Namen ziehen (Strg/Shift für Mehrfachauswahl).">
+                                            ToolTip="Ausgewählte FEE-Objekte gemeinsam auf einen Container ziehen; manuelle Zuordnung erlaubt auch unterschiedliche Namen (Strg/Shift für Mehrfachauswahl).">
                                         <TextBlock HorizontalAlignment="Center" FontSize="16" Text="↕" />
                                     </Border>
                                 </DataTemplate>
@@ -266,6 +335,9 @@
                         </DataGridTemplateColumn>
                         <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="210" IsReadOnly="True" />
                         <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="150" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Verknüpfung" Binding="{Binding ConnectionText}" Width="350" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Parent" Binding="{Binding ParentName}" Width="160" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="190" IsReadOnly="True" />
                         <DataGridTextColumn Header="Grund" Binding="{Binding Reason}" Width="340" IsReadOnly="True" />
                         <DataGridTextColumn Header="Komponente" Binding="{Binding TargetComponent, UpdateSourceTrigger=PropertyChanged}" Width="210" />
                         <DataGridTemplateColumn Header="Als Containertyp" Width="180">
@@ -287,8 +359,37 @@
                         </DataGridTemplateColumn>
                     </DataGrid.Columns>
                 </DataGrid>
-                </Grid>
-            </GroupBox>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="SpecialDevices">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Top" HorizontalAlignment="Left" Margin="4" Padding="10,5" Content="In FEE2SpecialDevices einlesen …" Click="OpenSpecialDevices" />
+                        <DataGrid ItemsSource="{Binding SpecialDevicesView}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="200" />
+                                <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="140" />
+                                <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="220" />
+                                <DataGridTextColumn Header="Parent" Binding="{Binding ParentName}" Width="170" />
+                                <DataGridTextColumn Header="Verknüpfung" Binding="{Binding ConnectionText}" Width="350" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="Verknüpfte Signale ohne Zuordnung">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Margin="4" Text="{Binding LinkedSignalsSummary}" />
+                        <DataGrid ItemsSource="{Binding LinkedUnassignedSignals}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="230" />
+                                <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="180" />
+                                <DataGridTextColumn Header="DataType" Binding="{Binding DataType}" Width="110" />
+                                <DataGridTextColumn Header="Verknüpfung" Binding="{Binding ConnectionText}" Width="400" />
+                                <DataGridTextColumn Header="GUID" Binding="{Binding Guid}" Width="250" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+            </TabControl>
         </Grid>
 
         <Expander Grid.Row="5" Margin="0,8,0,0" IsExpanded="{Binding IsIssuesExpanded, Mode=TwoWay}">

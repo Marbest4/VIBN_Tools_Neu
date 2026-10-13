@@ -115,9 +115,9 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         RefreshFeeObjectsCommand = new AsyncRelayCommand(
             RefreshFeeObjectsAsync,
             () => IsFeeObjectDiscoveryAvailable);
-        AutoAssignCommand = new RelayCommand(
-            AutoAssignMatches,
-            () => HasPlan && (AvailableFeeObjects.Count > 0 || AvailableFeeSignals.Count > 0) && !IsBusy);
+        AutoAssignCommand = new AsyncRelayCommand(
+            AutoAssignMatchesAsync,
+            () => HasPlan && IsFeeObjectDiscoveryAvailable && (AvailableFeeObjects.Count > 0 || AvailableFeeSignals.Count > 0));
         StartGenerationCommand = new AsyncRelayCommand(
             StartGenerationAsync,
             () => CanStartGeneration);
@@ -909,17 +909,17 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         }, usesFeeSdk: true);
     }
 
-    private void AutoAssignMatches()
+    private async Task AutoAssignMatchesAsync()
     {
-        int count = _planService.AutoAssignMatches();
-        RefreshCompletedContainerSelection();
-        StatusText = count > 0
-            ? $"{count} FEE-SimObject-/Signalzuordnung(en) automatisch erkannt."
-            : "Keine weiteren eindeutigen Namens-/Typzuordnungen gefunden.";
-        if (_planService.CurrentPlan is { ExistingInterfaceSelections.Count: 0 } && AvailableFeeSignals.Count > 0)
-            StatusText += " Für Signale bitte mindestens ein vorhandenes Interface auswählen.";
-        _log.Information(LogArea, StatusText);
-        AddOperationDetail("Automatische Zuordnung", StatusText);
+        await RunBusyAsync("Verknüpfungen für die automatische Zuordnung werden aktualisiert …", async token =>
+        {
+            var snapshot = await RefreshFeeStateAsync(token);
+            var count = snapshot.AutomaticAssignmentCount;
+            RefreshCachedLinkStates();
+            StatusText = $"{count} FEE-SimObject-/Logik-/Signalzuordnung(en) automatisch erkannt; Live-Verknüpfungen aktualisiert.";
+            _log.Information(LogArea, StatusText);
+            AddOperationDetail("Automatische Zuordnung", StatusText);
+        }, usesFeeSdk: true);
     }
 
     private async Task StartGenerationAsync()
@@ -1407,6 +1407,18 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             return;
         }
 
+        if (request?.Target is ContainerToFeeVisualTreeNodeVM logicTarget && ResolveLogicDropNode(logicTarget) is { } logicNodeId &&
+            sources.Count == 1 && sources[0] is ContainerToFeeVisualFeeObjectVM { FeeType: "LogicObject" } logicObject)
+        {
+            var result = _planService.TryAssign(logicNodeId, logicObject.Id);
+            PublishIssues(result.Issues);
+            if (!result.Success) { Reject(result.Message); return; }
+            RefreshCachedLinkStates();
+            StatusText = result.Message;
+            AddOperationDetail("Logik-Zuordnung", result.Message);
+            return;
+        }
+
         var target = request?.Target switch
         {
             ContainerToFeeVisualTargetVM targetVm => targetVm,
@@ -1480,6 +1492,10 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                    signalTarget.Kind == VisualNodeKind.Group &&
                    signalTarget.Id.EndsWith(":signals", StringComparison.Ordinal);
         }
+
+        if (request.Target is ContainerToFeeVisualTreeNodeVM logicTarget && ResolveLogicDropNode(logicTarget) is { } logicNodeId &&
+            sources.Count == 1 && sources[0] is ContainerToFeeVisualFeeObjectVM { FeeType: "LogicObject" } logicObject)
+            return _planService.CanAssignLogic(logicNodeId, logicObject.Id);
 
         var target = request.Target switch
         {
@@ -1588,6 +1604,8 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         });
     }
 
+    private bool _hasSelectedInitialInterfaces;
+
     private async Task<FeeRefreshSnapshot> RefreshFeeStateAsync(CancellationToken cancellationToken)
     {
         var totalWatch = Stopwatch.StartNew();
@@ -1604,22 +1622,30 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         var interfaceReadTime = stageWatch.Elapsed;
         RefreshFeeObjectProjection(objects);
         RefreshFeeInterfaceProjection(interfaces);
+        if (!_hasSelectedInitialInterfaces)
+        {
+            _hasSelectedInitialInterfaces = true;
+            _isRefreshingFeeInterfaceProjection = true;
+            try { foreach (var item in AvailableFeeInterfaces) item.IsSelected = true; }
+            finally { _isRefreshingFeeInterfaceProjection = false; }
+            CommitExistingInterfaceSelection();
+        }
 
         // Auto-assignment raises PlanChanged and rebuilds the tree. Apply all
         // live discovery states afterwards, otherwise that rebuild can mask a
         // missing SimObject-slot link with a stale green container state.
-        int automaticAssignments = _planService.AutoAssignMatches();
+        int automaticAssignments = 0;
         stageWatch.Restart();
         GenerationProgressText = "3/6: Signalverknüpfungen werden gelesen …";
         IReadOnlyList<VisualFeeSignalLink> signalLinks =
-            await _planService.DiscoverFeeSignalLinksAsync(cancellationToken);
-        automaticAssignments += _planService.AutoAssignMatches();
+            await _planService.DiscoverFeeSignalLinksAsync(cancellationToken, readAllSignals: true);
         var signalLinkTime = stageWatch.Elapsed;
         stageWatch.Restart();
         GenerationProgressText = "4/6: SimObject-Verknüpfungen werden gelesen …";
         IReadOnlyList<VisualFeeObjectLink> simObjectLinks =
-            await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken);
+            await _planService.DiscoverFeeSimObjectLinksAsync(cancellationToken, readAllRoots: true);
         var simObjectLinkTime = stageWatch.Elapsed;
+        automaticAssignments = _planService.AutoAssignMatches();
         // Rebuild the list after both link reads so identical SimObjects are
         // distinguished by their GUID-specific live connection state.
         RefreshFeeObjectProjection(objects);
@@ -2057,7 +2083,6 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             cancellation?.Dispose();
             IsBusy = false;
             IsProgressIndeterminate = false;
-            if (_pendingScopeLinkRefresh && CanUseFeeFeatures) QueueScopeLinkRefresh();
         }
     }
 
@@ -2914,7 +2939,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
         ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
         RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
         NotifyExistingInterfaceSelectionChanged();
-        QueueScopeLinkRefresh();
+        RefreshCachedLinkStates();
     }
 
     private IReadOnlySet<string> GetSelectedInterfaceGuids() => _selectedInterfaceGuids;
@@ -3013,7 +3038,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
 
     private void ClearLiveFeeData()
     {
-        _pendingScopeLinkRefresh = false;
+        _hasSelectedInitialInterfaces = false;
         _planService.ClearFeeDiscovery();
         _verifiedContainerIds.Clear();
         _selectedInterfaceGuids.Clear();
@@ -3961,7 +3986,7 @@ public sealed class ContainerToFeeVisualFeeObjectVM : MvvmBase
     public bool HasLiveConnections => ConnectionSummary.HasConnections;
     public bool HasError => false;
     public bool HasWarning => HasExactDuplicate && !IsDuplicateConfirmed;
-    public bool IsValid => !HasError && (PlanConnection?.IsVerified ?? HasLiveConnections);
+    public bool IsValid => !HasError && IsAssigned && PlanConnection?.IsVerified == true;
     public bool IsLinkMissing => !HasError && !IsValid;
     public string ConnectionStateText => PlanConnection?.Description ?? (!ConnectionSummary.WasRead
         ? "Live-Verknüpfungen noch nicht vollständig gelesen"
@@ -4026,7 +4051,12 @@ public sealed class ContainerToFeeVisualFeeObjectVM : MvvmBase
     {
         var target = plan?.FindTarget(assignment.TargetId);
         if (target is null)
-            return assignment.TargetId;
+        {
+            var node = plan?.FindNode(assignment.TargetId);
+            return node?.Kind == VisualNodeKind.Logic
+                ? $"Container: {plan?.FindNode(node.ContainerId ?? "")?.Name ?? "—"} | Logik: {assignment.FeeObjectName}"
+                : assignment.TargetId;
+        }
 
         var container = plan?.FindNode(target.ContainerId);
         var logic = plan?.Nodes.FirstOrDefault(node =>

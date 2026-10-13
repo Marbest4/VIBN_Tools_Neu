@@ -119,8 +119,8 @@ internal static partial class Program
             var service = new ContainerToFeeVisualPlanService(); var plan = service.LoadXmlAsync(path).GetAwaiter().GetResult().Plan!;
             var root = new FeeBasicFrame { Name = "Root" };
             var sensor = new FeeSensor { Name = "Station", Parent = root };
-            var logic = new FeeLogic { Name = "Station", LogicDefinitionName = "Grob_Sensor", Parent = root };
-            var otherLogic = new FeeLogic { Name = "Station", LogicDefinitionName = "Grob_Sensor", Parent = root };
+            var logic = new FeeLogic { Name = "Station", LogicDefinitionName = "Grob_Sensor", LogicDefinitionGuid = Guid.NewGuid(), Parent = root, Slots = new() { ["PLC_IN_PartPresent_Ch1"] = Guid.Empty } };
+            var otherLogic = new FeeLogic { Name = "Station", LogicDefinitionName = "Grob_Sensor", LogicDefinitionGuid = Guid.NewGuid(), Parent = root, Slots = new() { ["PLC_IN_PartPresent_Ch1"] = Guid.Empty } };
             var spare = new FeeSensor { Name = "Spare", Parent = root };
             FeeAbstractObject[] runtime = [sensor, logic, otherLogic, spare];
             var objects = runtime.Select(item => SnapshotObject(item, root)).ToArray();
@@ -135,7 +135,8 @@ internal static partial class Program
                 SetPrivateField(service, flag, true);
             service.SetSimObjectRoots([root.GuidString]); service.SetExistingInterfaces([feeInterface]);
             var target = plan.Targets.Single(); var signalNode = plan.Nodes.Single(node => node.Kind == VisualNodeKind.Signal);
-            if (!service.TryAssign(target.Id, objects[0].Id).Success || !service.TryAssignSignal(signalNode.Id, signal.GuidString).Success)
+            var logicNode = plan.Nodes.Single(node => node.Kind == VisualNodeKind.Logic);
+            if (!service.TryAssign(logicNode.Id, objects[1].Id).Success || !service.TryAssign(target.Id, objects[0].Id).Success || !service.TryAssignSignal(signalNode.Id, signal.GuidString).Success)
                 throw new InvalidOperationException("The live-color fixture could not assign its existing objects.");
 
             SetPrivateField(service, "_feeSimObjectLinks", new[] { new VisualFeeObjectLink(logic.GuidString, "WrongSlot", sensor.GuidString, "Channel1") });

@@ -114,7 +114,7 @@ public sealed partial class ContainerToFeeVisualPlanService
             .Append(new VisualContainerTypeOverride(containerId, typeName))
             .ToArray();
         plan.ReplaceContainerTypeOverrides(overrides);
-        plan.ReplaceAssignments(plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId) is not null));
+        plan.ReplaceAssignments(plan.Assignments.Where(assignment => (plan.FindTarget(assignment.TargetId) is not null || plan.FindNode(assignment.TargetId)?.Kind == VisualNodeKind.Logic)));
         RecordMutation(before);
         RaisePlanChanged();
         return true;
@@ -365,7 +365,7 @@ public sealed partial class ContainerToFeeVisualPlanService
     }
 
     public async Task<IReadOnlyList<VisualFeeObjectLink>> DiscoverFeeSimObjectLinksAsync(
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool readAllRoots = false)
     {
         var plan = CurrentPlan;
         if (plan is null || !_hasDiscoveredFeeObjects)
@@ -375,8 +375,9 @@ public sealed partial class ContainerToFeeVisualPlanService
             return _feeSimObjectLinks;
         }
 
-        var relevantObjects = ScopedSceneObjects().Where(item => item is FeeLogic || FeeSlotSnapshot.IsRoutingHelper(item) ||
-            item.Slots?.Count > 0).Concat(ScopedRuntimeObjects().Values).DistinctBy(item => item.Guid).ToArray();
+        var scene = readAllRoots ? _runtimeSceneObjects : ScopedSceneObjects();
+        var relevantObjects = scene.Where(item => item is FeeLogic || FeeSlotSnapshot.IsRoutingHelper(item) ||
+            item.Slots?.Count > 0).Concat(readAllRoots ? _runtimeObjects.Values : ScopedRuntimeObjects().Values).DistinctBy(item => item.Guid).ToArray();
         var result = await _simObjectLinkDiscovery.DiscoverAsync(relevantObjects, cancellationToken,
             _runtimeSceneObjects, CreateLinkReadSlots(), variableGuids: _feeSignals
                 .Where(signal => Guid.TryParse(signal.GuidString, out _)).Select(signal => Guid.Parse(signal.GuidString)));
@@ -467,7 +468,7 @@ public sealed partial class ContainerToFeeVisualPlanService
     }
 
     public async Task<IReadOnlyList<VisualFeeSignalLink>> DiscoverFeeSignalLinksAsync(
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool readAllSignals = false)
     {
         var plan = CurrentPlan;
         if (plan is null || !_hasDiscoveredFeeInterfaces)
@@ -495,7 +496,7 @@ public sealed partial class ContainerToFeeVisualPlanService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var selectedInterfaces = plan.ExistingInterfaceSelections.Select(item => item.InterfaceGuid)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var relevantSignals = _feeSignals.Where(signal => selectedInterfaces.Contains(signal.InterfaceGuidString) &&
+        var relevantSignals = _feeSignals.Where(signal => readAllSignals || selectedInterfaces.Contains(signal.InterfaceGuidString) &&
                 (explicitGuids.Contains(signal.GuidString) ||
                 relevantTags.Contains(signal.Tag.Trim()) ||
                 relevantLocations.Contains(VisualSignalAssignmentMatcher.NormalizeLocation(signal.Address)) ||
@@ -531,6 +532,8 @@ public sealed partial class ContainerToFeeVisualPlanService
         var container = node.ContainerId is null ? null : plan.FindNode(node.ContainerId);
         if (container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
             return new(VisualSignalConnectionKind.LinkMissing, "Der Container besitzt kein auflösbares FEE-Ziel.");
+        if (!string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) && FindExistingContainerLogics(container.Id).Count != 1)
+            return new(VisualSignalConnectionKind.LinkMissing, "Passende Containerlogik mit Logic Component und Slots fehlt oder ist nicht eindeutig.");
 
         var requiresLink = !string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) ||
                            !string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType) ||
@@ -712,8 +715,22 @@ public sealed partial class ContainerToFeeVisualPlanService
         var added = 0;
         var before = Capture(plan);
 
+        foreach (var logicNode in plan.Nodes.Where(node => node.Kind == VisualNodeKind.Logic && node.ContainerId is not null))
+        {
+            if (assignments.Any(item => item.TargetId == logicNode.Id && IsAssignedObjectInSelectedRoots(item))) continue;
+            var logics = FindExistingContainerLogics(logicNode.ContainerId!);
+            if (logics.Count != 1) continue;
+            var match = FindFeeObject(FeeSimObjectDiscovery.CreateFeeObjectId(logics[0].GuidString));
+            if (match is null || assignedObjectIds.Contains(match.Id)) continue;
+            assignments.RemoveAll(item => item.TargetId == logicNode.Id);
+            assignments.Add(ToAssignment(logicNode.Id, match));
+            assignedObjectIds.Add(match.Id);
+            added++;
+        }
+
         foreach (var target in plan.Targets)
         {
+            if (!HasRequiredContainerLogic(target.ContainerId)) continue;
             if (assignments.Any(assignment => assignment.TargetId == target.Id && IsAssignedObjectInSelectedRoots(assignment)))
                 continue;
 
@@ -813,6 +830,8 @@ public sealed partial class ContainerToFeeVisualPlanService
             return AssignmentFailure("Es ist kein visueller Plan geladen.", "PLAN_NOT_LOADED");
 
         var target = plan.FindTarget(targetId);
+        if (target is null && plan.FindNode(targetId)?.Kind == VisualNodeKind.Logic)
+            return TryAssignLogic(targetId, feeObjectId);
         if (target is null)
             return AssignmentFailure("Das Zuordnungsziel existiert nicht mehr.", "TARGET_NOT_FOUND", targetId);
         var feeObject = _feeObjects.FirstOrDefault(item => item.Id == feeObjectId);
@@ -820,6 +839,8 @@ public sealed partial class ContainerToFeeVisualPlanService
             return AssignmentFailure("Das FEE-SimObject ist nicht mehr verfügbar.", "FEE_OBJECT_NOT_FOUND", targetId);
         if (!IsFeeObjectInSelectedRoots(feeObject))
             return AssignmentFailure("Der FEE-Root dieses Objekts ist nicht ausgewählt.", "FEE_OBJECT_ROOT_NOT_SELECTED", targetId);
+        if (!HasRequiredContainerLogic(target.ContainerId))
+            return AssignmentFailure("Zuerst eine vorhandene Logik mit Logic Component und Slots dem Container zuordnen.", "CONTAINER_LOGIC_MISSING", targetId);
         if (!target.CanAssign(feeObject))
         {
             return AssignmentFailure(
@@ -877,6 +898,8 @@ public sealed partial class ContainerToFeeVisualPlanService
         var node = plan.FindNode(signalNodeId);
         if (node?.Kind is not (VisualNodeKind.Signal or VisualNodeKind.UnknownSignal))
             return SignalAssignmentFailure("Das Ziel ist kein Container-Signal.", "SIGNAL_TARGET_NOT_FOUND", signalNodeId);
+        if (node.ContainerId is { } containerId && !HasRequiredContainerLogic(containerId))
+            return SignalAssignmentFailure("Zuerst eine vorhandene Logik mit Logic Component und Slots dem Container zuordnen.", "CONTAINER_LOGIC_MISSING", signalNodeId);
         var signal = _feeSignals.FirstOrDefault(item => string.Equals(
             item.GuidString,
             feeSignalGuid,
@@ -1688,7 +1711,7 @@ public sealed partial class ContainerToFeeVisualPlanService
                 "Es ist kein unterstützter Container zur Generierung ausgewählt."));
         }
 
-        foreach (var assignment in plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId) is null))
+        foreach (var assignment in plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId) is null && plan.FindNode(assignment.TargetId)?.Kind != VisualNodeKind.Logic))
         {
             issues.Add(new VisualIssue(
                 VisualIssueSeverity.Error,
@@ -1955,7 +1978,7 @@ public sealed partial class ContainerToFeeVisualPlanService
         foreach (var assignment in assignments)
         {
             var target = plan.FindTarget(assignment.TargetId);
-            if (target is null)
+            if (target is null && plan.FindNode(assignment.TargetId)?.Kind != VisualNodeKind.Logic)
             {
                 issues.Add(new VisualIssue(
                     VisualIssueSeverity.Error,
@@ -2191,6 +2214,7 @@ public sealed partial class ContainerToFeeVisualPlanService
         {
             result.UnionWith(FindExistingContainerLogics(container.Id)
                 .Select(item => item.GuidString));
+            return result;
         }
         if (!string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType))
         {

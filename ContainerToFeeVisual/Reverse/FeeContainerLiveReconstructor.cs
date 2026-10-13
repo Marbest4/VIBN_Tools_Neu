@@ -14,7 +14,8 @@ public sealed record FeeContainerLiveObject(
     string? ProvenanceContainerId = null,
     string? ProvenanceContainerType = null,
     Guid? ParentGuid = null,
-    IReadOnlyList<Guid>? LinkedObjectGuids = null);
+    IReadOnlyList<Guid>? LinkedObjectGuids = null,
+    bool IsSpecialDevice = false);
 
 public sealed record FeeContainerLiveVariable(
     Guid VariableGuid,
@@ -48,7 +49,10 @@ public sealed record FeeContainerObjectAssociation(
     string Reason,
     string Role = "SimObject",
     string ProvenanceContainerId = "",
-    bool IsManual = false);
+    bool IsManual = false,
+    string ParentName = "",
+    string LogicDefinitionName = "",
+    string ConnectionText = "");
 
 public sealed record FeeContainerReconstructionResult(
     FeeContainerProvenanceSnapshot Snapshot,
@@ -85,7 +89,7 @@ public static class FeeContainerLiveReconstructor
         ArgumentNullException.ThrowIfNull(variables);
         ArgumentNullException.ThrowIfNull(assignments);
 
-        var sourceObjects = objects.Where(item => item.Guid != Guid.Empty && !EndsWithType(item.FeeType, "Decoration"))
+        var sourceObjects = objects.Where(item => item.Guid != Guid.Empty && !FeeContainerReadPolicy.IsIgnored(item.FeeType, item.Name))
             .DistinctBy(item => item.Guid).ToArray();
         var variableByGuid = variables
             .Where(item => item.VariableGuid != Guid.Empty)
@@ -102,6 +106,7 @@ public static class FeeContainerLiveReconstructor
 
         foreach (var item in sourceObjects)
         {
+            if (item.IsSpecialDevice) continue;
             var liveSlots = (assignmentsByObject.GetValueOrDefault(item.Guid) ?? []).Select(assignment => assignment.TargetSlot).ToArray();
             var liveSignals = (assignmentsByObject.GetValueOrDefault(item.Guid) ?? []).Select(assignment => variableByGuid.GetValueOrDefault(assignment.VariableGuid)?.Signal)
                 .Where(signal => signal is not null).Cast<string>().ToArray();
@@ -121,7 +126,7 @@ public static class FeeContainerLiveReconstructor
         issues.AddRange(candidates.Where(candidate => candidateWarnings.ContainsKey(candidate.Object.Guid))
             .Select(candidate => new FeeContainerReconstructionIssue(candidate.Object.Guid, candidateWarnings[candidate.Object.Guid])));
 
-        var objectAssociations = ResolveAllObjectAssociations(sourceObjects, candidates, issues);
+        var objectAssociations = ResolveAllObjectAssociations(sourceObjects.Where(item => !item.IsSpecialDevice).ToArray(), candidates, issues);
         relevantObjectGuids.Clear();
         relevantObjectGuids.UnionWith(objectAssociations.Select(item => item.ObjectGuid));
 
@@ -241,7 +246,8 @@ public static class FeeContainerLiveReconstructor
                 item.Guid,
                 item.Name,
                 item.FeeType,
-                "Kein eindeutig gleichnamiger Container erkennbar; manuelle Zuordnung möglich."))
+                item.IsSpecialDevice ? "SpecialDevice: separat in FEE2SpecialDevices einlesen." :
+                    "Kein eindeutig gleichnamiger Container erkennbar; manuelle Zuordnung möglich."))
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.FeeType, StringComparer.OrdinalIgnoreCase)
             .ToArray();

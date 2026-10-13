@@ -17,6 +17,7 @@ internal static partial class Program
 {
     private static void VerifyCurrentFeeStateRegressions()
     {
+        VerifyCachedAssignmentAndReverseDetails();
         VerifyFeeRootReadFailures();
         VerifyOptionalRequirementsRegressions();
         VerifyVisualLinkWorkflowRegressions();
@@ -56,7 +57,7 @@ internal static partial class Program
             SetPrivateField(service, "_hasDiscoveredFeeInterfaces", true);
             service.SetExistingInterfaces([firstInterface, secondInterface]);
             var vm = new ContainerToFeeVisualPageVM(service);
-            if (!vm.AutoAssignCommand.CanExecute(null) || service.AutoAssignMatches() != 2 || plan.SignalAssignments.Count != 2)
+            if (service.AutoAssignMatches() != 2 || plan.SignalAssignments.Count != 2)
                 throw new InvalidOperationException("Signal-only discovery cannot automatically assign unique sources or accepts ambiguous/type-conflicting signals.");
             var a = plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container && node.Name == "A");
             var b = plan.Nodes.Single(node => node.Kind == VisualNodeKind.Container && node.Name == "B");

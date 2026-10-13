@@ -71,11 +71,16 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
             {
                 var expectedLogic = plan.Nodes.FirstOrDefault(node =>
                     node.ContainerId == item.PlanNode.Id && node.Kind == VisualNodeKind.Logic)?.Name;
-                var matches = existingLogics.Where(logic =>
+                var explicitLogic = ExistingContainerLogicResolver.ExplicitAssignment(plan, item.PlanNode.Id, runtimeObjects);
+                var matches = existingLogics.Where(logic => explicitLogic is not null ? logic.Guid == explicitLogic.Guid :
                         string.Equals(logic.Name, item.RuntimeContainer.ComponentName, StringComparison.OrdinalIgnoreCase) &&
                         (string.IsNullOrWhiteSpace(expectedLogic) ||
                          string.Equals(logic.LogicDefinitionName, expectedLogic, StringComparison.OrdinalIgnoreCase)))
                     .ToArray();
+                if (explicitLogic is not null && (matches.Length != 1 ||
+                    matches[0].LogicDefinitionGuid != explicitLogic.LogicDefinitionGuid))
+                    return Failure("Die ausdrücklich zugeordnete Logik wurde in FEE entfernt oder geändert. FEE aktualisieren und die Zuordnung prüfen.",
+                        "ASSIGNED_LOGIC_CHANGED", item.PlanNode.Id);
                 if (matches.Length > 1)
                 {
                     if (forcedRun)

@@ -81,7 +81,8 @@ internal sealed class ExistingSimObjectLinkAdapter(IVisualPlanLogger logger)
 
                 var selectable = (ISimObjectFindOrSelect)bound.RuntimeContainer;
                 var assigned = selectable.GetSimObjectTargets().SelectMany(target => target.GetObjects()).ToArray();
-                var matchingLogics = logicResolver.Find(bound.PlanNode, assigned, liveLinks);
+                var matchingLogics = logicResolver.Find(bound.PlanNode, assigned, liveLinks,
+                    ExistingContainerLogicResolver.ExplicitAssignment(plan, bound.PlanNode.Id, runtimeObjects));
                 if (matchingLogics.Count == 0)
                 {
                     return Failure(

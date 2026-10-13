@@ -59,10 +59,16 @@ public static class DataGridRevealBehavior
                 if (viewer is null || !double.IsFinite(viewer.ViewportHeight) || viewer.ViewportHeight <= 0) return;
                 var logical = viewer.CanContentScroll && VirtualizingPanel.GetScrollUnit(grid) == ScrollUnit.Item;
                 var row = grid.ItemContainerGenerator.ContainerFromItem(item) as DataGridRow;
+                if (row is null)
+                {
+                    grid.ScrollIntoView(item);
+                    if (attempt < 3) QueueReveal(grid, item, revision, attempt + 1);
+                    return;
+                }
                 var rowHeight = row is { ActualHeight: > 0 } ? row.ActualHeight
                     : double.IsFinite(grid.RowHeight) && grid.RowHeight > 0 ? grid.RowHeight : 24d;
                 double offset;
-                if (row is not null && attempt > 0)
+                if (row is not null)
                 {
                     var presenter = viewer.Template?.FindName("PART_ScrollContentPresenter", viewer) as FrameworkElement;
                     var viewport = presenter ?? (FrameworkElement)viewer;

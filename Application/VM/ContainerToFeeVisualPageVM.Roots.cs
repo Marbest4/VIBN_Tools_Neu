@@ -36,7 +36,6 @@ public sealed partial class ContainerToFeeVisualPageVM
         if (args.PropertyName == nameof(ContainerToFeeVisualFeeRootVM.IsSelected))
         {
             CommitFeeRootSelection();
-            QueueScopeLinkRefresh();
         }
     }
 
@@ -50,6 +49,7 @@ public sealed partial class ContainerToFeeVisualPageVM
         ApplyDiscoveredSignalStates(_planService.DiscoveredFeeSignals);
         RefreshFeeObjectProjection(_planService.DiscoveredFeeObjects);
         RefreshFeeSignalProjection(_planService.DiscoveredFeeSignals);
+        RefreshCompletedContainerSelection();
     }
 
     private void RefreshCompletedContainerSelection()

@@ -150,11 +150,12 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         {
             base.StoreXmlObjectProperties(xElement, guid);
 
-            var logic = xElement.Element("Logic");
-
-            LogicDefinitionGuid = Guid.Parse((string)logic.Element("PersistedLogicGuid") ?? Guid.Empty.ToString());
-            LogicDefinitionVersion = (string)logic.Element("PersistedLogicVersion") ?? String.Empty;
-            IsEnabled = (bool?)logic.Element("IsEnable") ?? false;
+            var logic = xElement.Elements().FirstOrDefault(element => element.Name.LocalName is "Logic" or "LogicComponent")
+                ?? xElement.Descendants().FirstOrDefault(element => element.Name.LocalName is "Logic" or "LogicComponent");
+            var definition = logic?.Elements().FirstOrDefault(element => element.Name.LocalName is "PersistedLogicGuid" or "LogicDefinitionGuid")?.Value;
+            LogicDefinitionGuid = Guid.TryParse(definition, out var parsed) ? parsed : Guid.Empty;
+            LogicDefinitionVersion = logic?.Element("PersistedLogicVersion")?.Value ?? String.Empty;
+            IsEnabled = bool.TryParse(logic?.Element("IsEnable")?.Value, out var enabled) && enabled;
 
         }
 

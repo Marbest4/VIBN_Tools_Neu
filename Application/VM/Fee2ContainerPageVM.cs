@@ -56,15 +56,16 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
             item => item is not null && !IsBusy);
         AddObjectAsContainerCommand = new RelayCommand<Fee2ContainerUnmappedObjectVM>(
             AddObjectAsContainer,
-            item => item is { CanAdd: true } && !IsBusy);
+            item => item is { CanAdd: true, IsSpecialDevice: false } && !IsBusy);
         AssignObjectToContainerCommand = new RelayCommand<ContainerToFeeVisualDropRequest>(
             AssignObjectToContainer,
             request => request?.Target is Fee2ContainerFoundContainerVM &&
-                GetDraggedObjects(request.Source).Count > 0 && !IsBusy);
+                GetDraggedObjects(request.Source) is { Count: > 0 } items && items.All(item => !item.IsSpecialDevice) && !IsBusy);
         RemoveObjectAssociationCommand = new RelayCommand<FeeContainerObjectAssociation>(
             RemoveObjectAssociation,
             association => association is not null && !IsBusy);
         EditContainersCommand = new RelayCommand(EditContainers, () => SelectedRoot is not null && !IsBusy);
+        InitializeLiveDetails();
         ConfigureDetailViews();
         _connection.PropertyChanged += OnConnectionPropertyChanged;
     }
@@ -81,8 +82,11 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
             Matches(SignalSearchText, signal.Container, signal.ContainerType, signal.Signal, signal.Slot,
                 signal.Address, signal.DataType, signal.SignalId, signal.AssignmentState, signal.Note);
         NonContainerObjectsView.Filter = item => item is Fee2ContainerUnmappedObjectVM feeObject &&
+            !feeObject.IsSpecialDevice && ObjectTypeFilters.All(filter => filter.FeeType != feeObject.FeeType || filter.IsVisible) &&
             Matches(ObjectSearchText, feeObject.Name, feeObject.FeeType, feeObject.Reason,
-                feeObject.TargetComponent, feeObject.TargetContainerType);
+                feeObject.TargetComponent, feeObject.TargetContainerType, feeObject.ConnectionText, feeObject.ParentName, feeObject.LogicDefinitionName);
+        SpecialDevicesView = new ListCollectionView(NonContainerObjects);
+        SpecialDevicesView.Filter = item => item is Fee2ContainerUnmappedObjectVM { IsSpecialDevice: true };
     }
 
     public ObservableCollection<Fee2ContainerRootSelectionVM> Roots { get; } = new RangeObservableCollection<Fee2ContainerRootSelectionVM>();
@@ -613,6 +617,7 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
         OnPropertyChanged(nameof(FoundContainersView));
         OnPropertyChanged(nameof(FoundSignalsView));
         OnPropertyChanged(nameof(NonContainerObjectsView));
+        RefreshLiveDetailViews();
     }
 
     private static bool Matches(string query, params string?[] values)
@@ -653,7 +658,7 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
 
     private void AddObjectAsContainer(Fee2ContainerUnmappedObjectVM? item)
     {
-        if (item is null || SelectedRoot?.Editor is not { } editor || !item.CanAdd)
+        if (item is null || SelectedRoot?.Editor is not { } editor || !item.CanAdd || item.IsSpecialDevice)
             return;
         var container = editor.AddObjectAsContainer(item);
         if (!FoundContainers.Contains(container))
@@ -662,6 +667,7 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
         editor.NonContainerObjects.Remove(item);
         NonContainerObjects.Remove(item);
         SelectedFoundContainer = container;
+        RefreshLiveDetailViews();
         StatusText = $"FEE-Objekt '{item.Name}' wurde als prüfbarer Container '{item.TargetContainerType}' ergänzt. Slot- und Signalzuordnungen müssen manuell vervollständigt werden.";
     }
 
@@ -721,6 +727,8 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
         if (restored is null)
             return;
         NonContainerObjects.Add(restored);
+        editor.RefreshLiveMetadata();
+        RefreshLiveDetailViews();
         StatusText = $"Zuordnung von '{association.ObjectName}' entfernt. Das FEE-Objekt steht wieder für die Zuordnung bereit.";
     }
 }
@@ -742,6 +750,8 @@ public sealed class Fee2ContainerRootSelectionVM : NotifyBase
         OnPropertyChanged(nameof(ContainerCount));
         OnPropertyChanged(nameof(SignalCount));
     }
+    public void NotifyCounts()
+    { OnPropertyChanged(nameof(ContainerCount)); OnPropertyChanged(nameof(SignalCount)); }
     public bool IsSelected { get => _isSelected; set => SetPropertyChange(ref _isSelected, value); }
     public Guid Guid => Root.Guid;
     public string Name => Root.Name;
@@ -875,6 +885,13 @@ public sealed class Fee2ContainerRootEditor
         var assignedGuids = ObjectAssociations.Select(item => item.ObjectGuid).ToHashSet();
         foreach (var item in NonContainerObjects.Where(item => assignedGuids.Contains(item.Guid)).ToArray()) NonContainerObjects.Remove(item);
         RefreshObjectAssociations();
+        RefreshLiveMetadata();
+        foreach (var signal in Signals)
+            signal.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is nameof(Fee2ContainerFoundSignalVM.Signal) or nameof(Fee2ContainerFoundSignalVM.Slot) or
+                    nameof(Fee2ContainerFoundSignalVM.IsIncluded)) RefreshLiveMetadata();
+            };
         foreach (var container in Containers)
             container.PropertyChanged += (_, args) =>
             {
@@ -915,6 +932,11 @@ public sealed class Fee2ContainerRootEditor
             item.TargetContainerType,
             0);
         Containers.Add(added);
+        added.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName is nameof(Fee2ContainerFoundContainerVM.Component) or nameof(Fee2ContainerFoundContainerVM.Type) or
+                nameof(Fee2ContainerFoundContainerVM.IsIncluded)) RefreshLiveMetadata();
+        };
         AssignObjectToContainer(item, added);
         return added;
     }
@@ -943,8 +965,38 @@ public sealed class Fee2ContainerRootEditor
 
     private void RefreshObjectAssociations()
     {
+        var details = (_root.ObjectDetails ?? []).ToDictionary(item => item.Guid);
+        for (var index = 0; index < ObjectAssociations.Count; index++)
+            if (details.TryGetValue(ObjectAssociations[index].ObjectGuid, out var detail))
+                ObjectAssociations[index] = ObjectAssociations[index] with { ParentName = detail.ParentName,
+                    LogicDefinitionName = detail.LogicDefinitionName, ConnectionText = detail.ConnectionText };
         foreach (var container in Containers)
             container.SetAssociatedObjects(ObjectAssociations.Where(item => item.ContainerId == container.Id));
+        RefreshLiveMetadata();
+    }
+
+    public event EventHandler? ContentChanged;
+    public IReadOnlyList<FeeContainerLiveAssignment> LiveAssignments => _root.LiveAssignments ?? [];
+    public IReadOnlyList<FeeContainerLiveVariable> LiveVariables => _root.LiveVariables ?? [];
+    public IReadOnlyList<FeeContainerObjectDetails> ObjectDetails => _root.ObjectDetails ?? [];
+
+    public void RefreshLiveMetadata()
+    {
+        var byContainer = Signals.ToLookup(item => item.ContainerId, StringComparer.Ordinal);
+        var linksByObject = LiveAssignments.ToLookup(item => item.TargetObjectGuid);
+        var details = ObjectDetails.ToDictionary(item => item.Guid);
+        foreach (var container in Containers)
+        {
+            var rows = byContainer[container.Id].ToArray();
+            if (!container.DataList.SequenceEqual(rows)) container.DataList.ReplaceWith(rows);
+            var guids = container.AssociatedObjectItems.Select(item => item.ObjectGuid).ToHashSet();
+            var assigned = rows.Where(item => item.IsAssigned && item.VariableGuid is not null).Select(item => item.VariableGuid!.Value).ToHashSet();
+            container.LinkedUnassignedSignalCount = guids.SelectMany(guid => linksByObject[guid]).Where(item =>
+                !assigned.Contains(item.VariableGuid)).Select(item => item.VariableGuid).Distinct().Count();
+            container.NotifyValidation();
+        }
+        foreach (var item in NonContainerObjects) item.ApplyDetails(details.GetValueOrDefault(item.Guid));
+        ContentChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public Fee2ContainerUnmappedObjectVM? RemoveObjectAssociation(FeeContainerObjectAssociation association)
@@ -1059,6 +1111,8 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     private bool _isIncluded = true;
     private bool _isRelatedToSelection;
     private string _associatedObjects;
+    private int _linkedUnassignedSignalCount;
+    private bool _manuallyChecked;
 
     public Fee2ContainerFoundContainerVM(
         string id,
@@ -1080,6 +1134,17 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     public int OriginalSignalCount { get; }
     public string AssociatedObjects => _associatedObjects;
     public int AssociatedObjectCount => AssociatedObjectItems.Count;
+    public ObservableCollection<Fee2ContainerFoundSignalVM> DataList { get; } = new();
+    public int LinkedUnassignedSignalCount { get => _linkedUnassignedSignalCount; internal set => SetPropertyChange(ref _linkedUnassignedSignalCount, value); }
+    public string ParentName => string.Join(", ", AssociatedObjectItems.Select(item => item.ParentName).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct());
+    public string LogicDefinitionName => string.Join(", ", AssociatedObjectItems.Select(item => item.LogicDefinitionName).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct());
+    public string ConnectionText => string.Join("; ", AssociatedObjectItems.Select(item => item.ConnectionText).Where(text => !string.IsNullOrWhiteSpace(text)).Distinct());
+    public bool ManuallyChecked { get => _manuallyChecked; set => SetPropertyChange(ref _manuallyChecked, value); }
+    public bool HasErrors => string.IsNullOrWhiteSpace(Component) || string.IsNullOrWhiteSpace(Type);
+    public bool HasWarnings => !HasErrors && (DataList.Any(item => item.IsIncluded && !item.IsAssigned) || LinkedUnassignedSignalCount > 0);
+    public string ValidationError => HasErrors ? "Komponente oder Typ fehlt" : HasWarnings ? "Signalzuordnung prüfen" : "";
+    public void NotifyValidation()
+    { OnPropertyChanged(nameof(HasErrors)); OnPropertyChanged(nameof(HasWarnings)); OnPropertyChanged(nameof(ValidationError)); }
     public ObservableCollection<FeeContainerObjectAssociation> AssociatedObjectItems { get; } = new();
     public bool IsIncluded { get => _isIncluded; set => SetPropertyChange(ref _isIncluded, value); }
     public bool IsRelatedToSelection
@@ -1095,6 +1160,9 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
         _associatedObjects = string.Join(", ", AssociatedObjectItems.Select(item => $"{item.ObjectName} ({item.ObjectType})"));
         OnPropertyChanged(nameof(AssociatedObjects));
         OnPropertyChanged(nameof(AssociatedObjectCount));
+        OnPropertyChanged(nameof(ParentName));
+        OnPropertyChanged(nameof(LogicDefinitionName));
+        OnPropertyChanged(nameof(ConnectionText));
     }
 }
 
@@ -1158,6 +1226,7 @@ public sealed class Fee2ContainerUnmappedObjectVM : NotifyBase
     private string _targetContainerType;
     private string _targetComponent;
     private bool _addedAsContainer;
+    private FeeContainerObjectDetails? _details;
 
     public Fee2ContainerUnmappedObjectVM(FeeContainerUnmappedObject model)
     {
@@ -1171,6 +1240,17 @@ public sealed class Fee2ContainerUnmappedObjectVM : NotifyBase
     public string Name => Model.Name;
     public string FeeType => Model.FeeType;
     public string Reason => Model.Reason;
+    public string ParentName => _details?.ParentName ?? "";
+    public string LogicDefinitionName => _details?.LogicDefinitionName ?? "";
+    public string ConnectionText => _details?.ConnectionText ?? "";
+    public bool IsSpecialDevice => _details?.IsSpecialDevice == true;
+    public void ApplyDetails(FeeContainerObjectDetails? details)
+    {
+        if (Equals(_details, details)) return;
+        _details = details;
+        OnPropertyChanged(nameof(ParentName)); OnPropertyChanged(nameof(LogicDefinitionName));
+        OnPropertyChanged(nameof(ConnectionText)); OnPropertyChanged(nameof(IsSpecialDevice));
+    }
     public string TargetContainerType
     {
         get => _targetContainerType;

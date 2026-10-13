@@ -73,24 +73,17 @@ public sealed partial class ContainerToFeeVisualPlanService
     public VisualSimObjectConnectionState? GetFeeObjectPlanConnectionState(string feeObjectId)
     {
         if (CurrentPlan is not { } plan) return null;
-        var states = plan.Assignments.Where(item => item.FeeObjectId == feeObjectId)
+        var states = plan.Assignments.Where(item => item.FeeObjectId == feeObjectId && plan.FindTarget(item.TargetId) is not null)
             .Select(item => GetSimObjectConnectionState(item.TargetId, feeObjectId)).ToList();
         var feeObject = FindFeeObject(feeObjectId);
         if (feeObject is not null && string.Equals(feeObject.FeeType, "LogicObject", StringComparison.OrdinalIgnoreCase))
             foreach (var container in plan.Nodes.Where(node => node.Kind == VisualNodeKind.Container &&
-                string.Equals(node.Name.Trim(), feeObject.Name.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                plan.Assignments.Any(item => item.FeeObjectId == feeObjectId && plan.FindNode(item.TargetId)?.ContainerId == node.Id) &&
                 FindExistingContainerLogics(node.Id) is { Count: 1 } logics &&
                 string.Equals(logics[0].GuidString, feeObject.GuidString, StringComparison.OrdinalIgnoreCase)))
             {
-                var selected = plan.ExistingInterfaceSelections.Select(item => item.InterfaceGuid).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                var signals = plan.Nodes.Where(node => node.ContainerId == container.Id &&
-                    node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal && !plan.IsSignalRemoved(node.Id)).ToArray();
-                var targets = plan.Targets.Where(target => target.ContainerId == container.Id).ToArray();
-                var linked = signals.All(node => ResolveSignalForNode(plan, node, selected) is { } signal &&
-                    GetSignalConnectionState(node.Id, signal.GuidString).IsVerified) && targets.All(target => GetSimObjectConnectionState(target.Id).IsVerified) &&
-                    (signals.Length + targets.Length > 0 || GetFeeObjectConnectionSummary(feeObjectId).HasConnections);
-                states.Add(new(linked ? VisualSimObjectConnectionKind.Linked : VisualSimObjectConnectionKind.LinkMissing,
-                    linked ? "Alle erforderlichen Verknüpfungen dieser Containerlogik bestätigt." : "Containerlogik gefunden; erforderliche Verknüpfungen fehlen oder sind noch nicht gelesen."));
+                states.Add(new(VisualSimObjectConnectionKind.Linked,
+                    "Containerlogik zugeordnet; Logic Component und vorhandene Slots bestätigt."));
             }
         return states.FirstOrDefault(state => !state.IsVerified) ?? states.FirstOrDefault();
     }
@@ -111,11 +104,25 @@ public sealed partial class ContainerToFeeVisualPlanService
             return ScopedContainerObjects().Where(item => item.Kind == VisualFeeContainerObjectKind.Logic &&
                 string.Equals(item.Name.Trim(), container.Name.Trim(), StringComparison.OrdinalIgnoreCase) &&
                 ContainerMetadataCatalog.IsSameLogicDefinition(descriptor.ExpectedLogicName, item.Definition)).ToArray();
+        var explicitLogics = plan.Assignments.Where(item => plan.FindNode(item.TargetId) is { Kind: VisualNodeKind.Logic } node &&
+                node.ContainerId == containerId && IsAssignedObjectInSelectedRoots(item))
+            .Select(item => _runtimeObjects.GetValueOrDefault(item.FeeObjectId)).OfType<FeeLogic>()
+            .Where(item => ExistingContainerLogicResolver.IsCompatible(item, container.TypeName)).DistinctBy(item => item.Guid).ToArray();
+        if (explicitLogics.Length > 0)
+            return explicitLogics.Select(item => new VisualFeeContainerObject(item.GuidString, item.Name ?? "", VisualFeeContainerObjectKind.Logic,
+                item.LogicDefinitionName ?? descriptor.ExpectedLogicName ?? "")).ToArray();
         var targets = plan.Targets.Where(target => target.ContainerId == containerId).Select(target => target.Id).ToHashSet(StringComparer.Ordinal);
         var objects = plan.Assignments.Where(assignment => targets.Contains(assignment.TargetId))
             .Select(assignment => _runtimeObjects.GetValueOrDefault(assignment.FeeObjectId))
             .Where(item => item is not null && (_selectedSimObjectRootGuids is null ||
-                _selectedSimObjectRootGuids.Contains(FeeSimObjectDiscovery.ResolveRoot(item).GuidString))).Cast<FeeAbstractObject>();
+                _selectedSimObjectRootGuids.Contains(FeeSimObjectDiscovery.ResolveRoot(item).GuidString))).Cast<FeeAbstractObject>().ToArray();
+        if (objects.Length == 0)
+        {
+            var containerTargets = plan.Targets.Where(target => target.ContainerId == containerId).ToArray();
+            objects = _feeObjects.Where(item => IsFeeObjectInSelectedRoots(item) &&
+                    string.Equals(item.Name.Trim(), container.Name.Trim(), StringComparison.OrdinalIgnoreCase) && containerTargets.Any(target => target.CanAssign(item)))
+                .Select(item => _runtimeObjects.GetValueOrDefault(item.Id)).OfType<FeeAbstractObject>().ToArray();
+        }
         return ScopedLogicResolver.Find(container, objects, _feeSimObjectLinks).Select(item => new VisualFeeContainerObject(item.GuidString,
             item.Name ?? "", VisualFeeContainerObjectKind.Logic, item.LogicDefinitionName ?? "")).ToArray();
     }
@@ -175,6 +182,7 @@ public sealed partial class ContainerToFeeVisualPlanService
         foreach (var node in plan.Nodes.Where(node => node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal &&
                      !plan.IsSignalRemoved(node.Id) && !assignedNodes.Contains(node.Id)))
         {
+            if (node.ContainerId is { } containerId && !HasRequiredContainerLogic(containerId)) continue;
             var matches = byName[node.Name.Trim()].Where(signal => VisualSignalAssignmentMatcher.Matches(node, signal)).ToArray();
             if (matches.Length == 0 && !string.IsNullOrWhiteSpace(node.SourceLocation))
                 matches = byLocation[VisualSignalAssignmentMatcher.NormalizeLocation(node.SourceLocation)]
@@ -190,6 +198,28 @@ public sealed partial class ContainerToFeeVisualPlanService
             added++;
         }
         return added;
+    }
+
+    private bool HasRequiredContainerLogic(string containerId) => CurrentPlan?.FindNode(containerId) is { } container &&
+        (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor) || string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) ||
+            FindExistingContainerLogics(containerId).Count == 1);
+
+    public bool CanAssignLogic(string logicNodeId, string feeObjectId) =>
+        CurrentPlan?.FindNode(logicNodeId) is { Kind: VisualNodeKind.Logic, ContainerId: { } id } &&
+        CurrentPlan.FindNode(id) is { } container && FindFeeObject(feeObjectId) is { } feeObject && IsFeeObjectInSelectedRoots(feeObject) &&
+        _runtimeObjects.GetValueOrDefault(feeObjectId) is FeeLogic logic && ExistingContainerLogicResolver.IsCompatible(logic, container.TypeName);
+
+    private VisualAssignmentResult TryAssignLogic(string logicNodeId, string feeObjectId)
+    {
+        if (!CanAssignLogic(logicNodeId, feeObjectId))
+            return AssignmentFailure("Die Logik besitzt keine passende Logic Component und Slots oder ihr FEE-Root ist nicht ausgewählt.", "LOGIC_INCOMPATIBLE", logicNodeId);
+        var plan = CurrentPlan!;
+        var before = Capture(plan);
+        var added = ToAssignment(logicNodeId, FindFeeObject(feeObjectId)!);
+        plan.ReplaceAssignments(plan.Assignments.Where(item => item.TargetId != logicNodeId && item.FeeObjectId != feeObjectId).Append(added));
+        RecordMutation(before);
+        RaisePlanChanged();
+        return new VisualAssignmentResult(true, "Vorhandene Logik wurde dem Container zugeordnet.", added, []);
     }
 
     /// <summary>Completion is proved by the live objects and every expected endpoint, never by old XML tags.</summary>
