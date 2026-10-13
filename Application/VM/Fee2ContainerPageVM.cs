@@ -15,7 +15,7 @@ using VIBN_Tools.Settings;
 
 namespace VIBN_Tools.Application.VM;
 
-public sealed class Fee2ContainerPageVM : MvvmBase
+public sealed partial class Fee2ContainerPageVM : MvvmBase
 {
     private const string LogArea = "FEE2Container";
     private readonly Fee2ContainerService _service;
@@ -43,6 +43,8 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     {
         _service = service;
         _connection = connection;
+        OpenRequirementsCommand = new AsyncRelayCommand(OpenRequirementsAsync, () => !IsBusy);
+        RefreshRequirementDefinitions();
         RefreshCommand = new AsyncRelayCommand(RefreshAsync, () => CanRefresh);
         ExportCommand = new AsyncRelayCommand(ExportAsync, () => CanExport);
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
@@ -103,7 +105,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     public FeeConnectionService Connection => _connection;
 
     public IReadOnlyList<string> SupportedContainerTypes =>
-        FeeContainerLiveReconstructor.SupportedContainerTypes;
+        _supportedContainerTypes;
 
     public string ContainerSearchText
     {
@@ -329,6 +331,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
             _isBusy = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(CanRefresh));
+            OnPropertyChanged(nameof(CanConfigureRequirements));
             OnPropertyChanged(nameof(CanExport));
             OnPropertyChanged(nameof(RefreshUnavailableReason));
             OnPropertyChanged(nameof(ExportUnavailableReason));
@@ -383,6 +386,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         try
         {
             ClearDiscoveredRoots();
+            RefreshRequirementDefinitions();
             var progress = new Progress<Fee2ContainerProgress>(update =>
             {
                 if (!IsBusy || !ReferenceEquals(_operationCancellation, operationCancellation) ||
@@ -599,6 +603,9 @@ public sealed class Fee2ContainerPageVM : MvvmBase
         FoundContainers = new ObservableCollection<Fee2ContainerFoundContainerVM>(editor?.Containers ?? []);
         FoundSignals = new ObservableCollection<Fee2ContainerFoundSignalVM>(editor?.Signals ?? []);
         NonContainerObjects = new ObservableCollection<Fee2ContainerUnmappedObjectVM>(editor?.NonContainerObjects ?? []);
+        foreach (var item in NonContainerObjects)
+            if (!SupportedContainerTypes.Contains(item.TargetContainerType, StringComparer.OrdinalIgnoreCase))
+                item.TargetContainerType = SupportedContainerTypes.FirstOrDefault() ?? "";
         ConfigureDetailViews();
         OnPropertyChanged(nameof(FoundContainers));
         OnPropertyChanged(nameof(FoundSignals));
@@ -618,7 +625,7 @@ public sealed class Fee2ContainerPageVM : MvvmBase
     private void EditContainers()
     {
         if (SelectedRoot is not { } root || IsBusy) return;
-        var viewModel = new Fee2ContainerEditVM(root);
+        var viewModel = new Fee2ContainerEditVM(root, SupportedContainerTypes);
         var window = new VIBN_Tools.Application.View.Fee2ContainerEditWindow(viewModel);
         if (System.Windows.Application.Current?.MainWindow is { } owner) window.Owner = owner;
         if (window.ShowDialog() != true) return;

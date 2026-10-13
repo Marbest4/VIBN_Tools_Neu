@@ -3,6 +3,7 @@ using FS.API;
 using FS.SDK.Extensibility.Contracts;
 using FS.SDK.Io;
 using VIBN_Tools.ModelValidation;
+using VIBN_Tools.Core.Interfaces;
 using static VIBN_Tools.GlobalClasses.Interfaces;
 
 namespace VIBN_Tools.GlobalClasses.FeeObjects
@@ -214,24 +215,25 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             if (Tag == String.Empty)
                 PlausibilityIssues.Add(new PlausibilityIssue($"Kein Tag vergeben", Severity.Warning));
 
-            if (Usage != IOMode.Read && Usage != IOMode.Write && ParentInterface.ProviderGuid != PluginGuids.Symbolicinterface)
+            if (Usage != IOMode.Read && Usage != IOMode.Write && ParentInterface?.ProviderGuid != PluginGuids.Symbolicinterface)
                 PlausibilityIssues.Add(new PlausibilityIssue($"Read/Write nicht gesetzt", Severity.Error));
 
             if (References == 0)
                 PlausibilityIssues.Add(new PlausibilityIssue($"Signal nicht verknüpft", Severity.Error));
 
-            if (ParentInterface != null)
+            SiemensSignalAddress.TryParse(Address, IOTypeString, out var myAddress, out var addressWarning);
+            if (addressWarning is not null)
+                PlausibilityIssues.Add(new PlausibilityIssue(addressWarning, Severity.Warning));
+            if (ParentInterface != null && myAddress is not null)
             {
-                foreach (var other in ParentInterface.Signals)
+                foreach (var other in ParentInterface.Signals ?? [])
                 {
                     if (other == this) continue;
                     if (string.IsNullOrEmpty(Address)) continue;
                     if (string.IsNullOrEmpty(other.Address)) continue;
 
-                    var myAddr = ParseAddress(Address);
-                    var otherAddr = ParseAddress(other.Address);
-
-                    if (myAddr != null && otherAddr != null && Overlaps(myAddr, otherAddr))
+                    SiemensSignalAddress.TryParse(other.Address, other.IOTypeString, out var otherAddress, out _);
+                    if (otherAddress is not null && myAddress.Overlaps(otherAddress))
                     {
                         PlausibilityIssues.Add(new PlausibilityIssue($"Adresskonflikt mit Signal '{other.Tag}'", Severity.Error));
                     }
@@ -251,66 +253,6 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         //===================================================================================================================
 
 
-        private record ParsedAddress(char Area, int StartByte, int Length, int? Bit = null);
-
-        private static ParsedAddress ParseAddress(string address)
-        {
-
-            // Exclude Robot Signals
-            if (address.Contains("IN") || address.Contains("OUT") || (!address.StartsWith("A") && !address.StartsWith("E")))
-                return null;
-
-            // Exclude CMVM Axis Signals
-            if (address.StartsWith("Axis"))
-                return null;
-
-
-
-            char area = address[0]; // 'A' or 'E'
-
-            if (address.Contains('.'))
-            {
-                // Bool
-                var parts = address.Substring(1).Split('.');
-                return new ParsedAddress(area, int.Parse(parts[0]), 1, int.Parse(parts[1]));
-            }
-
-            // Byte, Word, DWord
-            string type = address.Substring(1, 1); // B, W, D
-            int start = int.Parse(address.Substring(2));
-
-            return type switch
-            {
-                "B" => new ParsedAddress(area, start, 1),
-                "W" => new ParsedAddress(area, start, 2),
-                "D" => new ParsedAddress(area, start, 4),
-                _ => throw new ArgumentException("Unbekanntes Format: " + address)
-            };
-        }
-            
-
-        private static bool Overlaps(ParsedAddress a, ParsedAddress b)
-        {
-            if (a.Area != b.Area) return false;
-
-            int aEnd = a.StartByte + a.Length - 1;
-            int bEnd = b.StartByte + b.Length - 1;
-
-            // Same Bit-Address
-            if (a.Bit.HasValue && b.Bit.HasValue)
-                return a.StartByte == b.StartByte && a.Bit.Value == b.Bit.Value;
-
-            // Bit-Adrress overlaps with other Byte/Word/Doubleword
-            if (a.Bit.HasValue || b.Bit.HasValue)
-            {
-                var boolAddr = a.Bit.HasValue ? a : b;
-                var blockAddr = a.Bit.HasValue ? b : a;
-                int blockEnd = blockAddr.StartByte + blockAddr.Length - 1;
-                return boolAddr.StartByte >= blockAddr.StartByte && boolAddr.StartByte <= blockEnd;
-            }
-
-            return a.StartByte <= bEnd && b.StartByte <= aEnd;
-        }
     }
 
 

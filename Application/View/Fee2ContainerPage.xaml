@@ -36,6 +36,10 @@
         </StackPanel>
 
         <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
+            <Button Margin="0,0,8,0" MinWidth="145" MinHeight="34" Content="Req-XML laden …"
+                    Command="{Binding OpenRequirementsCommand}" ToolTip="Optional: Req-XML einlesen oder eine bereits in ContainerGeneration geladene Datei verwenden." />
+            <CheckBox Margin="0,0,12,0" VerticalAlignment="Center" Content="Req-XML verwenden"
+                      IsChecked="{Binding UseRequirements}" IsEnabled="{Binding CanConfigureRequirements}" />
             <Button MinWidth="150" MinHeight="34"
                     Content="FEE-Roots einlesen"
                     Command="{Binding RefreshCommand}"
@@ -53,6 +57,7 @@
             <Button Margin="8,0,0,0" MinWidth="100" MinHeight="34"
                     Content="Abbrechen" Command="{Binding CancelCommand}" />
             <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
+            <TextBlock Margin="8,4,0,0" VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding RequirementsDescription}" />
         </WrapPanel>
 
         <DataGrid Grid.Row="2" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedRoot}"

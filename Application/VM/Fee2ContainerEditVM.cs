@@ -17,8 +17,9 @@ public sealed class Fee2ContainerEditVM : NotifyBase
     private string _xml;
     private bool _xmlDirty;
     private string _status = "Container, Signale und FEE-Objekte bearbeiten. Änderungen werden erst mit Übernehmen gespeichert.";
-    public Fee2ContainerEditVM(Fee2ContainerRootSelectionVM root)
+    public Fee2ContainerEditVM(Fee2ContainerRootSelectionVM root, IReadOnlyList<string>? supportedContainerTypes = null)
     {
+        SupportedContainerTypes = supportedContainerTypes ?? FeeContainerLiveReconstructor.SupportedContainerTypes;
         _source = root.CreateEditedRoot();
         var document = root.Editor.CreateSnapshot(includeExcluded: true).ContainerDocument;
         _editor = Fee2ContainerRootEditor.FromDocument(_source, document);
@@ -28,7 +29,7 @@ public sealed class Fee2ContainerEditVM : NotifyBase
         WriteXmlCommand = new RelayCommand(WriteXml);
     }
     public Fee2ContainerRootEditor Editor => _editor;
-    public IReadOnlyList<string> SupportedContainerTypes => FeeContainerLiveReconstructor.SupportedContainerTypes;
+    public IReadOnlyList<string> SupportedContainerTypes { get; }
     public ContainerGenerationSettings Settings { get; } = new() { GroupByComponent = true, GroupByType = true };
     public string Xml { get => _xml; set { if (SetPropertyChange(ref _xml, value)) _xmlDirty = true; } }
     public string Status { get => _status; private set => SetPropertyChange(ref _status, value); }

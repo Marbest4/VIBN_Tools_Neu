@@ -6,7 +6,8 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 internal sealed record VisualFeeSignalLinkDiscoveryResult(
     IReadOnlyList<VisualFeeSignalLink> Links,
     int FailedSignalCount,
-    IReadOnlyList<VisualFeeObjectLink>? ObjectLinks = null);
+    IReadOnlyList<VisualFeeObjectLink>? ObjectLinks = null,
+    IReadOnlyList<VisualIssue>? Issues = null);
 
 /// <summary>
 /// Reads the object-side endpoints of relevant FEE variables. Technical helper
@@ -104,7 +105,7 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
                 }
                 results.Add(new SignalRead(endpoints, null));
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
@@ -136,7 +137,10 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
             item.Key.Item1.ToString("D"), item.Key.Item2, peer.ObjectGuid.ToString("D"), peer.SlotName))).Distinct().ToArray();
         var resolved = FeeSlotSnapshot.ExpandSignalRoutes(links.Concat(snapshot.SignalLinks(candidates)), scene,
             snapshotLinks.Concat(routedObjectLinks));
-        return new VisualFeeSignalLinkDiscoveryResult(resolved, failed, routedObjectLinks);
+        var issues = candidates.Zip(results).Where(pair => pair.Second.Error is not null).Select(pair =>
+            new VisualIssue(VisualIssueSeverity.Warning, "FEE_SIGNAL_READ_FAILED",
+                $"Signal '{pair.First.Tag}' ({pair.First.GuidString}): {pair.Second.Error!.GetBaseException().Message}", pair.First.GuidString)).ToArray();
+        return new VisualFeeSignalLinkDiscoveryResult(resolved, failed, routedObjectLinks, issues);
     }
 
     private async Task<IReadOnlyDictionary<Guid, string>> ReadObjectTypesAsync(

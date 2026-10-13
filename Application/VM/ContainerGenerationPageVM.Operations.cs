@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -119,6 +120,14 @@ public partial class ContainerGenerationPageVM
         Visual or Visual3D => VisualTreeHelper.GetParent(current),
         _ => LogicalTreeHelper.GetParent(current)
     };
+
+    private static bool IsEditingText(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = GetUiParent(current))
+            if (current is TextBoxBase or PasswordBox or ComboBox or DataGridCell { IsEditing: true })
+                return true;
+        return false;
+    }
 
     private DataGrid? _dragGrid;
     private Point _dragStart;

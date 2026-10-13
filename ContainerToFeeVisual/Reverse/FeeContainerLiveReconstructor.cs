@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using VIBN_Tools.ContainerGeneration.Models;
+using VIBN_Tools.Core.Containers;
 
 namespace VIBN_Tools.ContainerToFeeVisual;
 
@@ -77,7 +78,8 @@ public static class FeeContainerLiveReconstructor
         string rootName,
         IEnumerable<FeeContainerLiveObject> objects,
         IEnumerable<FeeContainerLiveVariable> variables,
-        IEnumerable<FeeContainerLiveAssignment> assignments)
+        IEnumerable<FeeContainerLiveAssignment> assignments,
+        ContainerRequirementsCatalog? requirements = null)
     {
         ArgumentNullException.ThrowIfNull(objects);
         ArgumentNullException.ThrowIfNull(variables);
@@ -95,22 +97,29 @@ public static class FeeContainerLiveReconstructor
             .ToDictionary(group => group.Key, group => group.ToArray());
         var issues = new List<FeeContainerReconstructionIssue>();
         var candidates = new List<ContainerCandidate>();
+        var candidateWarnings = new Dictionary<Guid, string>();
         var relevantObjectGuids = new HashSet<Guid>();
 
         foreach (var item in sourceObjects)
         {
-            if (!TryCreateCandidate(item, out var candidate, out var ambiguity))
+            var liveSlots = (assignmentsByObject.GetValueOrDefault(item.Guid) ?? []).Select(assignment => assignment.TargetSlot).ToArray();
+            var liveSignals = (assignmentsByObject.GetValueOrDefault(item.Guid) ?? []).Select(assignment => variableByGuid.GetValueOrDefault(assignment.VariableGuid)?.Signal)
+                .Where(signal => signal is not null).Cast<string>().ToArray();
+            if (!TryCreateCandidate(item, liveSlots, liveSignals, requirements, out var candidate, out var ambiguity))
                 continue;
             candidates.Add(candidate!);
             relevantObjectGuids.Add(item.Guid);
             if (!string.IsNullOrWhiteSpace(ambiguity))
-                issues.Add(new FeeContainerReconstructionIssue(item.Guid, ambiguity));
+                candidateWarnings[item.Guid] = ambiguity;
         }
 
         // Historical owner IDs must never collapse primary objects that have
         // since been renamed or changed type. Live logic/cabinet/button GUIDs
         // remain distinct; same-name ancillary sensors belong to their logic.
-        candidates = candidates.Where(item => !IsRedundantLegacySimObject(item, candidates)).ToList();
+        var byGuid = sourceObjects.ToDictionary(item => item.Guid);
+        candidates = candidates.Where(item => !IsRedundantLegacySimObject(item, candidates, byGuid)).ToList();
+        issues.AddRange(candidates.Where(candidate => candidateWarnings.ContainsKey(candidate.Object.Guid))
+            .Select(candidate => new FeeContainerReconstructionIssue(candidate.Object.Guid, candidateWarnings[candidate.Object.Guid])));
 
         var objectAssociations = ResolveAllObjectAssociations(sourceObjects, candidates, issues);
         relevantObjectGuids.Clear();
@@ -131,8 +140,11 @@ public static class FeeContainerLiveReconstructor
             signalObjects.Add(candidate.Object.Guid);
             var objectAssignments = signalObjects.SelectMany(guid => assignmentsByObject.GetValueOrDefault(guid) ?? [])
                 .Distinct().ToArray();
-            var resolved = objectAssignments
-                .Select(assignment => TryCreateEntry(candidate, assignment, variableByGuid))
+            var primaryVariables = objectAssignments.Where(assignment => assignment.TargetObjectGuid == candidate.Object.Guid)
+                .Select(assignment => assignment.VariableGuid).ToHashSet();
+            var resolved = objectAssignments.Where(assignment => assignment.TargetObjectGuid == candidate.Object.Guid ||
+                    !primaryVariables.Contains(assignment.VariableGuid) || !IsHelper(byGuid.GetValueOrDefault(assignment.TargetObjectGuid)?.FeeType ?? ""))
+                .Select(assignment => TryCreateEntry(candidate, assignment, variableByGuid, requirements, issues))
                 .Where(item => item is not null)
                 .Cast<ResolvedEntry>()
                 .GroupBy(item => (item.Variable.VariableGuid, item.XmlSlot))
@@ -157,6 +169,13 @@ public static class FeeContainerLiveReconstructor
             }
 
             var dataList = new XElement("DataList");
+            if (requirements?.Contains(candidate.XmlType) == true)
+            {
+                var limits = requirements.SignalLimits(candidate.XmlType);
+                if (limits.Min is { } min && resolved.Length < min || limits.Max is { } max && resolved.Length > max)
+                    issues.Add(new FeeContainerReconstructionIssue(candidate.Object.Guid,
+                        $"'{componentName}' besitzt {resolved.Length} Signalzuordnung(en); Req-XML erwartet {limits.Min?.ToString() ?? "0"} bis {limits.Max?.ToString() ?? "unbegrenzt"}."));
+            }
             var containerIndex = containerElements.Count;
             if (resolved.Length == 0)
             {
@@ -240,10 +259,11 @@ public static class FeeContainerLiveReconstructor
         ICollection<FeeContainerReconstructionIssue> issues)
     {
         var result = new List<FeeContainerObjectAssociation>();
+        var byName = candidates.ToLookup(candidate => candidate.ComponentName.Trim(), StringComparer.OrdinalIgnoreCase);
+        var byGuid = objects.ToDictionary(item => item.Guid);
         foreach (var item in objects)
         {
-            var matches = candidates.Where(candidate =>
-                ContainerFileXml.HasMatchingObjectName(item.Name, candidate.ComponentName)).ToArray();
+            ContainerCandidate[] matches = string.IsNullOrWhiteSpace(item.Name) ? [] : byName[item.Name.Trim()].ToArray();
             // Provenance disambiguates equal names but never invents an automatic
             // association between differently named physical scene objects.
             var own = matches.Where(candidate => candidate.Object.Guid == item.Guid).ToArray();
@@ -251,7 +271,7 @@ public static class FeeContainerLiveReconstructor
             else if (matches.Length > 1)
             {
                 var related = matches.Where(candidate => item.LinkedObjectGuids?.Contains(candidate.Object.Guid) == true ||
-                    IsDescendantOf(item, candidate.Object.Guid, objects)).ToArray();
+                    IsDescendantOf(item, candidate.Object.Guid, byGuid)).ToArray();
                 if (related.Length == 1) matches = related;
             }
             if (matches.Length == 1)
@@ -272,9 +292,8 @@ public static class FeeContainerLiveReconstructor
     }
 
     private static bool IsDescendantOf(FeeContainerLiveObject item, Guid candidateGuid,
-        IReadOnlyList<FeeContainerLiveObject> objects)
+        IReadOnlyDictionary<Guid, FeeContainerLiveObject> byGuid)
     {
-        var byGuid = objects.ToDictionary(value => value.Guid);
         var visited = new HashSet<Guid>();
         for (var parent = item.ParentGuid; parent.HasValue && visited.Add(parent.Value);)
         {
@@ -289,6 +308,9 @@ public static class FeeContainerLiveReconstructor
 
     private static bool TryCreateCandidate(
         FeeContainerLiveObject item,
+        IReadOnlyList<string> liveSlots,
+        IReadOnlyList<string> liveSignals,
+        ContainerRequirementsCatalog? requirements,
         out ContainerCandidate? candidate,
         out string? ambiguity)
     {
@@ -299,6 +321,12 @@ public static class FeeContainerLiveReconstructor
         { "Switch" => "CabinetSwitch", "Fuse" => "CabinetFuse", var type => type };
         string? xmlType = null;
         var logicMatches = ContainerMetadataCatalog.FindXmlTypesByLogicName(item.LogicDefinitionName);
+        var configuredLogics = logicMatches.Select(type => requirements?.ConfiguredName(type)).Where(type => type is not null)
+            .Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (configuredLogics.Length > 0) logicMatches = configuredLogics;
+        IReadOnlyList<string> signalMatches = logicMatches.Count > 1 ? requirements?.TypesMatchingSignals(liveSignals, logicMatches.ToArray()) ?? [] : [];
+        var resolvedLogics = logicMatches.Where(type => signalMatches.Contains(type, StringComparer.OrdinalIgnoreCase)).ToArray();
+        if (resolvedLogics.Length == 1) logicMatches = resolvedLogics;
         if (logicMatches.Count > 0)
         {
             xmlType = logicMatches.FirstOrDefault(type => string.Equals(type, hint, StringComparison.OrdinalIgnoreCase)) ?? logicMatches[0];
@@ -309,10 +337,17 @@ public static class FeeContainerLiveReconstructor
         }
         else if (EndsWithType(feeType, "BoolNot"))
         {
-            var compatibleHint = new[] { "ReturnCircuit", "SafeArea" }.FirstOrDefault(type =>
+            var compatibleTypes = new[] { "ReturnCircuit", "SafeArea" };
+            var configured = compatibleTypes.Where(type => requirements?.Contains(type) == true).ToArray();
+            if (configured.Length > 0) compatibleTypes = configured;
+            IReadOnlyList<string> helperSignalMatches = compatibleTypes.Length > 1
+                ? requirements?.TypesMatchingSignals(liveSignals, compatibleTypes) ?? [] : [];
+            var resolvedHelpers = compatibleTypes.Where(type => helperSignalMatches.Contains(type, StringComparer.OrdinalIgnoreCase)).ToArray();
+            if (resolvedHelpers.Length == 1) compatibleTypes = resolvedHelpers;
+            var compatibleHint = compatibleTypes.FirstOrDefault(type =>
                 string.Equals(type, hint, StringComparison.OrdinalIgnoreCase));
-            xmlType = compatibleHint ?? "ReturnCircuit";
-            if (compatibleHint is null)
+            xmlType = compatibleHint ?? compatibleTypes[0];
+            if (compatibleHint is null && compatibleTypes.Length > 1)
                 ambiguity = "Ein BoolNot ist ohne passende Typinformation nicht sicher als ReturnCircuit oder SafeArea unterscheidbar; ReturnCircuit bitte prüfen.";
         }
         else if (xmlType is null && EndsWithType(feeType, "Button"))
@@ -342,28 +377,61 @@ public static class FeeContainerLiveReconstructor
                         "Die Zuordnung ist zu prüfen, falls das Floor keiner Stopperlogik angehört.";
         }
 
-        if (xmlType is null || !ContainerMetadataCatalog.TryGet(xmlType, out var descriptor))
+        var runtimeType = xmlType;
+        if (xmlType is not null && requirements?.ConfiguredName(xmlType) is { } configuredName)
+            xmlType = configuredName;
+        else if (requirements is not null)
+        {
+            var slotMatches = requirements.TypesMatchingSlots(liveSlots);
+            if (slotMatches.Count == 1)
+            {
+                xmlType = slotMatches[0];
+                ambiguity = $"'{item.Name}' wurde anhand aktueller FEE-Slots als Req-XML-Typ '{xmlType}' erkannt; Definition und Zuordnung bitte prüfen.";
+            }
+            else if (xmlType is not null)
+                ambiguity = $"Typ '{xmlType}' ist nicht in der geladenen Req-XML definiert; Erkennung über die aktuelle FEE-Definition bitte prüfen.";
+        }
+        if (xmlType is null || !ContainerMetadataCatalog.TryGet(runtimeType ?? xmlType, out _) && requirements?.Contains(xmlType) != true)
             return false;
         var componentName = EndsWithType(feeType, "CabinetElement")
             ? FirstNotBlank(item.Label, item.Name?.Split(';')[0])
             : item.Name;
-        candidate = new ContainerCandidate(item, xmlType, descriptor, componentName ?? string.Empty);
+        candidate = new ContainerCandidate(item, xmlType, runtimeType ?? xmlType, componentName ?? string.Empty);
         return true;
     }
 
     private static ResolvedEntry? TryCreateEntry(
         ContainerCandidate candidate,
         FeeContainerLiveAssignment assignment,
-        IReadOnlyDictionary<Guid, FeeContainerLiveVariable> variables)
+        IReadOnlyDictionary<Guid, FeeContainerLiveVariable> variables,
+        ContainerRequirementsCatalog? requirements,
+        ICollection<FeeContainerReconstructionIssue> issues)
     {
         if (!variables.TryGetValue(assignment.VariableGuid, out var variable))
             return null;
-        var slot = MapSlot(candidate, assignment.TargetSlot);
+        var runtimeSlot = assignment.TargetSlot?.Trim() ?? "";
+        var allowed = requirements?.Slots(candidate.XmlType) ?? [];
+        var slot = allowed.FirstOrDefault(slot => string.Equals(slot, runtimeSlot, StringComparison.OrdinalIgnoreCase)) ??
+            MapRuntimeSlot(candidate.RuntimeType, runtimeSlot);
+        if (slot is not null && allowed.Count > 0 && !allowed.Contains(slot, StringComparer.OrdinalIgnoreCase) &&
+            ContainerMetadataCatalog.TryGet(candidate.RuntimeType, out var descriptor))
+        {
+            var runtime = descriptor.Factory();
+            var mapped = ContainerSignalSlotMap.RuntimeSlot(runtime, candidate.RuntimeType, slot);
+            slot = allowed.FirstOrDefault(configured => string.Equals(
+                ContainerSignalSlotMap.RuntimeSlot(runtime, candidate.RuntimeType, configured), mapped, StringComparison.OrdinalIgnoreCase)) ?? slot;
+        }
+        if (string.IsNullOrWhiteSpace(slot) && !string.IsNullOrWhiteSpace(assignment.TargetSlot))
+        {
+            slot = assignment.TargetSlot.Trim();
+            issues.Add(new FeeContainerReconstructionIssue(candidate.Object.Guid,
+                $"Signal '{variable.Signal}': tatsächlicher FEE-Slot '{slot}' ist für '{candidate.XmlType}' nicht eindeutig abbildbar; Originalzuordnung bleibt zur Prüfung erhalten."));
+        }
+        if (requirements?.Contains(candidate.XmlType) == true && slot is not null && !allowed.Contains(slot, StringComparer.OrdinalIgnoreCase))
+            issues.Add(new FeeContainerReconstructionIssue(candidate.Object.Guid,
+                $"Signal '{variable.Signal}': Slot '{slot}' ist nicht in der Req-XML für '{candidate.XmlType}' definiert; aktuelle FEE-Verknüpfung bitte prüfen."));
         return string.IsNullOrWhiteSpace(slot) ? null : new ResolvedEntry(variable, slot);
     }
-
-    private static string? MapSlot(ContainerCandidate candidate, string runtimeSlot)
-        => MapRuntimeSlot(candidate.XmlType, runtimeSlot);
 
     internal static string? MapRuntimeSlot(string xmlType, string runtimeSlot)
     {
@@ -427,16 +495,21 @@ public static class FeeContainerLiveReconstructor
 
     private static bool IsRedundantLegacySimObject(
         ContainerCandidate candidate,
-        IEnumerable<ContainerCandidate> allCandidates)
+        IEnumerable<ContainerCandidate> allCandidates,
+        IReadOnlyDictionary<Guid, FeeContainerLiveObject> byGuid)
     {
         if (!EndsWithType(candidate.Object.FeeType, "Sensor") &&
             !EndsWithType(candidate.Object.FeeType, "SafetySensor") &&
-            !EndsWithType(candidate.Object.FeeType, "Floor"))
+            !EndsWithType(candidate.Object.FeeType, "Floor") && !IsHelper(candidate.Object.FeeType))
             return false;
         return allCandidates.Any(other =>
             other.Object.Guid != candidate.Object.Guid &&
-            !string.IsNullOrWhiteSpace(other.Object.LogicDefinitionName) &&
-            string.Equals(other.ComponentName, candidate.ComponentName, StringComparison.OrdinalIgnoreCase));
+            !IsHelper(other.Object.FeeType) &&
+            (candidate.Object.LinkedObjectGuids?.Contains(other.Object.Guid) == true &&
+                (!IsHelper(candidate.Object.FeeType) || ContainerFileXml.HasMatchingObjectName(candidate.ComponentName, other.ComponentName)) ||
+             IsDescendantOf(candidate.Object, other.Object.Guid, byGuid) ||
+             !IsHelper(candidate.Object.FeeType) && !string.IsNullOrWhiteSpace(other.Object.LogicDefinitionName) &&
+             ContainerFileXml.HasMatchingObjectName(other.ComponentName, candidate.ComponentName)));
     }
 
     private static string? MapCabinetType(string? definition)
@@ -470,7 +543,7 @@ public static class FeeContainerLiveReconstructor
     private sealed record ContainerCandidate(
         FeeContainerLiveObject Object,
         string XmlType,
-        ContainerDescriptor Descriptor,
+        string RuntimeType,
         string ComponentName);
 
     private sealed record ResolvedEntry(FeeContainerLiveVariable Variable, string XmlSlot);

@@ -471,6 +471,11 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
             return finalGroupedDictionary;
         }
 
+        /// <summary>Shares the existing required/exclude key rules with live reverse type disambiguation.</summary>
+        public IReadOnlyList<string> MatchRequirementTypes(XDocument document, string signal, IReadOnlyCollection<string>? candidates = null) =>
+            GetMatchingComponents(document, new ContainerEntry { Signal = signal }, true, new List<string>(), candidates)
+                .Select(match => match.ComponentType).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
         /// <summary>
         /// Retrieves a list of matching components based on the provided XML document and container entry.
         /// </summary>
@@ -494,11 +499,13 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
             XDocument doc,
             ContainerEntry cEntry,
             bool ignoreCase,
-            ICollection<string> exclusionDiagnostics)
+            ICollection<string> exclusionDiagnostics,
+            IReadOnlyCollection<string>? candidates = null)
         {
             List<MatchingData> matchingDataList = [];
 
-            var components = doc.Descendants("Component");
+            var components = doc.Descendants("Component").Where(component => candidates is null ||
+                candidates.Contains(component.Attribute("type")?.Value ?? "", StringComparer.OrdinalIgnoreCase));
 
             // iterate over all components
             foreach (var component in components)

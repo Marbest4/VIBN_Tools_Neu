@@ -826,13 +826,19 @@ namespace VIBN_Tools.Application.VM
 
             Zuli = new ZuLiDefault();
 
-            RequirementsFile = new RequirementsXml();
+            RequirementsFile = RequirementsProvider.RequirementsFile is { IsInitialized: true } sharedRequirements
+                ? sharedRequirements : new RequirementsXml();
             RequirementsProvider.RequirementsFile = this.RequirementsFile;
 
 
             ContainerGenerator = new ContainerGenerator();
 
             LoadDefaultSettings();
+            if (RequirementsFile.IsInitialized)
+            {
+                Settings.PathRequirementsXml = RequirementsProvider.SourcePath;
+                foreach (var type in RequirementsFile.GetComponentTypes().OrderBy(type => type)) ComponentTypes.Add(type);
+            }
             ReloadGroupingPresetFiles(false);
 
             AddActivity(
@@ -900,6 +906,7 @@ namespace VIBN_Tools.Application.VM
             {
                 RequirementsFile = importedRequirements;
                 RequirementsProvider.RequirementsFile = RequirementsFile;
+                RequirementsProvider.SourcePath = filePath;
                 Settings.PathRequirementsXml = filePath;
                 ComponentTypes.Clear();
                 var components = RequirementsFile.GetComponentTypes().OrderBy(x => x).ToList();
@@ -976,6 +983,8 @@ namespace VIBN_Tools.Application.VM
                 EnsureSignalIds(Zuli.Items);
                 RequirementsFile = importedRequirements;
                 RequirementsProvider.RequirementsFile = RequirementsFile;
+
+                RequirementsProvider.SourcePath = Settings.PathRequirementsXml;
 
                 ComponentTypes.Clear();
                 foreach (var component in RequirementsFile.GetComponentTypes().OrderBy(x => x))
@@ -2588,7 +2597,8 @@ namespace VIBN_Tools.Application.VM
         /// <param name="e">The <see cref="KeyEventArgs"/> instance containing the event data.</param>
         public void ContainerGrid_OnPreviewKeyDown(object parameter)
         {
-            if (parameter is not KeyEventArgs e)
+            if (parameter is not KeyEventArgs e || e.Handled ||
+                IsEditingText(e.OriginalSource as DependencyObject) || IsEditingText(Keyboard.FocusedElement as DependencyObject))
                 return;
 
             if (e.Key == Key.Delete)
