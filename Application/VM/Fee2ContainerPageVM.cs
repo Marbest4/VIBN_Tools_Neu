@@ -1170,6 +1170,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     private bool _isIncluded = true;
     private bool _isRelatedToSelection;
     private string _associatedObjects;
+    private bool _isExpanded;
     private int _linkedUnassignedSignalCount;
     private bool _manuallyChecked;
     private VIBN_Tools.SpecialDevices.Fee2SpecialDeviceRoot? _specialDevice;
@@ -1189,6 +1190,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     }
 
     public string Id { get; }
+    public bool IsExpanded { get => _isExpanded; set => SetPropertyChange(ref _isExpanded, value); }
     public string Name => Component;
     public string FeeType => IsSpecialDevice ? "LogicObject" : Type;
     public bool IsSpecialDevice => _specialDevice is not null || AssociatedObjectItems.Any(item => item.Role == "SpecialDevice");

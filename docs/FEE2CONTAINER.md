@@ -15,6 +15,8 @@ Auswählbar sind die höchsten BasicFrames; verschachtelte BasicFrames gehören 
 3. Einen Root für die Details auswählen und gewünschte Roots über **Export** markieren. Die Tabellen zeigen aktuelle Container, Signalzuordnungen und nicht zugeordnete Objekte. Ein Container hebt seine Signale hervor und zentriert die erste passende Signalzeile; eine Signalzeile hebt ihren Container hervor und zentriert dessen Zeile. Filter auf der Zielseite werden bei Bedarf geöffnet.
 4. Den Stand bearbeiten und exportieren. Nur markierte Roots sowie darin zum Export markierte Container und Signale werden übernommen.
 
+Die erkannten Container starten eingeklappt. Der Pfeil links an einer Containerzeile öffnet oder schließt ihre Signal- und FEE-Objektdetails. Eingeklappt bleibt eine kompakte Containerübersicht mit Komponente, Typ, Exportauswahl und Prüfstatus. Die Auswahl einer Zeile allein ändert den Klappzustand nicht. Signalbearbeitung, Mehrfach-Drag-and-drop und Zuordnungsentfernung bleiben in den aufgeklappten Details verfügbar.
+
 Beim Root-Wechsel werden neue Tabellenansichten veröffentlicht; alte virtuelle Ansichten bleiben unverändert, während WPF ausstehende Zeilenanforderungen beendet. Revisionsnummern verwerfen veraltete Auswahl- und Zentrierungsanforderungen. Die Spalten und Listenbereiche lassen sich manuell über Spaltenränder und Trennbalken anpassen.
 
 Ein aktuelles Objekt ohne rücklesbare Signalzuordnung erhält einen **PRÜFEN**-Hinweis und einen leeren, schema-konformen FEE-UNASSIGNED-Eintrag. Es wird kein Signal erfunden. Leseprobleme erscheinen unter **Fehler und Rekonstruktionshinweise**. Der Export schreibt atomar ein ContainerFile, das ContainerGeneration und der Containervergleich einlesen können.

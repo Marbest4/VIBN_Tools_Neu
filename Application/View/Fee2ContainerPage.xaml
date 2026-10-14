@@ -11,6 +11,7 @@
         <vm:Fee2ContainerPageVM />
     </UserControl.DataContext>
     <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="ContainerDetailsVisibilityConverter" />
         <Style TargetType="DataGrid">
             <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True" />
             <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
@@ -110,6 +111,7 @@
                     </Style.Triggers>
                 </Style>
                 <Style x:Key="Fee2ContainerDropRowStyle" TargetType="DataGridRow" BasedOn="{StaticResource Fee2RelatedRowStyle}">
+                    <Setter Property="DetailsVisibility" Value="{Binding IsExpanded, Converter={StaticResource ContainerDetailsVisibilityConverter}}" />
                     <Setter Property="behaviors:ContainerToFeeVisualDragDropBehavior.IsDropTarget" Value="True" />
                     <Setter Property="behaviors:ContainerToFeeVisualDragDropBehavior.DropTarget" Value="{Binding}" />
                     <Setter Property="behaviors:ContainerToFeeVisualDragDropBehavior.DropCommand"
@@ -148,87 +150,73 @@
                     <DataGrid Grid.Row="1" ItemsSource="{Binding FoundContainersView}" SelectedItem="{Binding SelectedFoundContainer}"
                               behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
                               RowStyle="{StaticResource Fee2ContainerDropRowStyle}" AutoGenerateColumns="False"
+                              AreRowDetailsFrozen="True" HeadersVisibility="Column" MinRowHeight="32"
                               CanUserAddRows="False" CanUserDeleteRows="False" EnableRowVirtualization="True" EnableColumnVirtualization="True">
                         <DataGrid.Columns>
-                            <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="70" />
-                            <DataGridTextColumn Header="Component" Binding="{Binding Component}" Width="190" />
-                            <DataGridTemplateColumn Header="Type" Width="160"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                            <DataGridTemplateColumn Header="" Width="34" IsReadOnly="True" CanUserResize="False" CanUserSort="False">
+                                <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                    <ToggleButton Width="24" Height="24" Padding="0" IsChecked="{Binding IsExpanded, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  ToolTip="Signale und zugeordnete FEE-Objekte ein-/ausklappen" AutomationProperties.Name="Containerdetails ein-/ausklappen">
+                                        <TextBlock FontSize="15"><TextBlock.Style><Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="▸" />
+                                            <Style.Triggers><DataTrigger Binding="{Binding IsExpanded}" Value="True"><Setter Property="Text" Value="▾" /></DataTrigger></Style.Triggers>
+                                        </Style></TextBlock.Style></TextBlock>
+                                    </ToggleButton>
+                                </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="60" />
+                            <DataGridTextColumn Header="Component" Binding="{Binding Component}" Width="220" />
+                            <DataGridTemplateColumn Header="Type" Width="180"><DataGridTemplateColumn.CellTemplate><DataTemplate>
                                 <ComboBox ItemsSource="{Binding DataContext.SupportedContainerTypes, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                           SelectedItem="{Binding Type, UpdateSourceTrigger=PropertyChanged}" IsEditable="False" />
                             </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="ID" Width="170">
-                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
-                                    <ItemsControl.ItemTemplate><DataTemplate>
-                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
-                                                 Text="{Binding SignalId, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
-                                    </DataTemplate></ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="Address" Width="160">
-                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
-                                    <ItemsControl.ItemTemplate><DataTemplate>
-                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
-                                                 Text="{Binding Address, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
-                                    </DataTemplate></ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="DataType" Width="100">
-                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
-                                    <ItemsControl.ItemTemplate><DataTemplate>
-                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
-                                                 Text="{Binding DataType, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
-                                    </DataTemplate></ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="Signal" Width="230">
-                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
-                                    <ItemsControl.ItemTemplate><DataTemplate>
-                                        <DockPanel>
-                                            <Border DockPanel.Dock="Left" Padding="3,4" Cursor="Hand" behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"><TextBlock Text="↕" /></Border>
-                                            <Button DockPanel.Dock="Right" Content="×" Width="20" Padding="0" ToolTip="Signalzuordnung entfernen; FEE-Signal bleibt erhalten"
-                                                    Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
-                                            <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
-                                                 Text="{Binding Signal, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
-                                        </DockPanel>
-                                    </DataTemplate></ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="Slot" Width="200">
-                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
-                                    <ItemsControl.ItemTemplate><DataTemplate>
-                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
-                                                 Text="{Binding Slot, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
-                                    </DataTemplate></ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-                        <DataGridTemplateColumn Header="Prüfhinweise" Width="240">
-                            <DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
-                                    <ItemsControl.ItemTemplate><DataTemplate>
-                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
-                                                 Text="{Binding Note, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
-                                    </DataTemplate></ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-
-                            <DataGridTextColumn Header="Prüfstatus" Binding="{Binding ValidationError}" IsReadOnly="True" Width="160" />
-                            <DataGridCheckBoxColumn Header="Manually Checked / geprüft" Binding="{Binding ManuallyChecked, UpdateSourceTrigger=PropertyChanged}" Width="150" />
+                            <DataGridTextColumn Header="Signalzeilen" Binding="{Binding DataList.Count}" IsReadOnly="True" Width="90" />
                             <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" IsReadOnly="True" Width="95" />
-                        <DataGridTemplateColumn Header="Zugeordnete FEE-Objekte" Width="240" IsReadOnly="True">
-                            <DataGridTemplateColumn.CellTemplate>
-                                <DataTemplate>
-                                    <ItemsControl ItemsSource="{Binding AssociatedObjectItems}">
+                            <DataGridTextColumn Header="Prüfstatus" Binding="{Binding ValidationError}" IsReadOnly="True" Width="*" MinWidth="150" />
+                            <DataGridCheckBoxColumn Header="geprüft" Binding="{Binding ManuallyChecked, UpdateSourceTrigger=PropertyChanged}" Width="75" />
+                            <DataGridTemplateColumn Header="Aktion" Width="100"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                        CommandParameter="{Binding}" ToolTip="Container aus dem Arbeitsstand entfernen; FEE-Objekte und Verknüpfungen bleiben im Projekt erhalten." />
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                        <DataGrid.RowDetailsTemplate>
+                            <DataTemplate>
+                                <Border Padding="8" Background="#FFF7F9FB" BorderBrush="#FFD6DCE3" BorderThickness="0,0,0,1">
+                                    <StackPanel>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <TextBlock Margin="0,0,18,0"><Run FontWeight="SemiBold" Text="Parent / Cabinet: " /><Run Text="{Binding ParentName}" /></TextBlock>
+                                            <TextBlock><Run FontWeight="SemiBold" Text="Logik: " /><Run Text="{Binding LogicDefinitionName}" /></TextBlock>
+                                        </WrapPanel>
+                                        <TextBlock Margin="0,0,0,4" FontWeight="SemiBold" Text="Signale des Containers" />
+                                        <DataGrid ItemsSource="{Binding DataList}" AutoGenerateColumns="False" HeadersVisibility="Column"
+                                                  CanUserAddRows="False" CanUserDeleteRows="False" EnableRowVirtualization="True" EnableColumnVirtualization="True"
+                                                  MinHeight="35" MaxHeight="280" SelectionMode="Extended" SelectionUnit="FullRow"
+                                                  RowStyle="{StaticResource Fee2RelatedRowStyle}" SelectionChanged="OnContainerSignalSelectionChanged">
+                                            <DataGrid.Columns>
+                                                <DataGridTemplateColumn Header="Ziehen" Width="60" IsReadOnly="True"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                    <Border Padding="8,4" Cursor="Hand" behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
+                                                            ToolTip="Ausgewählte Signale gemeinsam auf eine Containerzeile ziehen (Strg/Shift)."><TextBlock Text="↕" /></Border>
+                                                </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="60" />
+                                                <DataGridTextColumn Header="ID" Binding="{Binding SignalId, UpdateSourceTrigger=LostFocus}" Width="130" />
+                                                <DataGridTextColumn Header="Address" Binding="{Binding Address, UpdateSourceTrigger=LostFocus}" Width="150" />
+                                                <DataGridTextColumn Header="DataType" Binding="{Binding DataType, UpdateSourceTrigger=LostFocus}" Width="100" />
+                                                <DataGridTextColumn Header="Signal" Binding="{Binding Signal, UpdateSourceTrigger=LostFocus}" Width="220" />
+                                                <DataGridTextColumn Header="Slot" Binding="{Binding Slot, UpdateSourceTrigger=LostFocus}" Width="180" />
+                                                <DataGridTextColumn Header="Prüfhinweise" Binding="{Binding Note, UpdateSourceTrigger=LostFocus}" Width="*" MinWidth="160" />
+                                                <DataGridTemplateColumn Header="Aktion" Width="90" IsReadOnly="True"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                    <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                                            CommandParameter="{Binding}" ToolTip="Signalzuordnung entfernen; FEE-Signal bleibt erhalten" />
+                                                </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                        <DockPanel Margin="0,10,0,4">
+                                            <Button DockPanel.Dock="Right" Content="{Binding LinkedUnassignedSignalCount, StringFormat='Verknüpfte Signale ohne Zuordnung ({0})'}" Padding="6,3"
+                                                    Command="{Binding DataContext.ShowLinkedSignalsCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
+                                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Zugeordnete FEE-Objekte" />
+                                        </DockPanel>
+                                        <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <ItemsControl ItemsSource="{Binding AssociatedObjectItems}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Padding="4,2" Cursor="Hand"
@@ -249,21 +237,12 @@
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
-                                </DataTemplate>
-                            </DataGridTemplateColumn.CellTemplate>
-                        </DataGridTemplateColumn>
-
-                            <DataGridTextColumn Header="Verknüpfung" Binding="{Binding ConnectionText}" Width="300" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Parent / Cabinet" Binding="{Binding ParentName}" Width="160" IsReadOnly="True" />
-                            <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="200" IsReadOnly="True" />
-                            <DataGridTemplateColumn Header="Verknüpft, nicht zugeordnet" Width="180"><DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <Button Content="{Binding LinkedUnassignedSignalCount, StringFormat='Signale anzeigen ({0})'}" Padding="6,3"
-                                        Command="{Binding DataContext.ShowLinkedSignalsCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="Aktion" Width="100"><DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" ToolTip="Container aus dem Arbeitsstand entfernen; FEE-Objekte und Verknüpfungen bleiben im Projekt erhalten." />
-                            </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-                        </DataGrid.Columns>
+                                        </ScrollViewer>
+                                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Verknüpfung: " /><Run Text="{Binding ConnectionText}" /></TextBlock>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </DataGrid.RowDetailsTemplate>
                     </DataGrid>
                 </Grid>
             </GroupBox>

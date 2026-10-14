@@ -17,7 +17,7 @@ public partial class Fee2ContainerPage : UserControl
     {
         if (args.Handled || args.Key != Key.Delete || Keyboard.FocusedElement is TextBoxBase or PasswordBox or ComboBox ||
             DataContext is not VIBN_Tools.Application.VM.Fee2ContainerPageVM vm || vm.IsBusy) return;
-        var grid = FindGrids(this).FirstOrDefault(item => item.IsKeyboardFocusWithin);
+        var grid = FindGrids(this).LastOrDefault(item => item.IsKeyboardFocusWithin);
         if (grid is null) return;
         var selected = grid.SelectedItems.OfType<VIBN_Tools.Application.VM.Fee2ContainerFoundSignalVM>().ToArray();
         foreach (var signal in selected) vm.RemoveSignalCommand.Execute(signal);
@@ -29,6 +29,17 @@ public partial class Fee2ContainerPage : UserControl
         {
             grid.CommitEdit(DataGridEditingUnit.Cell, true);
             grid.CommitEdit(DataGridEditingUnit.Row, true);
+        }
+    }
+
+    private void OnContainerSignalSelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (sender is DataGrid grid && args.OriginalSource == grid &&
+            grid.SelectedItem is VIBN_Tools.Application.VM.Fee2ContainerFoundSignalVM signal &&
+            DataContext is VIBN_Tools.Application.VM.Fee2ContainerPageVM vm)
+        {
+            vm.SelectedFoundSignal = signal;
+            args.Handled = true;
         }
     }
 
@@ -68,7 +79,7 @@ public partial class Fee2ContainerPage : UserControl
         {
             var child = VisualTreeHelper.GetChild(parent, index);
             if (child is DataGrid grid) yield return grid;
-            else foreach (var nested in FindGrids(child)) yield return nested;
+            foreach (var nested in FindGrids(child)) yield return nested;
         }
     }
 }
