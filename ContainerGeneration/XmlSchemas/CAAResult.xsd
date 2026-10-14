@@ -10,6 +10,8 @@
         <xs:element name="Note" type="xs:string" minOccurs="0"/>
     </xs:sequence>
     <xs:attribute name="feeGuid" type="xs:string" use="optional"/>
+        <xs:attribute name="interfaceGuid" type="xs:string" use="optional"/>
+        <xs:attribute name="interfaceName" type="xs:string" use="optional"/>
 	</xs:complexType>
 
 	<xs:complexType name="ContainerType">
@@ -27,6 +29,10 @@
 		</xs:sequence>
 		<xs:attribute name="id" type="xs:string" use="optional"/>
         <xs:attribute name="feeRootGuid" type="xs:string" use="optional"/>
+        <xs:attribute name="origin" type="xs:string" use="optional"/>
+        <xs:attribute name="targetGuid" type="xs:string" use="optional"/>
+        <xs:attribute name="specialDevice" type="xs:boolean" use="optional"/>
+        <xs:attribute name="manuallyChecked" type="xs:boolean" use="optional"/>
 	</xs:complexType>
 
     <xs:complexType name="FeeObjectType">

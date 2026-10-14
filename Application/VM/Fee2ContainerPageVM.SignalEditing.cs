@@ -13,6 +13,7 @@ public sealed partial class Fee2ContainerPageVM
     {
         if (request.Target is not Fee2ContainerFoundContainerVM container || !CanAssignSignals(request.Source) ||
             SelectedRoot?.Editor is not { } editor || !editor.Containers.Contains(container)) return false;
+        using var change = BeginWorkspaceEdit();
         foreach (var source in SignalDragItems(request.Source))
         {
             Fee2ContainerFoundSignalVM signal;
@@ -22,7 +23,7 @@ public sealed partial class Fee2ContainerPageVM
                 if (existing.ContainerId == container.Id) { existing.IsIncluded = true; continue; }
                 editor.Signals.Remove(existing);
                 signal = new(container.Id, container.Component, container.Type, existing.Signal, existing.Slot,
-                    existing.Address, existing.DataType, existing.SignalId, existing.Note, existing.VariableGuid);
+                    existing.Address, existing.DataType, existing.SignalId, existing.Note, existing.VariableGuid, existing.InterfaceGuid, existing.InterfaceName);
             }
             else
             {
@@ -36,7 +37,7 @@ public sealed partial class Fee2ContainerPageVM
                 if (editor.Signals.Any(item => item.ContainerId == container.Id && item.VariableGuid == linked.Guid && item.Slot == slot && item.IsIncluded)) continue;
                 var address = container.IsSpecialDevice && !string.IsNullOrWhiteSpace(variable.Address) ? variable.Address : linked.Address;
                 signal = new(container.Id, container.Component, container.Type, variable.Signal, slot, address,
-                    variable.DataType, variable.Comment, "Manuell im ContainerFile zugeordnet; FEE-Verknüpfungen bleiben unverändert.", linked.Guid);
+                    variable.DataType, variable.Comment, "Manuell im ContainerFile zugeordnet; FEE-Verknüpfungen bleiben unverändert.", linked.Guid, variable.InterfaceGuid, variable.InterfaceName);
             }
             editor.AddSignal(signal);
         }

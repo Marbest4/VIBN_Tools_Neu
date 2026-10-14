@@ -43,17 +43,21 @@
 
         <StackPanel>
             <TextBlock FontSize="24" FontWeight="SemiBold" Text="FEE2Container" />
-            <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
-                       Text="Liest die aktuelle FEE-Struktur; Decoration, SceneObjectCompounder, CADAssembly und Roboterachsen j1–j9 bleiben ausgeblendet. SpecialDevices werden separat angezeigt. BasicFrames und Projektobjekte ohne BasicFrame bilden die auswählbaren Bereiche. Container zeigen Signale und FEE-Objekte getrennt. Für einen gemeinsamen Export alle gewünschten FEE-Roots sowie deren Container und Signale unter Export markieren. Eindeutige gleichnamige Objekte werden automatisch zugeordnet; andere und mehrdeutige Objekte bleiben für die manuelle Zuordnung verfügbar." />
+            <TextBlock Margin="0,7,0,0" TextWrapping="Wrap" Text="{Binding WorkflowText}" />
         </StackPanel>
 
         <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
+            <Button MinWidth="160" MinHeight="34" Content="1. Interfaces einlesen" Command="{Binding ReadInterfacesCommand}" />
+            <Button Margin="8,0,0,0" MinWidth="190" MinHeight="34" Content="Container aus Signalen erstellen" Command="{Binding GenerateSignalContainersCommand}" Click="CommitPendingEdits" />
+            <Button Margin="8,0,0,0" MinWidth="175" MinHeight="34" Content="FEE-Objekte zuordnen" Command="{Binding AssignSceneObjectsCommand}" Click="CommitPendingEdits" />
+            <Button Margin="8,0,0,0" MinWidth="105" MinHeight="34" Content="Rückgängig" Command="{Binding UndoCommand}" Click="CommitPendingEdits" />
+
             <Button Margin="0,0,8,0" MinWidth="145" MinHeight="34" Content="Req-XML laden …"
                     Command="{Binding OpenRequirementsCommand}" ToolTip="Optional: Req-XML einlesen oder eine bereits in ContainerGeneration geladene Datei verwenden." />
             <CheckBox Margin="0,0,12,0" VerticalAlignment="Center" Content="Req-XML verwenden"
                       IsChecked="{Binding UseRequirements}" IsEnabled="{Binding CanConfigureRequirements}" />
             <Button MinWidth="150" MinHeight="34"
-                    Content="FEE-Roots einlesen"
+                    Content="2. FEE-Roots einlesen"
                     Command="{Binding RefreshCommand}"
                     IsEnabled="{Binding CanRefresh}"
                     ToolTip="{Binding RefreshUnavailableReason}"
@@ -72,7 +76,20 @@
             <TextBlock Margin="8,4,0,0" VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding RequirementsDescription}" />
         </WrapPanel>
 
-        <DataGrid Grid.Row="2" ItemsSource="{Binding Roots}" SelectedItem="{Binding SelectedRoot}"
+        <Grid Grid.Row="2" IsEnabled="{Binding CanConfigureRequirements}">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="2*" /></Grid.ColumnDefinitions>
+            <GroupBox Header="1. Interfaces für die Signal-Erkennung">
+                <DataGrid ItemsSource="{Binding Interfaces}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="Suchen" Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="65" />
+                        <DataGridTextColumn Header="Interface" Binding="{Binding Name, Mode=OneWay}" IsReadOnly="True" Width="*" />
+                        <DataGridTextColumn Header="Signale" Binding="{Binding SignalCount, Mode=OneWay}" IsReadOnly="True" Width="70" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+            <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" />
+            <GroupBox Grid.Column="2" Header="2. FEE-Roots für die separate Objektzuordnung">
+        <DataGrid ItemsSource="{Binding ObjectRoots}"
                   AutoGenerateColumns="False" IsReadOnly="False"
                   CanUserAddRows="False" CanUserDeleteRows="False"
                   CanUserResizeRows="True" CanUserReorderColumns="True"
@@ -83,7 +100,8 @@
                   VirtualizingPanel.VirtualizationMode="Recycling"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True">
             <DataGrid.Columns>
-                <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Export" ToolTip="Legt fest, ob dieser oberste BasicFrame in das ContainerFile übernommen wird." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
+                <DataGridTextColumn Header="Interface" Binding="{Binding InterfacesText, Mode=OneWay}" IsReadOnly="True" Width="180" />
+                <DataGridCheckBoxColumn Binding="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"><DataGridCheckBoxColumn.Header><TextBlock Text="Zuordnen" ToolTip="Dieser Root wird beim nächsten Klick auf FEE-Objekte zuordnen berücksichtigt." /></DataGridCheckBoxColumn.Header></DataGridCheckBoxColumn>
                 <DataGridTextColumn Binding="{Binding Name}" Width="220" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="FEE-Root" ToolTip="Name des obersten BasicFrames, der den auszulesenden FEE-Teilbaum begrenzt." /></DataGridTextColumn.Header></DataGridTextColumn>
                 <DataGridTextColumn Binding="{Binding Guid}" Width="250" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="GUID" ToolTip="Eindeutige FEE-Objektkennung des Hauptknotens." /></DataGridTextColumn.Header></DataGridTextColumn>
                 <DataGridTextColumn Binding="{Binding SourceKind}" Width="210" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quelle" ToolTip="Zeigt, ob der Inhalt aus Provenienz oder durch Live-Rekonstruktion des FEE-Modells stammt." /></DataGridTextColumn.Header></DataGridTextColumn>
@@ -96,12 +114,14 @@
                 <DataGridTextColumn Binding="{Binding Provenance.SourceFingerprint, TargetNullValue=-}" Width="260" IsReadOnly="True"><DataGridTextColumn.Header><TextBlock Text="Quellfingerprint" ToolTip="Hash des ContainerFiles, aus dem dieser Root ursprünglich erzeugt wurde; '-' bedeutet keine Provenienz." /></DataGridTextColumn.Header></DataGridTextColumn>
             </DataGrid.Columns>
         </DataGrid>
+            </GroupBox>
+        </Grid>
 
         <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                       Background="#FFE0E0E0" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
                       ToolTip="Ziehen, um die Höhe der Root-Liste und der Ergebnislisten anzupassen." />
 
-        <Grid Grid.Row="4" Margin="0,10,0,0">
+        <Grid Grid.Row="4" Margin="0,10,0,0" IsEnabled="{Binding CanConfigureRequirements}">
             <Grid.Resources>
                 <Style x:Key="Fee2RelatedRowStyle" TargetType="DataGridRow">
                     <Setter Property="Background" Value="White" />
@@ -174,6 +194,12 @@
                             <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" IsReadOnly="True" Width="95" />
                             <DataGridTextColumn Header="Prüfstatus" Binding="{Binding ValidationError}" IsReadOnly="True" Width="*" MinWidth="150" />
                             <DataGridCheckBoxColumn Header="geprüft" Binding="{Binding ManuallyChecked, UpdateSourceTrigger=PropertyChanged}" Width="75" />
+                            <DataGridTextColumn Header="Interface" Binding="{Binding InterfacesText, Mode=OneWay}" IsReadOnly="True" Width="150" />
+                            <DataGridTextColumn Header="Erkennung" Binding="{Binding RecognitionOrigin, Mode=OneWay}" IsReadOnly="True" Width="220" />
+                            <DataGridTemplateColumn Header="SpecialDevices" Width="135" IsReadOnly="True"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                <Button Content="+ SpecialDevices" Padding="6,2" Command="{Binding DataContext.AddToSpecialDevicesCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                        CommandParameter="{Binding}" Click="OnAddToSpecialDevices" ToolTip="Vorhandene Logik in FEE2SpecialDevices übernehmen. Unbekannte Definitionen erhalten einen Hinweis." />
+                            </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="Aktion" Width="100"><DataGridTemplateColumn.CellTemplate><DataTemplate>
                                 <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                         CommandParameter="{Binding}" ToolTip="Container aus dem Arbeitsstand entfernen; FEE-Objekte und Verknüpfungen bleiben im Projekt erhalten." />
@@ -199,6 +225,7 @@
                                                 </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                                                 <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="60" />
                                                 <DataGridTextColumn Header="ID" Binding="{Binding SignalId, UpdateSourceTrigger=LostFocus}" Width="130" />
+                                                <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName, Mode=OneWay}" IsReadOnly="True" Width="160" />
                                                 <DataGridTextColumn Header="Address" Binding="{Binding Address, UpdateSourceTrigger=LostFocus}" Width="150" />
                                                 <DataGridTextColumn Header="DataType" Binding="{Binding DataType, UpdateSourceTrigger=LostFocus}" Width="100" />
                                                 <DataGridTextColumn Header="Signal" Binding="{Binding Signal, UpdateSourceTrigger=LostFocus}" Width="220" />
@@ -273,6 +300,7 @@
                         <DataGridTextColumn Header="Zugeordnet zu Container" Binding="{Binding Container}" Width="210" IsReadOnly="True" />
                         <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="190" />
                         <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="175" />
+                        <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName, Mode=OneWay}" IsReadOnly="True" Width="160" />
                         <DataGridTextColumn Header="Adresse/Pfad" Binding="{Binding Address}" Width="150" />
                         <DataGridTextColumn Header="Datentyp" Binding="{Binding DataType}" Width="115" />
                         <DataGridTextColumn Header="Status" Binding="{Binding AssignmentState}" Width="230" IsReadOnly="True" />
@@ -358,6 +386,7 @@
                                 <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="200" />
                                 <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="140" />
                                 <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="220" />
+                                <DataGridTextColumn Header="Definitionshinweis" Binding="{Binding SpecialDeviceWarning, Mode=OneWay}" Width="300" />
                                 <DataGridTextColumn Header="E-Byte" Binding="{Binding InputByteText}" Width="80" />
                                 <DataGridTextColumn Header="A-Byte" Binding="{Binding OutputByteText}" Width="80" />
                                 <DataGridTextColumn Header="Signaladressen" Binding="{Binding SignalAddresses}" Width="350" />
@@ -378,6 +407,7 @@
                         </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
 
                                 <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="230" />
+                                <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName, Mode=OneWay}" IsReadOnly="True" Width="160" />
                                 <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="180" />
                                 <DataGridTextColumn Header="DataType" Binding="{Binding DataType}" Width="110" />
                                 <DataGridTextColumn Header="Verknüpfung" Binding="{Binding ConnectionText}" Width="400" />

@@ -24,7 +24,7 @@ public sealed record FeeContainerLiveVariable(
     string Path,
     string DataType,
     string Comment,
-    string Usage = "");
+    string Usage = "", string InterfaceGuid = "", string InterfaceName = "");
 
 public sealed record FeeContainerLiveAssignment(
     Guid VariableGuid,
@@ -84,7 +84,7 @@ public static class FeeContainerLiveReconstructor
         IEnumerable<FeeContainerLiveObject> objects,
         IEnumerable<FeeContainerLiveVariable> variables,
         IEnumerable<FeeContainerLiveAssignment> assignments,
-        ContainerRequirementsCatalog? requirements = null)
+        ContainerRequirementsCatalog? requirements = null, bool requireConnectedSignal = false)
     {
         ArgumentNullException.ThrowIfNull(objects);
         ArgumentNullException.ThrowIfNull(variables);
@@ -107,8 +107,8 @@ public static class FeeContainerLiveReconstructor
 
         foreach (var item in sourceObjects)
         {
-            // Cabinets and elementary operators are members, never guessed
-            // container definitions from a coincidentally matching slot set.
+            // Cabinets stay members. Connected elementary operators are
+            // classified separately below, without guessing a business type.
             if (EndsWithType(item.FeeType, "Cabinet") || IsHelper(item.FeeType) && !EndsWithType(item.FeeType, "BoolNot"))
                 continue;
             if (item.IsSpecialDevice && !string.IsNullOrWhiteSpace(item.LogicDefinitionName))
@@ -132,6 +132,25 @@ public static class FeeContainerLiveReconstructor
         // since been renamed or changed type. Live logic/cabinet/button GUIDs
         // remain distinct; same-name ancillary sensors belong to their logic.
         var byGuid = sourceObjects.ToDictionary(item => item.Guid);
+        // A directly connected, otherwise standalone operator is a signal
+        // container. Operators already routed to another primary remain members.
+        var primaryGuids = candidates.Select(item => item.Object.Guid).ToHashSet();
+        foreach (var item in sourceObjects.Where(item => IsHelper(item.FeeType) && !primaryGuids.Contains(item.Guid) &&
+            (assignmentsByObject.GetValueOrDefault(item.Guid)?.Length ?? 0) > 0))
+        {
+            var pending = new Queue<Guid>(); pending.Enqueue(item.Guid);
+            var visited = new HashSet<Guid>(); var attached = false;
+            while (pending.TryDequeue(out var guid) && !attached)
+            {
+                if (!visited.Add(guid) || !byGuid.TryGetValue(guid, out var current)) continue;
+                foreach (var peer in current.LinkedObjectGuids ?? [])
+                    if (primaryGuids.Contains(peer)) { attached = true; break; }
+                    else if (byGuid.TryGetValue(peer, out var neighbour) && IsHelper(neighbour.FeeType)) pending.Enqueue(peer);
+            }
+            var ownVariables = assignmentsByObject[item.Guid].Select(route => route.VariableGuid).ToHashSet();
+            attached |= candidates.Any(candidate => (assignmentsByObject.GetValueOrDefault(candidate.Object.Guid) ?? []).Any(route => ownVariables.Contains(route.VariableGuid)));
+            if (!attached) candidates.Add(new(item, "N/A", "N/A", item.Name));
+        }
         candidates = candidates.Where(item => !IsRedundantLegacySimObject(item, candidates, byGuid)).ToList();
         issues.AddRange(candidates.Where(candidate => candidateWarnings.ContainsKey(candidate.Object.Guid))
             .Select(candidate => new FeeContainerReconstructionIssue(candidate.Object.Guid, candidateWarnings[candidate.Object.Guid])));
@@ -171,6 +190,7 @@ public static class FeeContainerLiveReconstructor
                 .ToArray();
 
             var componentName = candidate.ComponentName;
+            if (requireConnectedSignal && resolved.Length == 0) continue;
             if (string.IsNullOrWhiteSpace(componentName))
                 componentName = resolved.FirstOrDefault()?.Variable.Signal;
             if (string.IsNullOrWhiteSpace(componentName))

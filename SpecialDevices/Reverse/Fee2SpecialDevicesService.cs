@@ -7,8 +7,10 @@ namespace VIBN_Tools.SpecialDevices;
 public sealed record Fee2SpecialDeviceRoot(
     Guid Guid, string Name, FeeSpecialDeviceSnapshot Snapshot, int UpdatedSignalCount, int MissingSignalCount,
     bool HasProvenance = false, Fee2SpecialDeviceSignalCoverage? SignalCoverage = null,
-    string LogicDefinitionName = "", string ParentName = "", int? CurrentInputByte = null, int? CurrentOutputByte = null)
+    string LogicDefinitionName = "", string ParentName = "", int? CurrentInputByte = null, int? CurrentOutputByte = null,
+    bool IsDefinitionKnown = true, string DefinitionWarning = "")
 {
+    public string DefinitionStatus => IsDefinitionKnown ? "In SpecialDevices definiert" : DefinitionWarning;
     public string SourceKind => "Aktuelle FEE-Struktur";
     public int InputSignalCount => SignalCoverage?.InputSignalCount ?? 0;
     public int ConnectedInputSignalCount => SignalCoverage?.ConnectedInputSignalCount ?? 0;

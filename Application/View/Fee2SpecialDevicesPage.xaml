@@ -65,6 +65,7 @@
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Gerät / LogicObject" Binding="{Binding Name}" Width="2*" />
                 <DataGridTextColumn Header="Parent" Binding="{Binding ParentName}" Width="160" />
+                <DataGridTextColumn Header="Definition" Binding="{Binding DefinitionStatus, Mode=OneWay}" Width="300" />
                 <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="200" />
                 <DataGridTextColumn Header="Präfix" Binding="{Binding Snapshot.Prefix}" Width="*" />
                 <DataGridTextColumn Header="Hersteller" Binding="{Binding Snapshot.Manufacturer}" Width="*" />

@@ -68,7 +68,7 @@ public static class FeeSpecialDeviceLiveProjector
         return bytes.Count == 0 ? null : bytes.Min();
     }
 
-    private static string? InferRobotType(IEnumerable<FeeSpecialDeviceSignalSnapshot> signals)
+    public static string? InferRobotType(IEnumerable<FeeSpecialDeviceSignalSnapshot> signals)
     {
         var addresses = signals.Select(item => item.Address).Where(address => !string.IsNullOrWhiteSpace(address)).ToArray();
         if (addresses.Any(address => address.StartsWith("$IN[", StringComparison.OrdinalIgnoreCase) || address.StartsWith("$OUT[", StringComparison.OrdinalIgnoreCase))) return "Kuka";

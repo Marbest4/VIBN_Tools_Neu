@@ -57,6 +57,7 @@ public sealed partial class Fee2ContainerPageVM
         GroupContainersCommand = new RelayCommand(() =>
         {
             if (SelectedRoot is not { } root) return;
+            using var change = BeginWorkspaceEdit();
             var edit = new Fee2ContainerEditVM(root, SupportedContainerTypes);
             edit.Settings.GroupByComponent = GroupingSettings.GroupByComponent;
             edit.Settings.GroupByType = GroupingSettings.GroupByType;
@@ -89,6 +90,7 @@ public sealed partial class Fee2ContainerPageVM
         _linkedSignalsContainerId = null;
         RefreshLinkedSignals();
         OnPropertyChanged(nameof(SpecialDevicesView));
+        if (!_restoringWorkspace && _lastWorkspaceState is null) _lastWorkspaceState = CaptureWorkspace();
     }
 
     private void OnObjectTypeFilterChanged(object? sender, PropertyChangedEventArgs args)
@@ -100,6 +102,7 @@ public sealed partial class Fee2ContainerPageVM
         RefreshLinkedSignals();
         SelectedRoot?.NotifyCounts();
         OnPropertyChanged(nameof(SelectionSummary));
+        TrackWorkspaceChange(); SpecialDevicesView.Refresh();
     }
 
     private static int CountLinkedUnassignedSignals(Fee2ContainerRootEditor? editor, string? containerId)
@@ -131,7 +134,7 @@ public sealed partial class Fee2ContainerPageVM
                 if (!variables.TryGetValue(group.Key, out var variable)) continue;
                 rows.Add(new Fee2ContainerLinkedSignalVM(group.Key, variable.Signal,
                     string.IsNullOrWhiteSpace(variable.Path) ? variable.Address : variable.Path, variable.DataType,
-                    string.Join("; ", group.Select(item => $"{details.GetValueOrDefault(item.TargetObjectGuid)?.Name ?? item.TargetObjectGuid.ToString("D")}/{item.TargetSlot}").Distinct())));
+                    string.Join("; ", group.Select(item => $"{details.GetValueOrDefault(item.TargetObjectGuid)?.Name ?? item.TargetObjectGuid.ToString("D")}/{item.TargetSlot}").Distinct()), variable.InterfaceName));
             }
         }
         LinkedUnassignedSignals.ReplaceWith(rows.OrderBy(item => item.Signal, StringComparer.OrdinalIgnoreCase));
@@ -147,4 +150,4 @@ public sealed class Fee2ContainerObjectTypeFilterVM(string feeType, bool isVisib
     public bool IsVisible { get => _isVisible; set => SetPropertyChange(ref _isVisible, value); }
 }
 
-public sealed record Fee2ContainerLinkedSignalVM(Guid Guid, string Signal, string Address, string DataType, string ConnectionText);
+public sealed record Fee2ContainerLinkedSignalVM(Guid Guid, string Signal, string Address, string DataType, string ConnectionText, string InterfaceName = "");

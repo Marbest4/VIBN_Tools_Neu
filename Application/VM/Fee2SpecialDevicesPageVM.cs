@@ -105,8 +105,8 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
     }
 
     public bool CanRefresh => !IsBusy && Connection.CanUseFeeFeatures;
-    public bool CanExport => !IsBusy && SelectedRoot is not null;
-    public bool CanExportAll => !IsBusy && Roots.Count > 0;
+    public bool CanExport => !IsBusy && SelectedRoot is { IsDefinitionKnown: true };
+    public bool CanExportAll => !IsBusy && Roots.Count > 0 && Roots.All(item => item.IsDefinitionKnown);
     public bool CanRemoveSelected => !IsBusy && SelectedRoot is not null;
     public bool CanRemoveAll => !IsBusy && Roots.Count > 0;
     public string RefreshUnavailableReason => Connection.CanUseFeeFeatures
@@ -114,6 +114,7 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
         : Connection.UnavailableReason;
     public string ExportUnavailableReason => SelectedRoot is null
         ? "Zuerst einen erkannten Special-Device-Root auswählen."
+        : !SelectedRoot.IsDefinitionKnown ? SelectedRoot.DefinitionWarning
         : IsBusy ? "Ein FEE2SpecialDevices-Vorgang läuft bereits." : string.Empty;
     public string SelectionSummary => SelectedRoot is null
         ? "Kein Root ausgewählt."
@@ -169,11 +170,29 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
     public void LoadDevices(IEnumerable<Fee2SpecialDeviceRoot> devices)
     {
         Roots.Clear(); Issues.Clear();
-        foreach (var device in devices.DistinctBy(item => item.Guid)) Roots.Add(device);
+        foreach (var device in devices.DistinctBy(item => (item.Guid, item.Name)))
+        { Roots.Add(device); if (!device.IsDefinitionKnown) Issues.Add(device.DefinitionWarning); }
         SelectedRoot = Roots.FirstOrDefault();
         OnPropertyChanged(nameof(CanExportAll)); OnPropertyChanged(nameof(CanRemoveAll));
         StatusText = $"{Roots.Count} Gerät(e) aus dem aktuellen FEE2Container-Snapshot übernommen.";
         CommandManager.InvalidateRequerySuggested();
+    }
+
+    public void AddDevices(IEnumerable<Fee2SpecialDeviceRoot> devices)
+    {
+        var candidates = devices.DistinctBy(item => (item.Guid, item.Name)).ToArray();
+        foreach (var candidate in candidates)
+        {
+            var existing = Roots.FirstOrDefault(item => candidate.Guid != Guid.Empty ? item.Guid == candidate.Guid :
+                item.Guid == Guid.Empty && item.Name == candidate.Name);
+            if (existing is not null) Roots[Roots.IndexOf(existing)] = candidate;
+            else Roots.Add(candidate);
+            if (!candidate.IsDefinitionKnown && !Issues.Contains(candidate.DefinitionWarning)) Issues.Add(candidate.DefinitionWarning);
+        }
+        SelectedRoot = candidates.FirstOrDefault() ?? SelectedRoot;
+        OnPropertyChanged(nameof(CanExportAll)); OnPropertyChanged(nameof(CanRemoveAll));
+        CommandManager.InvalidateRequerySuggested();
+        StatusText = $"{candidates.Length} Container aus FEE2Container zur SpecialDevices-Übersicht hinzugefügt.";
     }
 
     private Task ExportAllAsync()

@@ -148,8 +148,9 @@ internal static partial class Program
         var variables = new FeeContainerLiveVariable[] { new(signal, "Ready", "%I0.0", "", "Bool", "S1") };
         var stale = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", objects, variables,
             [new(signal, helper, "Output 01")]);
-        if (stale.Snapshot.SignalCount != 0)
-            throw new InvalidOperationException("Old helper provenance invented a current signal route.");
+        if (stale.Snapshot.SignalCount != 1 || stale.Snapshot.ContainerDocument.Descendants("Container").Single(item =>
+                item.Element("Component")?.Value == "OtherHelper").Element("Type")?.Value != "N/A")
+            throw new InvalidOperationException("A helper-only active signal disappeared or old provenance assigned it to the wrong container.");
         var result = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", objects, variables,
             [new(signal, helper, "Output 01"), new(signal, primary, "Output 01")]);
         if (result.Snapshot.SignalCount != 1 || result.ObjectAssociations.Single(item => item.ObjectGuid == helper).Role != "TechnicalHelper" ||

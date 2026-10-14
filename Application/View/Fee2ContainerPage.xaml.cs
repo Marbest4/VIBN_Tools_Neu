@@ -44,6 +44,9 @@ public partial class Fee2ContainerPage : UserControl
     }
 
     private void OpenSpecialDevices(object sender, RoutedEventArgs args)
+        => TransferSpecialDevices(append: false);
+
+    private void TransferSpecialDevices(bool append, VIBN_Tools.Application.VM.Fee2ContainerFoundContainerVM? container = null)
     {
         if (System.Windows.Application.Current?.MainWindow is not { } main) return;
         foreach (var tabs in FindControls<TabControl>(main))
@@ -56,12 +59,25 @@ public partial class Fee2ContainerPage : UserControl
                         if (tab.Content is LazyPageHost host) host.EnsureContent();
                         var target = FindControls<Fee2SpecialDevicesPage>(main).FirstOrDefault();
                         if (target?.DataContext is not VIBN_Tools.Application.VM.Fee2SpecialDevicesPageVM devices) return;
-                        var current = (DataContext as VIBN_Tools.Application.VM.Fee2ContainerPageVM)?.SelectedRoot?.Root.SpecialDevices;
-                        if (current is { Count: > 0 }) devices.LoadDevices(current);
+                        var current = (DataContext as VIBN_Tools.Application.VM.Fee2ContainerPageVM)?.CreateSpecialDeviceCandidates(container);
+                        if (current is { Count: > 0 })
+                        {
+                            if (append) devices.AddDevices(current);
+                            else devices.LoadDevices(current);
+                        }
                         else if (devices.RefreshCommand.CanExecute(null)) devices.RefreshCommand.Execute(null);
                     }));
                     return;
                 }
+    }
+
+    private void OnAddToSpecialDevices(object sender, RoutedEventArgs args)
+    {
+        CommitPendingEdits(sender, args);
+        // WPF executes the bound command after Click. Transfer only after its
+        // classification and workspace history have been updated.
+        var container = (sender as Button)?.CommandParameter as VIBN_Tools.Application.VM.Fee2ContainerFoundContainerVM;
+        _ = Dispatcher.BeginInvoke(new Action(() => TransferSpecialDevices(append: true, container)));
     }
 
     private static IEnumerable<T> FindControls<T>(DependencyObject parent) where T : DependencyObject

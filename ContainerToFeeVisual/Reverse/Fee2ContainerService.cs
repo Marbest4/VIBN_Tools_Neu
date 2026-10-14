@@ -30,7 +30,7 @@ public sealed record Fee2ContainerRoot(
     IReadOnlyList<VIBN_Tools.SpecialDevices.Fee2SpecialDeviceRoot>? SpecialDevices = null)
 {
     public bool HasProvenance => Provenance is not null && UsesExactProvenance;
-    public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : "FEE-Struktur (rekonstruiert)";
+    public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : Guid == System.Guid.Empty ? "Signal-Interfaces (rekonstruiert)" : "FEE-Struktur (rekonstruiert)";
     public int ContainerCount => Provenance?.ContainerCount ?? 0;
     public int SignalCount => Provenance?.SignalCount ?? 0;
 }
@@ -60,6 +60,8 @@ public sealed record Fee2ContainerProgress(int Percent, string Message);
 /// </summary>
 public sealed class Fee2ContainerService
 {
+    public IReadOnlyDictionary<string, string> InterfaceNames { get; set; } = new Dictionary<string, string>();
+    public IReadOnlySet<string>? SelectedInterfaceGuids { get; set; }
     public ContainerRequirementsCatalog? Requirements { get; set; }
     public async Task<Fee2ContainerDiscoveryResult> DiscoverAsync(
         CancellationToken cancellationToken = default,
@@ -458,7 +460,7 @@ public sealed class Fee2ContainerService
         return result;
     }
 
-    private static async Task<Fee2ContainerDiscoveryResult> DiscoverFromLiveSceneAsync(
+    private async Task<Fee2ContainerDiscoveryResult> DiscoverFromLiveSceneAsync(
         IProgress<Fee2ContainerProgress>? progress,
         CancellationToken cancellationToken,
         ContainerRequirementsCatalog? requirements)
@@ -488,8 +490,10 @@ public sealed class Fee2ContainerService
         var liveVariables = await Fee2ContainerReadPhase.ReadAsync("Aktuelle FEE-Variablen lesen", async () =>
         {
             var variables = await Services.ApiInstance!.Interface.GetAllVariablesAsync() ?? [];
-            return variables.Select(signal => new FeeContainerLiveVariable(signal.VariableGuid,
-                signal.Tag ?? "", signal.Address ?? "", signal.Path ?? "", signal.Type.ToString(), signal.Comment ?? "", signal.Usage.ToString()))
+            return variables.Where(signal => SelectedInterfaceGuids is null || SelectedInterfaceGuids.Contains(signal.InterfaceGuid.ToString("D")))
+                .Select(signal => new FeeContainerLiveVariable(signal.VariableGuid,
+                signal.Tag ?? "", signal.Address ?? "", signal.Path ?? "", signal.Type.ToString(), signal.Comment ?? "", signal.Usage.ToString(),
+                signal.InterfaceGuid.ToString("D"), InterfaceNames.GetValueOrDefault(signal.InterfaceGuid.ToString("D")) ?? signal.InterfaceGuid.ToString("D")))
                 .DistinctBy(signal => signal.VariableGuid).ToArray();
         }, cancellationToken);
         EnsureLiveConnection(connectionRevision);
@@ -542,7 +546,8 @@ public sealed class Fee2ContainerService
             try
             {
                 var liveObjects = scoped.Select(item => ToLiveObject(item, hints.GetValueOrDefault(item.Guid), relatedObjects[item.Guid].Distinct().ToArray())).ToArray();
-                var reconstructed = FeeContainerLiveReconstructor.Reconstruct(root.Guid, root.Name, liveObjects, liveVariables, assignments, requirements);
+                var reconstructed = FeeContainerLiveReconstructor.Reconstruct(root.Guid, root.Name, liveObjects, liveVariables, assignments, requirements,
+                    requireConnectedSignal: SelectedInterfaceGuids is not null);
                 var associations = FeeContainerAssociationProjection.Apply(reconstructed.Snapshot, reconstructed, scoped)
                     .Select(item => item with { ParentName = details[item.ObjectGuid].ParentName,
                         LogicDefinitionName = details[item.ObjectGuid].LogicDefinitionName, ConnectionText = details[item.ObjectGuid].ConnectionText }).ToArray();
@@ -642,8 +647,8 @@ public sealed class Fee2ContainerService
                 item.Name ?? "", item.FeeType ?? "", ContainerFileXml.IsTechnicalHelperType(item.FeeType) ? "TechnicalHelper" : "Available", "", item.TypeName,
                 logicDefinitionName: (item as FeeLogic)?.LogicDefinitionName ?? ""))),
             new XElement("Signals", variables.Select(item => new XElement("Signal",
-                new XElement("Guid", item.VariableGuid.ToString("D")), new XElement("InterfaceGuid", ""),
-                new XElement("InterfaceName", ""), new XElement("Tag", item.Signal),
+                new XElement("Guid", item.VariableGuid.ToString("D")), new XElement("InterfaceGuid", item.InterfaceGuid),
+                new XElement("InterfaceName", item.InterfaceName), new XElement("Tag", item.Signal),
                 new XElement("Address", item.Address), new XElement("Path", item.Path), new XElement("DataType", item.DataType))))));
     }
 
@@ -702,7 +707,7 @@ public sealed class Fee2ContainerService
             if (item is FeeCabinetElement)
                 while (parent is not null && parent is not FeeCabinet && visited.Add(parent.Guid)) parent = parent.Parent;
             parent ??= item.Parent;
-            var logic = (item as FeeLogic)?.LogicDefinitionName ?? "";
+            var logic = (item as FeeLogic)?.LogicDefinitionName ?? (ContainerFileXml.IsTechnicalHelperType(item.FeeType) && item is not FeeCabinet ? item.FeeType : "");
             var connected = signalDetails[item.Guid].Select(link => $"{link.TargetSlot} ↔ Signal {signals.GetValueOrDefault(link.VariableGuid)?.Signal ?? link.VariableGuid.ToString("D")}")
                 .Concat(objectDetails[item.GuidString]).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(text => text, StringComparer.OrdinalIgnoreCase);
             return new FeeContainerObjectDetails(item.Guid, item.Name ?? "", item.FeeType ?? "", parent?.Name ?? "",

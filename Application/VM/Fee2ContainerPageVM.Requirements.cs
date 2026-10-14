@@ -25,7 +25,7 @@ public sealed partial class Fee2ContainerPageVM
             _useRequirements = value;
             OnPropertyChanged();
             RefreshRequirementDefinitions();
-            StatusText = "Typdefinitionen geändert. FEE-Roots erneut einlesen, um die neue Auswahl anzuwenden.";
+            StatusText = "Typdefinitionen geändert. Container aus Signalen erneut erstellen, um die neue Req-Auswahl anzuwenden.";
         }
     }
     public string RequirementsDescription => _service.Requirements is null
@@ -68,7 +68,7 @@ public sealed partial class Fee2ContainerPageVM
             _useRequirements = true;
             OnPropertyChanged(nameof(UseRequirements));
             RefreshRequirementDefinitions();
-            StatusText = "Req-XML eingelesen. FEE-Roots erneut einlesen; vorhandene Bearbeitungen bleiben bis dahin erhalten.";
+            StatusText = "Req-XML eingelesen. Container aus Signalen erneut erstellen; vorhandene Bearbeitungen bleiben bis dahin erhalten.";
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { StatusText = "Einlesen der Req-XML abgebrochen."; }
         catch (Exception exception) { ReportOperationFailure("Req-XML konnte nicht gelesen werden", exception); }

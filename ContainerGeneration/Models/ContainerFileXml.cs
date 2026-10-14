@@ -41,7 +41,7 @@ public static class ContainerFileXml
     private static readonly HashSet<string> TechnicalHelperTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "Cabinet", "BoolNot", "MoveBit", "BoolAnd", "BoolAnd3Inputs", "BoolAlwaysTrue", "BoolAnd10Inputs",
-        "ConvertBoolToByte", "ConvertByteToBool", "BoolCopy5Outputs", "BoolOr", "BoolPositiveEdge"
+        "ConvertBoolToByte", "ConvertByteToBool", "BoolCopy5Outputs", "BoolOr", "BoolPositiveEdge", "CounterSLO"
     };
 
     public static bool IsTechnicalHelperType(string? feeType) =>
@@ -53,7 +53,8 @@ public static class ContainerFileXml
     public static bool IsStructuralObjectAssociation(string? feeType, string? role) =>
         IsTechnicalHelperAssociation(feeType, role) ||
         string.Equals(role, "Primary", StringComparison.OrdinalIgnoreCase) &&
-        string.Equals((feeType ?? "").Split('.').Last(), "CabinetElement", StringComparison.OrdinalIgnoreCase);
+        (new[] { "CabinetElement", "LogicObject" }.Contains((feeType ?? "").Split('.').Last(), StringComparer.OrdinalIgnoreCase) ||
+            IsTechnicalHelperType(feeType) && !string.Equals(feeType, "Cabinet", StringComparison.OrdinalIgnoreCase));
 
     public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName) =>
         item.Attribute("assignment")?.Value == "Manual" || HasMatchingObjectName(liveName, containerName) ||
