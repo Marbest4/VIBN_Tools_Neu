@@ -184,8 +184,8 @@
                                 <Border Padding="8" Background="#FFF7F9FB" BorderBrush="#FFD6DCE3" BorderThickness="0,0,0,1">
                                     <StackPanel>
                                         <WrapPanel Margin="0,0,0,8">
-                                            <TextBlock Margin="0,0,18,0"><Run FontWeight="SemiBold" Text="Parent / Cabinet: " /><Run Text="{Binding ParentName}" /></TextBlock>
-                                            <TextBlock><Run FontWeight="SemiBold" Text="Logik: " /><Run Text="{Binding LogicDefinitionName}" /></TextBlock>
+                                            <TextBlock Margin="0,0,18,0"><Run FontWeight="SemiBold" Text="Parent / Cabinet: " /><Run Text="{Binding ParentName, Mode=OneWay}" /></TextBlock>
+                                            <TextBlock><Run FontWeight="SemiBold" Text="Logik: " /><Run Text="{Binding LogicDefinitionName, Mode=OneWay}" /></TextBlock>
                                         </WrapPanel>
                                         <TextBlock Margin="0,0,0,4" FontWeight="SemiBold" Text="Signale des Containers" />
                                         <DataGrid ItemsSource="{Binding DataList}" AutoGenerateColumns="False" HeadersVisibility="Column"
@@ -231,14 +231,14 @@
                                                         </ContextMenu>
                                                     </Border.ContextMenu>
                                                     <TextBlock TextWrapping="Wrap">
-                                                        <Run Text="{Binding ObjectName}" /><Run Text=" (" /><Run Text="{Binding ObjectType}" /><Run Text=") · " /><Run Text="{Binding Role}" />
+                                                        <Run Text="{Binding ObjectName, Mode=OneWay}" /><Run Text=" (" /><Run Text="{Binding ObjectType, Mode=OneWay}" /><Run Text=") · " /><Run Text="{Binding Role, Mode=OneWay}" />
                                                     </TextBlock>
                                                 </Border>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                         </ScrollViewer>
-                                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Verknüpfung: " /><Run Text="{Binding ConnectionText}" /></TextBlock>
+                                        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap"><Run FontWeight="SemiBold" Text="Verknüpfung: " /><Run Text="{Binding ConnectionText, Mode=OneWay}" /></TextBlock>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
