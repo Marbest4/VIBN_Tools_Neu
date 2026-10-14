@@ -1,3 +1,4 @@
+using VIBN_Tools.GlobalClasses;
 using static VIBN_Tools.SpecialDevices.DeviceCatalog;
 
 namespace VIBN_Tools.SpecialDevices;

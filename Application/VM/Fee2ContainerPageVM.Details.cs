@@ -16,7 +16,16 @@ public sealed partial class Fee2ContainerPageVM
     private bool _showLinkedUnassignedSignals;
     private string? _linkedSignalsContainerId;
     private int _selectedResultTabIndex;
-    public int SelectedResultTabIndex { get => _selectedResultTabIndex; set => SetPropertyChange(ref _selectedResultTabIndex, value); }
+    public int SelectedResultTabIndex
+    {
+        get => _selectedResultTabIndex;
+        set
+        {
+            if (_selectedResultTabIndex == value) return;
+            _selectedResultTabIndex = value;
+            OnPropertyChanged();
+        }
+    }
     public ObservableCollection<Fee2ContainerObjectTypeFilterVM> ObjectTypeFilters { get; } = new();
     public ObservableCollection<Fee2ContainerLinkedSignalVM> LinkedUnassignedSignals { get; } = new RangeObservableCollection<Fee2ContainerLinkedSignalVM>();
     public ICollectionView SpecialDevicesView { get; private set; } = null!;
@@ -26,7 +35,12 @@ public sealed partial class Fee2ContainerPageVM
     public bool ShowLinkedUnassignedSignals
     {
         get => _showLinkedUnassignedSignals;
-        set => SetPropertyChange(ref _showLinkedUnassignedSignals, value);
+        set
+        {
+            if (_showLinkedUnassignedSignals == value) return;
+            _showLinkedUnassignedSignals = value;
+            OnPropertyChanged();
+        }
     }
     public string LinkedSignalsSummary => $"{LinkedUnassignedSignals.Count} verknüpfte Signale ohne vollständige Containerzuordnung";
     public int LinkedUnassignedSignalCount => CountLinkedUnassignedSignals(SelectedRoot?.Editor, null);
