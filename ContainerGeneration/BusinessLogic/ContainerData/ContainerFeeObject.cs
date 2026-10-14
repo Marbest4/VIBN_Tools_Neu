@@ -14,10 +14,12 @@ public sealed class ContainerFeeObject
     public string ClrType { get; set; } = string.Empty;
     [XmlArray("Slots"), XmlArrayItem("Slot")]
     public List<ContainerFeeSlot> Slots { get; set; } = [];
+    public string LogicDefinitionName { get; set; } = string.Empty;
     public ContainerFeeObject Clone() => new()
     {
         Guid = Guid, Name = Name, FeeType = FeeType, Role = Role, Target = Target, ClrType = ClrType, AssignmentKind = AssignmentKind,
-        Slots = Slots.Select(slot => new ContainerFeeSlot { Name = slot.Name, AssignedGuid = slot.AssignedGuid }).ToList()
+        Slots = Slots.Select(slot => new ContainerFeeSlot { Name = slot.Name, AssignedGuid = slot.AssignedGuid }).ToList(),
+        LogicDefinitionName = LogicDefinitionName
     };
 }
 

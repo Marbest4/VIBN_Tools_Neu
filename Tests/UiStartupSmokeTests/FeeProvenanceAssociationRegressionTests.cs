@@ -152,14 +152,15 @@ internal static partial class Program
             throw new InvalidOperationException("Old helper provenance invented a current signal route.");
         var result = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", objects, variables,
             [new(signal, helper, "Output 01"), new(signal, primary, "Output 01")]);
-        if (result.Snapshot.SignalCount != 1 || result.ObjectAssociations.Any(item => item.ObjectGuid == helper) ||
-            result.UnmappedObjects.Single().Guid != helper)
-            throw new InvalidOperationException("A current technical route was lost or authorized a differently named automatic object association.");
+        if (result.Snapshot.SignalCount != 1 || result.ObjectAssociations.Single(item => item.ObjectGuid == helper).Role != "TechnicalHelper" ||
+            result.UnmappedObjects.Count != 0)
+            throw new InvalidOperationException("A current technical route did not retain its linked helper, or duplicated the primary signal.");
         var cabinet = Guid.NewGuid();
         var labelled = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root",
             [new(cabinet, "RawName;%I0.0", "CabinetElement", CabinetDefinition: "Grob_2PositionSwitch", Label: "Selector")],
             [new(signal, "Selected", "%I0.0", "", "Bool", "S1")], [new(signal, cabinet, "NO1")]);
-        if (labelled.Snapshot.SignalCount != 1 || labelled.ObjectAssociations.Count != 0 || labelled.UnmappedObjects.Single().Guid != cabinet)
-            throw new InvalidOperationException("Cabinet label handling authorized a different object name or dropped its signal.");
+        if (labelled.Snapshot.SignalCount != 1 || labelled.ObjectAssociations.Single().ObjectGuid != cabinet || labelled.UnmappedObjects.Count != 0 ||
+            labelled.Snapshot.ContainerDocument.Descendants("Component").Single().Value != "Selector")
+            throw new InvalidOperationException("CabinetElement identity, display label or current signal was dropped.");
     }
 }

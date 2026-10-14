@@ -76,7 +76,7 @@ public static class FeeContainerLiveReconstructor
     /// contract, including signal-only types retained by root provenance.
     /// </summary>
     public static IReadOnlyList<string> SupportedContainerTypes =>
-        ContainerMetadataCatalog.SupportedXmlTypes;
+        ContainerMetadataCatalog.SupportedXmlTypes.Concat(["N/A"]).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     public static FeeContainerReconstructionResult Reconstruct(
         Guid rootGuid,
@@ -107,6 +107,10 @@ public static class FeeContainerLiveReconstructor
 
         foreach (var item in sourceObjects)
         {
+            // Cabinets and elementary operators are members, never guessed
+            // container definitions from a coincidentally matching slot set.
+            if (EndsWithType(item.FeeType, "Cabinet") || IsHelper(item.FeeType) && !EndsWithType(item.FeeType, "BoolNot"))
+                continue;
             if (item.IsSpecialDevice && !string.IsNullOrWhiteSpace(item.LogicDefinitionName))
             {
                 candidates.Add(new ContainerCandidate(item, item.LogicDefinitionName, item.LogicDefinitionName, item.Name));
@@ -132,7 +136,7 @@ public static class FeeContainerLiveReconstructor
         issues.AddRange(candidates.Where(candidate => candidateWarnings.ContainsKey(candidate.Object.Guid))
             .Select(candidate => new FeeContainerReconstructionIssue(candidate.Object.Guid, candidateWarnings[candidate.Object.Guid])));
 
-        var objectAssociations = ResolveAllObjectAssociations(sourceObjects, candidates, issues)
+        var objectAssociations = ResolveAllObjectAssociations(sourceObjects, candidates, assignmentsByObject, issues)
             .Select(item => byGuid.GetValueOrDefault(item.ContainerObjectGuid)?.IsSpecialDevice == true && item.ObjectGuid == item.ContainerObjectGuid
                 ? item with { Role = "SpecialDevice" } : item).ToArray();
         relevantObjectGuids.Clear();
@@ -232,7 +236,8 @@ public static class FeeContainerLiveReconstructor
                 dataList,
                 new XElement("SimObjects", members.Select(item => ContainerFileXml.Object(
                     item.ObjectGuid.ToString("D"), item.ObjectName, item.ObjectType,
-                    item.Role)))));
+                    item.Role, assignmentKind: ContainerFileXml.IsStructuralObjectAssociation(item.ObjectType, item.Role) ? "Linked" : "Automatic",
+                    logicDefinitionName: byGuid[item.ObjectGuid].LogicDefinitionName ?? "")))));
         }
 
         var document = new XDocument(
@@ -251,7 +256,7 @@ public static class FeeContainerLiveReconstructor
             bindings.Count,
             string.Empty);
         var unmapped = sourceObjects
-            .Where(item => !relevantObjectGuids.Contains(item.Guid))
+            .Where(item => !relevantObjectGuids.Contains(item.Guid) && !EndsWithType(item.FeeType, "Cabinet"))
             .Select(item => new FeeContainerUnmappedObject(
                 item.Guid,
                 item.Name,
@@ -272,17 +277,21 @@ public static class FeeContainerLiveReconstructor
 
     private static FeeContainerObjectAssociation[] ResolveAllObjectAssociations(
         IReadOnlyList<FeeContainerLiveObject> objects, IReadOnlyList<ContainerCandidate> candidates,
+        IReadOnlyDictionary<Guid, FeeContainerLiveAssignment[]> assignments,
         ICollection<FeeContainerReconstructionIssue> issues)
     {
         var result = new List<FeeContainerObjectAssociation>();
         var byName = candidates.ToLookup(candidate => candidate.ComponentName.Trim(), StringComparer.OrdinalIgnoreCase);
         var byGuid = objects.ToDictionary(item => item.Guid);
+        var byCandidateGuid = candidates.ToDictionary(item => item.Object.Guid);
         foreach (var item in objects)
         {
+            if (EndsWithType(item.FeeType, "Cabinet") || IsHelper(item.FeeType) && !byCandidateGuid.ContainsKey(item.Guid))
+                continue;
             ContainerCandidate[] matches = string.IsNullOrWhiteSpace(item.Name) ? [] : byName[item.Name.Trim()].ToArray();
             // Provenance disambiguates equal names but never invents an automatic
             // association between differently named physical scene objects.
-            var own = matches.Where(candidate => candidate.Object.Guid == item.Guid).ToArray();
+            ContainerCandidate[] own = byCandidateGuid.TryGetValue(item.Guid, out var primary) ? [primary] : [];
             if (own.Length == 1) matches = own;
             else if (matches.Length > 1)
             {
@@ -304,7 +313,70 @@ public static class FeeContainerLiveReconstructor
                 issues.Add(new FeeContainerReconstructionIssue(item.Guid,
                     $"'{item.Name}' ({item.FeeType}) passt zu mehreren Containern und bleibt zur manuellen Zuordnung verfügbar."));
         }
+
+        // Traverse only helper chains. Do not walk through a container into
+        // unrelated containers or infer physical SimObject ownership from links.
+        var edges = objects.ToDictionary(item => item.Guid, _ => new HashSet<Guid>());
+        foreach (var item in objects)
+            foreach (var peer in item.LinkedObjectGuids ?? [])
+                if (peer != item.Guid && edges.ContainsKey(peer))
+                { edges[item.Guid].Add(peer); edges[peer].Add(item.Guid); }
+        var ownersByObject = result.ToLookup(item => item.ObjectGuid, item => item.ContainerObjectGuid);
+        var ownersByVariable = result.SelectMany(association => (assignments.GetValueOrDefault(association.ObjectGuid) ?? [])
+                .Select(assignment => (assignment.VariableGuid, association.ContainerObjectGuid)))
+            .ToLookup(item => item.VariableGuid, item => item.ContainerObjectGuid);
+        var processed = new HashSet<Guid>();
+        foreach (var helper in objects.Where(item => IsHelper(item.FeeType) && !byCandidateGuid.ContainsKey(item.Guid)))
+        {
+            if (processed.Contains(helper.Guid)) continue;
+            var chain = new HashSet<Guid>();
+            var owners = new HashSet<Guid>();
+            var pending = new Queue<Guid>(); pending.Enqueue(helper.Guid);
+            while (pending.TryDequeue(out var current))
+            {
+                if (!chain.Add(current)) continue;
+                foreach (var peer in edges[current])
+                {
+                    if (IsHelper(byGuid[peer].FeeType) && !byCandidateGuid.ContainsKey(peer)) pending.Enqueue(peer);
+                    else owners.UnionWith(ownersByObject[peer]);
+                }
+            }
+            processed.UnionWith(chain);
+            if (owners.Count == 0)
+                foreach (var guid in chain)
+                    foreach (var assignment in assignments.GetValueOrDefault(guid) ?? [])
+                        owners.UnionWith(ownersByVariable[assignment.VariableGuid]);
+            var linked = owners.Count > 0;
+            foreach (var guid in chain)
+            {
+                var item = byGuid[guid];
+                // Preserve the existing same-name fallback for older helpers.
+                if (owners.Count == 0 && (EndsWithType(item.FeeType, "MoveBit") || EndsWithType(item.FeeType, "BoolNot")) &&
+                    byName[item.Name.Trim()].ToArray() is { Length: 1 } named)
+                    owners.Add(named[0].Object.Guid);
+                foreach (var owner in owners)
+                    AddMember(item, byCandidateGuid[owner], linked ? "Technisches Hilfsobjekt über aktuelle FEE-Verknüpfungen zugeordnet" :
+                        "Älteres Hilfsobjekt über gleichen Containernamen zugeordnet");
+            }
+        }
+        var cabinetOwners = new HashSet<(Guid Cabinet, Guid Owner)>();
+        foreach (var association in result)
+        {
+            var visited = new HashSet<Guid>();
+            var parent = byGuid[association.ObjectGuid].ParentGuid;
+            while (parent.HasValue && visited.Add(parent.Value) && byGuid.TryGetValue(parent.Value, out var ancestor))
+            {
+                if (EndsWithType(ancestor.FeeType, "Cabinet")) cabinetOwners.Add((ancestor.Guid, association.ContainerObjectGuid));
+                parent = ancestor.ParentGuid;
+            }
+        }
+        foreach (var (cabinet, owner) in cabinetOwners)
+            AddMember(byGuid[cabinet], byCandidateGuid[owner], "Cabinet als technisches Hilfsobjekt über die aktuelle Hierarchie zugeordnet");
         return result.ToArray();
+
+        void AddMember(FeeContainerLiveObject item, ContainerCandidate owner, string reason) =>
+            result.Add(new FeeContainerObjectAssociation(item.Guid, item.Name, item.FeeType, owner.Object.Guid,
+                $"fee:{owner.Object.Guid:D}", reason, "TechnicalHelper", owner.Object.ProvenanceContainerId ?? ""));
     }
 
     private static bool IsDescendantOf(FeeContainerLiveObject item, Guid candidateGuid,
@@ -319,8 +391,7 @@ public static class FeeContainerLiveReconstructor
         return false;
     }
 
-    private static bool IsHelper(string type) => new[] { "BoolNot", "MoveBit", "BoolAnd", "BoolOr" }
-        .Any(value => EndsWithType(type, value));
+    private static bool IsHelper(string type) => !EndsWithType(type, "Cabinet") && ContainerFileXml.IsTechnicalHelperType(type);
 
     private static bool TryCreateCandidate(
         FeeContainerLiveObject item,
@@ -377,8 +448,7 @@ public static class FeeContainerLiveReconstructor
         else if (xmlType is null && EndsWithType(feeType, "CabinetElement"))
         {
             xmlType = MapCabinetType(item.CabinetDefinition);
-            if (xmlType is null)
-                return false;
+            if (xmlType is null) xmlType = "N/A";
         }
         else if (xmlType is null &&
                  (EndsWithType(feeType, "Sensor") || EndsWithType(feeType, "SafetySensor")))
@@ -398,7 +468,7 @@ public static class FeeContainerLiveReconstructor
             xmlType = configuredName;
         else if (requirements is not null)
         {
-            var slotMatches = requirements.TypesMatchingSlots(liveSlots);
+            IReadOnlyList<string> slotMatches = EndsWithType(feeType, "CabinetElement") && xmlType is not null ? [] : requirements.TypesMatchingSlots(liveSlots);
             if (slotMatches.Count == 1)
             {
                 xmlType = slotMatches[0];
@@ -407,7 +477,14 @@ public static class FeeContainerLiveReconstructor
             else if (xmlType is not null)
                 ambiguity = $"Typ '{xmlType}' ist nicht in der geladenen Req-XML definiert; Erkennung über die aktuelle FEE-Definition bitte prüfen.";
         }
-        if (xmlType is null || !ContainerMetadataCatalog.TryGet(runtimeType ?? xmlType, out _) && requirements?.Contains(xmlType) != true)
+        if (xmlType is null && EndsWithType(feeType, "LogicObject") &&
+            (!string.IsNullOrWhiteSpace(item.LogicDefinitionName) && !string.Equals(item.LogicDefinitionName, "UNDEFINED", StringComparison.OrdinalIgnoreCase) || liveSlots.Count > 0))
+        {
+            xmlType = "N/A"; runtimeType = "N/A";
+            ambiguity = $"Die aktuelle Logik '{item.LogicDefinitionName}' besitzt noch keine Containertypdefinition. Typ N/A erhält das LogicObject und seine aktuellen Signalverknüpfungen.";
+        }
+        if (xmlType is null || xmlType != "N/A" && !EndsWithType(feeType, "CabinetElement") &&
+            !ContainerMetadataCatalog.TryGet(runtimeType ?? xmlType, out _) && requirements?.Contains(xmlType) != true)
             return false;
         var componentName = EndsWithType(feeType, "CabinetElement")
             ? FirstNotBlank(item.Label, item.Name?.Split(';')[0])
@@ -426,7 +503,7 @@ public static class FeeContainerLiveReconstructor
         if (!variables.TryGetValue(assignment.VariableGuid, out var variable))
             return null;
         var runtimeSlot = assignment.TargetSlot?.Trim() ?? "";
-        if (candidate.Object.IsSpecialDevice)
+        if (candidate.Object.IsSpecialDevice || candidate.XmlType == "N/A")
             return runtimeSlot.Length == 0 ? null : new ResolvedEntry(variable, runtimeSlot);
         var allowed = requirements?.Slots(candidate.XmlType) ?? [];
         var slot = allowed.FirstOrDefault(slot => string.Equals(slot, runtimeSlot, StringComparison.OrdinalIgnoreCase)) ??
@@ -540,11 +617,18 @@ public static class FeeContainerLiveReconstructor
         if (normalized.Contains("LAMP", StringComparison.Ordinal))
             return "CabinetLamp";
         if (normalized.Contains("GROB2POSITIONSWITCH", StringComparison.Ordinal) ||
+            normalized.Contains("GROB3POSITIONSWITCH", StringComparison.Ordinal) ||
             normalized.Contains("POSITIONSWITCH2", StringComparison.Ordinal) ||
             normalized.Contains("2POSITIONSWITCH", StringComparison.Ordinal) ||
-            normalized.Contains("TWOPOSITIONSWITCH", StringComparison.Ordinal))
+            normalized.Contains("TWOPOSITIONSWITCH", StringComparison.Ordinal) ||
+            normalized == "CABINETSWITCH")
             return "CabinetSwitch";
-        return null;
+        if (normalized.Contains("BUTTON", StringComparison.Ordinal)) return "CabinetButton";
+        if (normalized.Contains("MAINSWITCH", StringComparison.Ordinal)) return "CabinetMainSwitch";
+        if (normalized.Contains("POSITIONSWITCH", StringComparison.Ordinal) || normalized.EndsWith("SWITCH", StringComparison.Ordinal)) return "CabinetSwitch";
+        var actual = definition?.Trim().Replace('/', '\\').Split('\\').Last();
+        if (string.IsNullOrWhiteSpace(actual) || Guid.TryParse(actual, out _)) return null;
+        return actual.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) ? actual[..^4] : actual;
     }
 
     private static bool EndsWithType(string value, string typeName) =>

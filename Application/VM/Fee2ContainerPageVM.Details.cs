@@ -79,7 +79,7 @@ public sealed partial class Fee2ContainerPageVM
         var previous = ObjectTypeFilters.ToDictionary(item => item.FeeType, item => item.IsVisible, StringComparer.OrdinalIgnoreCase);
         foreach (var item in ObjectTypeFilters) item.PropertyChanged -= OnObjectTypeFilterChanged;
         ObjectTypeFilters.Clear();
-        foreach (var type in NonContainerObjects.Where(item => !item.IsSpecialDevice).Select(item => item.FeeType)
+        foreach (var type in NonContainerObjects.Select(item => item.FeeType)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(type => type, StringComparer.OrdinalIgnoreCase))
         {
             var filter = new Fee2ContainerObjectTypeFilterVM(type, previous.GetValueOrDefault(type, true));

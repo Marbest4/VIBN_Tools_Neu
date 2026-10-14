@@ -11,6 +11,9 @@ internal static class FeeContainerAssociationProjection
         IReadOnlyList<FeeAbstractObject> liveObjects)
     {
         var live = liveObjects.ToDictionary(item => item.Guid);
+        var structuralProofs = reconstructed.ObjectAssociations
+            .Where(item => ContainerFileXml.IsStructuralObjectAssociation(item.ObjectType, item.Role))
+            .Select(item => (item.ObjectGuid, item.ContainerId)).ToHashSet();
         var containers = snapshot.ContainerDocument.Descendants("Container").ToArray();
         var associations = new List<FeeContainerObjectAssociation>();
         var stableIds = new Dictionary<XElement, string>();
@@ -35,15 +38,18 @@ internal static class FeeContainerAssociationProjection
             // Explicit manual associations survive even when names differ.
             foreach (var item in ContainerFileXml.Objects(container))
                 if (Guid.TryParse(item.Element("Guid")?.Value, out var guid) && live.TryGetValue(guid, out var actual) &&
-                    ContainerFileXml.CanRetainObjectAssociation(item, actual.Name, name))
+                    ContainerFileXml.CanRetainObjectAssociation(item, actual.Name, name) &&
+                    (item.Attribute("assignment")?.Value != "Linked" || HasLiveStructuralAssociation(guid, container)))
                     stored.Add(new FeeContainerObjectAssociation(guid, actual.Name, actual.FeeType,
                         Guid.Empty, id, item.Attribute("assignment")?.Value == "Manual" ? "Manuelle Zuordnung aus Container-Provenienz" : "Gespeicherte Zuordnung mit gleichem Namen",
                         item.Element("Role")?.Value ?? "SimObject", IsManual: item.Attribute("assignment")?.Value == "Manual"));
         }
         var storedGuids = stored.Select(item => item.ObjectGuid).ToHashSet();
         foreach (var group in stored.GroupBy(item => item.ObjectGuid))
-            if (group.Select(item => item.ContainerId).Distinct(StringComparer.Ordinal).Count() == 1)
-                associations.Add(group.FirstOrDefault(item => item.IsManual) ?? group.First());
+            if (group.Select(item => item.ContainerId).Distinct(StringComparer.Ordinal).Count() == 1 ||
+                group.All(item => ContainerFileXml.IsTechnicalHelperAssociation(item.ObjectType, item.Role)))
+                foreach (var containerGroup in group.GroupBy(item => item.ContainerId))
+                    associations.Add(containerGroup.FirstOrDefault(item => item.IsManual) ?? containerGroup.First());
         foreach (var group in reconstructed.ObjectAssociations.GroupBy(item => item.ContainerId))
         {
             var source = reconstructed.Snapshot.ContainerDocument.Descendants("Container").FirstOrDefault(item => item.Attribute("id")?.Value == group.Key);
@@ -56,9 +62,13 @@ internal static class FeeContainerAssociationProjection
                     string.Equals(item.Element("Type")?.Value, source.Element("Type")?.Value, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (matches.Length != 1) continue;
             foreach (var item in group)
-                if (!storedGuids.Contains(item.ObjectGuid) && !associations.Any(association => association.ObjectGuid == item.ObjectGuid) &&
+                if ((!storedGuids.Contains(item.ObjectGuid) || ContainerFileXml.IsTechnicalHelperAssociation(item.ObjectType, item.Role) &&
+                        !stored.Any(saved => saved.ObjectGuid == item.ObjectGuid && saved.ContainerId == matches[0].Attribute("id")!.Value)) &&
+                    !associations.Any(association => association.ObjectGuid == item.ObjectGuid &&
+                        (!ContainerFileXml.IsTechnicalHelperAssociation(item.ObjectType, item.Role) || association.ContainerId == matches[0].Attribute("id")!.Value)) &&
                     live.TryGetValue(item.ObjectGuid, out var actual) &&
-                    (item.IsManual || ContainerFileXml.HasMatchingObjectName(actual.Name, matches[0].Element("Component")?.Value)))
+                    (item.IsManual || ContainerFileXml.IsStructuralObjectAssociation(item.ObjectType, item.Role) ||
+                        ContainerFileXml.HasMatchingObjectName(actual.Name, matches[0].Element("Component")?.Value)))
                     associations.Add(item with { ContainerId = matches[0].Attribute("id")!.Value,
                         ObjectName = actual.Name, ObjectType = actual.FeeType });
         }
@@ -69,8 +79,13 @@ internal static class FeeContainerAssociationProjection
                 .Select(item => ContainerFileXml.Object(item.ObjectGuid.ToString("D"), item.ObjectName, item.ObjectType, item.Role,
                     slots: live.GetValueOrDefault(item.ObjectGuid)?.Slots?.Select(slot =>
                         new VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData.ContainerFeeSlot
-                        { Name = slot.Key, AssignedGuid = slot.Value.ToString("D") }), assignmentKind: item.IsManual ? "Manual" : "Automatic"))));
+                        { Name = slot.Key, AssignedGuid = slot.Value.ToString("D") }), assignmentKind: item.IsManual ? "Manual" :
+                            ContainerFileXml.IsStructuralObjectAssociation(item.ObjectType, item.Role) ? "Linked" : "Automatic",
+                    logicDefinitionName: (live.GetValueOrDefault(item.ObjectGuid) as FeeLogic)?.LogicDefinitionName ?? ""))));
         }
         return associations;
+
+        bool HasLiveStructuralAssociation(Guid objectGuid, XElement container) =>
+            structuralProofs.Contains((objectGuid, container.Attribute("id")!.Value));
     }
 }

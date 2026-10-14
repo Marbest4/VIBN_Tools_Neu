@@ -43,6 +43,7 @@
                     <xs:attribute name="assignedGuid" type="xs:string" use="required"/></xs:complexType>
                 </xs:element></xs:sequence></xs:complexType>
             </xs:element>
+            <xs:element name="LogicDefinitionName" type="xs:string" minOccurs="0"/>
         </xs:sequence>
         <xs:attribute name="assignment" type="xs:string" use="optional"/>
     </xs:complexType>

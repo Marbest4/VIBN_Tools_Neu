@@ -38,8 +38,27 @@ public static class ContainerFileXml
         !string.IsNullOrWhiteSpace(objectName) && !string.IsNullOrWhiteSpace(containerName) &&
         string.Equals(objectName.Trim(), containerName.Trim(), StringComparison.OrdinalIgnoreCase);
 
+    private static readonly HashSet<string> TechnicalHelperTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Cabinet", "BoolNot", "MoveBit", "BoolAnd", "BoolAnd3Inputs", "BoolAlwaysTrue", "BoolAnd10Inputs",
+        "ConvertBoolToByte", "ConvertByteToBool", "BoolCopy5Outputs", "BoolOr", "BoolPositiveEdge"
+    };
+
+    public static bool IsTechnicalHelperType(string? feeType) =>
+        TechnicalHelperTypes.Contains((feeType ?? "").Split('.').Last());
+
+    public static bool IsTechnicalHelperAssociation(string? feeType, string? role) =>
+        string.Equals(role, "TechnicalHelper", StringComparison.OrdinalIgnoreCase) && IsTechnicalHelperType(feeType);
+
+    public static bool IsStructuralObjectAssociation(string? feeType, string? role) =>
+        IsTechnicalHelperAssociation(feeType, role) ||
+        string.Equals(role, "Primary", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals((feeType ?? "").Split('.').Last(), "CabinetElement", StringComparison.OrdinalIgnoreCase);
+
     public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName) =>
-        item.Attribute("assignment")?.Value == "Manual" || HasMatchingObjectName(liveName, containerName);
+        item.Attribute("assignment")?.Value == "Manual" || HasMatchingObjectName(liveName, containerName) ||
+        item.Attribute("assignment")?.Value == "Linked" &&
+        IsStructuralObjectAssociation(item.Element("FeeType")?.Value, item.Element("Role")?.Value);
 
     /// <summary>
     /// ContainerGeneration can write empty IDs. Reverse editing needs one unique
@@ -68,12 +87,13 @@ public static class ContainerFileXml
 
     public static XElement Object(string guid, string name, string feeType, string role = "SimObject",
         string target = "", string clrType = "", IEnumerable<ContainerFeeSlot>? slots = null,
-        string assignmentKind = "Automatic") =>
+        string assignmentKind = "Automatic", string logicDefinitionName = "") =>
         new("SimObject", new XAttribute("assignment", assignmentKind), new XElement("Guid", guid), new XElement("Name", name),
             new XElement("FeeType", feeType), new XElement("Role", role),
             new XElement("Target", target), new XElement("ClrType", clrType),
             new XElement("Slots", (slots ?? []).Select(slot => new XElement("Slot",
-                new XAttribute("name", slot.Name), new XAttribute("assignedGuid", slot.AssignedGuid)))));
+                new XAttribute("name", slot.Name), new XAttribute("assignedGuid", slot.AssignedGuid)))),
+            new XElement("LogicDefinitionName", logicDefinitionName));
 
     public static XDocument Document(IEnumerable<XElement> containers, XElement? inventory = null) =>
         new(new XDeclaration("1.0", "utf-8", null), new XElement("CAAMergeResult",

@@ -143,7 +143,7 @@
                         <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="8,3" Command="{Binding ShowLinkedSignalsCommand}">
                             <TextBlock Text="{Binding LinkedUnassignedSignalCount, StringFormat='Verknüpfte Signale ohne Zuordnung ({0})'}" />
                         </Button>
-                        <TextBox Padding="6,3" Text="{Binding ContainerSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Container filtern" />
+                        <TextBox Padding="6,3" Text="{Binding ContainerSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Container filtern; !Motor blendet Treffer mit Motor aus. Mehrere Suchbegriffe mit Komma trennen." />
                     </DockPanel>
                     <DataGrid Grid.Row="1" ItemsSource="{Binding FoundContainersView}" SelectedItem="{Binding SelectedFoundContainer}"
                               behaviors:DataGridRevealBehavior.RevealItem="{Binding ContainerRevealTarget}"
@@ -261,7 +261,7 @@
                                         Command="{Binding DataContext.ShowLinkedSignalsCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
                             </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="Aktion" Width="100"><DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
+                                <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" ToolTip="Container aus dem Arbeitsstand entfernen; FEE-Objekte und Verknüpfungen bleiben im Projekt erhalten." />
                             </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
@@ -271,7 +271,7 @@
             <TabControl Grid.Row="3" SelectedIndex="{Binding SelectedResultTabIndex}">
                 <TabItem Header="Erkannte Signalzuordnungen">
                     <DockPanel>
-                        <TextBox DockPanel.Dock="Top" Margin="4" Padding="6,3" Text="{Binding SignalSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Signalzuordnungen filtern" />
+                        <TextBox DockPanel.Dock="Top" Margin="4" Padding="6,3" Text="{Binding SignalSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Signalzuordnungen filtern; !Motor blendet Treffer mit Motor aus. Mehrere Suchbegriffe mit Komma trennen." />
                 <DataGrid SelectionMode="Extended" SelectionUnit="FullRow" ItemsSource="{Binding FoundSignalsView}" SelectedItem="{Binding SelectedFoundSignal}"
                           ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel"
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding SignalRevealTarget}"
@@ -319,7 +319,7 @@
                                     <ItemsControl.ItemTemplate><DataTemplate><CheckBox Margin="5,2" Content="{Binding FeeType}" IsChecked="{Binding IsVisible, UpdateSourceTrigger=PropertyChanged}" /></DataTemplate></ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </Expander>
-                            <TextBox Padding="6,3" Text="{Binding ObjectSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name, Typ, Parent, Logik oder Verknüpfung filtern" />
+                            <TextBox Padding="6,3" Text="{Binding ObjectSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name, Typ, Parent, Logik oder Verknüpfung filtern; !Motor blendet Treffer mit Motor aus. Mehrere Suchbegriffe mit Komma trennen." />
                         </DockPanel>
                 <DataGrid Grid.Row="1" ItemsSource="{Binding NonContainerObjectsView}" AutoGenerateColumns="False"
                           SelectionMode="Extended" SelectionUnit="FullRow"

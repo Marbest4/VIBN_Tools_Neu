@@ -639,7 +639,8 @@ public sealed class Fee2ContainerService
         snapshot.ContainerDocument.Root?.Element("FeeInventory")?.Remove();
         snapshot.ContainerDocument.Root?.Add(new XElement("FeeInventory",
             new XElement("SimObjects", objects.Select(item => ContainerFileXml.Object(item.GuidString,
-                item.Name ?? "", item.FeeType ?? "", "Available", "", item.TypeName))),
+                item.Name ?? "", item.FeeType ?? "", ContainerFileXml.IsTechnicalHelperType(item.FeeType) ? "TechnicalHelper" : "Available", "", item.TypeName,
+                logicDefinitionName: (item as FeeLogic)?.LogicDefinitionName ?? ""))),
             new XElement("Signals", variables.Select(item => new XElement("Signal",
                 new XElement("Guid", item.VariableGuid.ToString("D")), new XElement("InterfaceGuid", ""),
                 new XElement("InterfaceName", ""), new XElement("Tag", item.Signal),
