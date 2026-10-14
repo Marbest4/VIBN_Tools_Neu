@@ -11,7 +11,8 @@ internal static class FeeLogicSlotSnapshot
     {
         using var throttle = new SemaphoreSlim(4);
         var reads = objects.OfType<FeeLogic>().Where(item => item.LogicDefinitionGuid != Guid.Empty &&
-                (item.Slots?.Count is not > 0 || string.Equals(item.LogicDefinitionName, "UNDEFINED", StringComparison.OrdinalIgnoreCase)))
+                (item.Slots?.Count is not > 0 || string.Equals(item.LogicDefinitionName, "UNDEFINED", StringComparison.OrdinalIgnoreCase) ||
+                    VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(item.LogicDefinitionName)))
             .Select(async logic =>
             {
                 await throttle.WaitAsync(token);

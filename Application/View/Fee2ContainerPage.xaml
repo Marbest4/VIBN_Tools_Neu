@@ -190,8 +190,13 @@
                             <DataGridTemplateColumn.CellTemplate><DataTemplate>
                                 <ItemsControl ItemsSource="{Binding DataList}">
                                     <ItemsControl.ItemTemplate><DataTemplate>
-                                        <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
+                                        <DockPanel>
+                                            <Border DockPanel.Dock="Left" Padding="3,4" Cursor="Hand" behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"><TextBlock Text="↕" /></Border>
+                                            <Button DockPanel.Dock="Right" Content="×" Width="20" Padding="0" ToolTip="Signalzuordnung entfernen; FEE-Signal bleibt erhalten"
+                                                    Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
+                                            <TextBox Height="30" Padding="4,3" BorderThickness="0,0,0,1" BorderBrush="#FFE0E0E0"
                                                  Text="{Binding Signal, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding Note}" />
+                                        </DockPanel>
                                     </DataTemplate></ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </DataTemplate></DataGridTemplateColumn.CellTemplate>
@@ -267,7 +272,7 @@
                 <TabItem Header="Erkannte Signalzuordnungen">
                     <DockPanel>
                         <TextBox DockPanel.Dock="Top" Margin="4" Padding="6,3" Text="{Binding SignalSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Signalzuordnungen filtern" />
-                <DataGrid ItemsSource="{Binding FoundSignalsView}" SelectedItem="{Binding SelectedFoundSignal}"
+                <DataGrid SelectionMode="Extended" SelectionUnit="FullRow" ItemsSource="{Binding FoundSignalsView}" SelectedItem="{Binding SelectedFoundSignal}"
                           ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel"
                           behaviors:DataGridRevealBehavior.RevealItem="{Binding SignalRevealTarget}"
                           RowStyle="{StaticResource Fee2RelatedRowStyle}"
@@ -280,6 +285,11 @@
                           VirtualizingPanel.VirtualizationMode="Recycling"
                           EnableRowVirtualization="True" EnableColumnVirtualization="True">
                     <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Ziehen" Width="60" IsReadOnly="True"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                            <Border Padding="8,4" Cursor="Hand" behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
+                                    ToolTip="Ausgewählte Signale gemeinsam auf eine Containerzeile ziehen (Strg/Shift)."><TextBlock Text="↕" /></Border>
+                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+
                         <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="Auto" />
                         <DataGridTextColumn Header="Zugeordnet zu Container" Binding="{Binding Container}" Width="210" IsReadOnly="True" />
                         <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="190" />
@@ -369,6 +379,9 @@
                                 <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding Name}" Width="200" />
                                 <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType}" Width="140" />
                                 <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="220" />
+                                <DataGridTextColumn Header="E-Byte" Binding="{Binding InputByteText}" Width="80" />
+                                <DataGridTextColumn Header="A-Byte" Binding="{Binding OutputByteText}" Width="80" />
+                                <DataGridTextColumn Header="Signaladressen" Binding="{Binding SignalAddresses}" Width="350" />
                                 <DataGridTextColumn Header="Parent" Binding="{Binding ParentName}" Width="170" />
                                 <DataGridTextColumn Header="Verknüpfung" Binding="{Binding ConnectionText}" Width="350" />
                             </DataGrid.Columns>
@@ -378,8 +391,13 @@
                 <TabItem Header="Verknüpfte Signale ohne Zuordnung">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Margin="4" Text="{Binding LinkedSignalsSummary}" />
-                        <DataGrid ItemsSource="{Binding LinkedUnassignedSignals}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False">
+                        <DataGrid SelectionMode="Extended" SelectionUnit="FullRow" ItemsSource="{Binding LinkedUnassignedSignals}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" CanUserDeleteRows="False">
                             <DataGrid.Columns>
+                        <DataGridTemplateColumn Header="Ziehen" Width="60" IsReadOnly="True"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                            <Border Padding="8,4" Cursor="Hand" behaviors:ContainerToFeeVisualDragDropBehavior.IsDragSource="True"
+                                    ToolTip="Ausgewählte Signale gemeinsam auf eine Containerzeile ziehen (Strg/Shift)."><TextBlock Text="↕" /></Border>
+                        </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+
                                 <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="230" />
                                 <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="180" />
                                 <DataGridTextColumn Header="DataType" Binding="{Binding DataType}" Width="110" />

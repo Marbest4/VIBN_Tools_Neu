@@ -2527,7 +2527,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
                         ? "Keine unterstützte Schnittstellenzuordnung – Unknown"
                         : "Noch nicht vorhanden – wird bei der Generierung angelegt";
             node.ApplyExecutionState(
-                node.Kind == VisualNodeKind.UnknownSignal ? ContainerToFeeVisualNodeState.Planned : state,
+                connectionState?.Kind == VisualSignalConnectionKind.NotRequired ? ContainerToFeeVisualNodeState.NotLinkable : state,
                 connection);
         }
         RefreshAggregateTreeStates();
@@ -2786,7 +2786,7 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             VisualStatusFilterKey.Verified => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Verified,
             VisualStatusFilterKey.LinkMissing => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked,
             VisualStatusFilterKey.Unassigned => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.None,
-            VisualStatusFilterKey.Planned => node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Planned,
+            VisualStatusFilterKey.Planned => node.EffectiveState.Kind is ContainerToFeeVisualNodeStateKind.Planned or ContainerToFeeVisualNodeStateKind.NotLinkable,
             VisualStatusFilterKey.Error => node.HasValidationError ||
                                            node.EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Missing,
             _ => true,
@@ -2850,12 +2850,14 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             ? Array.Empty<VisualFeeSignal>()
             : source.Where(signal => selectedGuids.Contains(signal.InterfaceGuidString)).ToArray();
         var verifiedNodeIds = _planService.FindVerifiedSignalNodeIds();
+        var notLinkableNodeIds = _planService.FindNotLinkableSignalNodeIds();
         AvailableFeeSignals.ReplaceWith(source.Select(signal =>
             new ContainerToFeeVisualFeeSignalVM(
                 signal,
                 scopedSignals,
                 plan,
-                verifiedNodeIds.TryGetValue(signal.GuidString, out var nodeIds) ? nodeIds : [])));
+                verifiedNodeIds.TryGetValue(signal.GuidString, out var nodeIds) ? nodeIds : [],
+                notLinkableNodeIds.TryGetValue(signal.GuidString, out var unsupportedIds) ? unsupportedIds : [])));
         FeeSignalsView.Refresh();
     }
 
@@ -3122,6 +3124,8 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
             ? ContainerToFeeVisualNodeState.Missing
             : relevantStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.Planned)
                 ? ContainerToFeeVisualNodeState.Planned
+                : relevantStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.NotLinkable)
+                    ? ContainerToFeeVisualNodeState.NotLinkable
                 : relevantStates.Any(state => state.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked)
                     ? ContainerToFeeVisualNodeState.FoundUnlinked
                     : relevantStates.Length == 0
@@ -3490,6 +3494,7 @@ public enum ContainerToFeeVisualNodeStateKind
     None,
     Verified,
     FoundUnlinked,
+    NotLinkable,
     Planned,
     Missing,
 }
@@ -3505,6 +3510,8 @@ public sealed record ContainerToFeeVisualNodeState(
         new(ContainerToFeeVisualNodeStateKind.Verified, "#FFC6EFCE", "In FEE eindeutig gefunden oder in dieser Sitzung erfolgreich erzeugt.");
     public static ContainerToFeeVisualNodeState FoundUnlinked { get; } =
         new(ContainerToFeeVisualNodeStateKind.FoundUnlinked, "#FFE8D9F3", "In FEE gefunden beziehungsweise ausgewählt, aber die erforderliche Verknüpfung ist noch nicht als ausgeführt bestätigt.");
+    public static ContainerToFeeVisualNodeState NotLinkable { get; } =
+        new(ContainerToFeeVisualNodeStateKind.NotLinkable, "#FFFFF2CC", "Signal vorhanden; dieser Containertyp besitzt kein Objektziel und unterstützt keine Slotverknüpfung.");
     public static ContainerToFeeVisualNodeState Planned { get; } =
         new(ContainerToFeeVisualNodeStateKind.Planned, "#FFFFF2CC", "Wird bei der nächsten Generierung erzeugt oder vervollständigt.");
     public static ContainerToFeeVisualNodeState Missing { get; } =
@@ -3613,6 +3620,8 @@ public sealed class ContainerToFeeVisualTreeNodeVM : NotifyBase
                                       EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Planned;
     public string GenerationActionText => WillGenerateObject
         ? "Wird neu erzeugt"
+        : EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.NotLinkable
+            ? "Vorhanden; dieser Typ unterstützt keine Verknüpfung"
         : EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.Verified
             ? "Vorhanden und vollständig verknüpft"
             : EffectiveState.Kind == ContainerToFeeVisualNodeStateKind.FoundUnlinked
@@ -4074,7 +4083,8 @@ public sealed class ContainerToFeeVisualFeeSignalVM : MvvmBase
         VisualFeeSignal model,
         IReadOnlyCollection<VisualFeeSignal> allSignals,
         VisualPlan? plan,
-        IReadOnlyCollection<string>? verifiedNodeIds = null)
+        IReadOnlyCollection<string>? verifiedNodeIds = null,
+        IReadOnlyCollection<string>? notLinkableNodeIds = null)
     {
         Model = model;
         var verified = (verifiedNodeIds ?? []).ToHashSet(StringComparer.Ordinal);
@@ -4092,10 +4102,13 @@ public sealed class ContainerToFeeVisualFeeSignalVM : MvvmBase
             .ToArray() ?? [];
         AssignedNodeIds = assignments.Select(item => item.SignalNodeId)
             .Concat(verifiedNodeIds ?? [])
+            .Concat(notLinkableNodeIds ?? [])
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         HasVerifiedConnections = verified.Count > 0 && AssignedNodeIds.All(verified.Contains);
+        IsNotLinkable = (notLinkableNodeIds?.Count ?? 0) > 0 && AssignedNodeIds.All(id => notLinkableNodeIds!.Contains(id));
         AssignedTargets = explicitTargets.Concat(liveTargets)
+            .Concat((notLinkableNodeIds ?? []).Select(nodeId => DescribeSignalNode(plan, nodeId)))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         HasDuplicateName = !string.IsNullOrWhiteSpace(model.Tag) && !string.IsNullOrWhiteSpace(model.InterfaceGuidString) && allSignals
@@ -4122,6 +4135,7 @@ public sealed class ContainerToFeeVisualFeeSignalVM : MvvmBase
     public IReadOnlyList<string> AssignedNodeIds { get; }
     public bool IsAssigned => AssignedTargets.Count > 0;
     public bool HasVerifiedConnections { get; }
+    public bool IsNotLinkable { get; }
     public bool HasDuplicateName { get; }
     public bool HasDuplicateAssignment { get; }
     public bool HasError => HasDuplicateAssignment;
@@ -4136,7 +4150,7 @@ public sealed class ContainerToFeeVisualFeeSignalVM : MvvmBase
         }.Where(item => item is not null));
     public string StateBackground => HasError
         ? "#FFFFCDD2"
-        : !HasVerifiedConnections ? "#FFE8D9F3" : HasWarning ? "#FFFFF2CC" : "#FFC6EFCE";
+        : IsNotLinkable ? "#FFFFF2CC" : !HasVerifiedConnections ? "#FFE8D9F3" : HasWarning ? "#FFFFF2CC" : "#FFC6EFCE";
     public string ToolTipText => $"Signal: {Tag}{Environment.NewLine}{AssignmentText}";
     public bool IsSynchronizationMatch
     {
@@ -4274,7 +4288,7 @@ public sealed class ContainerToFeeVisualSignalSlotVM : MvvmBase
                 return "#FFF3F5F7";
             if (states.Any(state => state == ContainerToFeeVisualNodeStateKind.Missing))
                 return ContainerToFeeVisualNodeState.Missing.Background;
-            if (states.Any(state => state is ContainerToFeeVisualNodeStateKind.Planned or ContainerToFeeVisualNodeStateKind.None))
+            if (states.Any(state => state is ContainerToFeeVisualNodeStateKind.Planned or ContainerToFeeVisualNodeStateKind.NotLinkable or ContainerToFeeVisualNodeStateKind.None))
                 return ContainerToFeeVisualNodeState.Planned.Background;
             if (states.Any(state => state == ContainerToFeeVisualNodeStateKind.FoundUnlinked))
                 return ContainerToFeeVisualNodeState.FoundUnlinked.Background;

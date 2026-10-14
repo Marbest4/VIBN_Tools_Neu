@@ -4,16 +4,19 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
+             xmlns:behaviors="clr-namespace:VIBN_Tools.Application.Behaviors"
              mc:Ignorable="d"
              d:DesignHeight="700" d:DesignWidth="1200">
     <UserControl.DataContext>
         <vm:Fee2SpecialDevicesPageVM />
     </UserControl.DataContext>
 
-    <Grid Margin="20">
+    <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="2*" />
+            <RowDefinition Height="8" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -21,7 +24,7 @@
         <StackPanel>
             <TextBlock FontSize="24" FontWeight="SemiBold" Text="FEE2SpecialDevices" />
             <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
-                       Text="Liest die gesamte BasicFrame-Hierarchie. Versionierte Provenienz wird bevorzugt; ältere Geräte werden nur bei einer eindeutigen bekannten Logikdefinition rekonstruiert." />
+                       Text="Liest die gesamte BasicFrame-Hierarchie. Jede bekannte Gerätelogik wird einzeln aus aktuellen FEE-Variablen, Adressen und Slotverknüpfungen rekonstruiert." />
         </StackPanel>
         <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
             <Button MinWidth="175" MinHeight="34"
@@ -60,21 +63,23 @@
                   EnableRowVirtualization="True"
                   EnableColumnVirtualization="True">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="FEE-Root" Binding="{Binding Name}" Width="2*" />
+                <DataGridTextColumn Header="Gerät / LogicObject" Binding="{Binding Name}" Width="2*" />
+                <DataGridTextColumn Header="Parent" Binding="{Binding ParentName}" Width="160" />
+                <DataGridTextColumn Header="Logik" Binding="{Binding LogicDefinitionName}" Width="200" />
                 <DataGridTextColumn Header="Präfix" Binding="{Binding Snapshot.Prefix}" Width="*" />
                 <DataGridTextColumn Header="Hersteller" Binding="{Binding Snapshot.Manufacturer}" Width="*" />
                 <DataGridTextColumn Header="Gerätetyp" Binding="{Binding Snapshot.DeviceType}" Width="1.5*" />
-                <DataGridTextColumn Header="E-Byte" Binding="{Binding Snapshot.InputByte}" Width="75">
+                <DataGridTextColumn Header="E-Byte" Binding="{Binding InputByteText}" Width="75">
                     <DataGridTextColumn.HeaderStyle>
                         <Style TargetType="DataGridColumnHeader">
-                            <Setter Property="ToolTip" Value="Kleinste gefundene und verknüpfte Byteadresse" />
+                            <Setter Property="ToolTip" Value="Numerisch kleinste aktuelle Eingangsadresse (E/I); — wenn keine ableitbare Adresse vorliegt." />
                         </Style>
                     </DataGridTextColumn.HeaderStyle>
                 </DataGridTextColumn>
-                <DataGridTextColumn Header="A-Byte" Binding="{Binding Snapshot.OutputByte}" Width="75">
+                <DataGridTextColumn Header="A-Byte" Binding="{Binding OutputByteText}" Width="75">
                     <DataGridTextColumn.HeaderStyle>
                         <Style TargetType="DataGridColumnHeader">
-                            <Setter Property="ToolTip" Value="Kleinste gefundene und verknüpfte Byteadresse" />
+                            <Setter Property="ToolTip" Value="Numerisch kleinste aktuelle Ausgangsadresse (A/Q); — wenn keine ableitbare Adresse vorliegt." />
                         </Style>
                     </DataGridTextColumn.HeaderStyle>
                 </DataGridTextColumn>
@@ -83,19 +88,50 @@
                 <DataGridTextColumn Header="PLC_OUT verbunden" Binding="{Binding ConnectedOutputSignalCount}" Width="125" />
                 <DataGridTextColumn Header="PLC_OUT vorhanden" Binding="{Binding OutputSignalCount}" Width="125" />
                 <DataGridTextColumn Header="Fehlende PLC-Slots" Binding="{Binding MissingPlcSlots}" Width="2*" />
-                <DataGridTextColumn Header="Signale" Binding="{Binding Snapshot.Signals.Count}" Width="75" />
-                <DataGridTextColumn Header="Aktuell verbunden" Binding="{Binding CurrentSignalCount}" Width="110" />
-                <DataGridTextColumn Header="Fehlend" Binding="{Binding MissingSignalCount}" Width="75" />
+                <DataGridTextColumn Header="Signale" Binding="{Binding ExpectedSignalCount}" Width="75">
+                    <DataGridTextColumn.HeaderStyle><Style TargetType="DataGridColumnHeader">
+                        <Setter Property="ToolTip" Value="Eindeutige aktuell verknüpfte FEE-Variablen plus offene PLC-Slots. Eine mehrfach verwendete Variable zählt einmal." />
+                    </Style></DataGridTextColumn.HeaderStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Aktuell verbunden" Binding="{Binding CurrentSignalCount}" Width="110">
+                    <DataGridTextColumn.HeaderStyle><Style TargetType="DataGridColumnHeader">
+                        <Setter Property="ToolTip" Value="Anzahl eindeutiger vorhandener FEE-Variablen mit aktuell bestätigter Verknüpfung zu dieser Gerätelogik." />
+                    </Style></DataGridTextColumn.HeaderStyle>
+                </DataGridTextColumn>
+                <DataGridTextColumn Header="Fehlend" Binding="{Binding MissingSignalCount}" Width="75">
+                    <DataGridTextColumn.HeaderStyle><Style TargetType="DataGridColumnHeader">
+                        <Setter Property="ToolTip" Value="Anzahl deklarierter PLC_IN-/PLC_OUT-Slots ohne rücklesbare Verbindung zu einer aktuellen FEE-Variable." />
+                    </Style></DataGridTextColumn.HeaderStyle>
+                </DataGridTextColumn>
             </DataGrid.Columns>
         </DataGrid>
-        <ItemsControl Grid.Row="3" Margin="0,8,0,0" ItemsSource="{Binding Issues}">
+        <GridSplitter Grid.Row="3" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" />
+        <GroupBox Grid.Row="4" Header="Aktuell verknüpfte Signale des ausgewählten Geräts">
+            <DataGrid ItemsSource="{Binding SelectedRoot.LinkedSignals}" AutoGenerateColumns="False" IsReadOnly="True"
+                      CanUserAddRows="False" CanUserDeleteRows="False" EnableRowVirtualization="True"
+                      VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True" behaviors:SmoothScrollBehavior.IsEnabled="True">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Signal" Binding="{Binding Tag}" Width="220" />
+                    <DataGridTextColumn Header="Aktuelle Adresse" Binding="{Binding Address}" Width="170" />
+                    <DataGridTextColumn Header="Pfad" Binding="{Binding Path}" Width="180" />
+                    <DataGridTextColumn Header="Datentyp" Binding="{Binding DataType}" Width="100" />
+                    <DataGridTextColumn Header="Nutzung" Binding="{Binding Usage}" Width="100" />
+                    <DataGridTemplateColumn Header="Verknüpfte Slots" Width="220"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                        <ItemsControl ItemsSource="{Binding Slots}" />
+                    </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Kommentar" Binding="{Binding Comment}" Width="250" />
+                    <DataGridTextColumn Header="GUID" Binding="{Binding VariableGuid}" Width="250" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </GroupBox>
+        <ItemsControl Grid.Row="5" Margin="0,8,0,0" ItemsSource="{Binding Issues}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <TextBlock Foreground="DarkRed" TextWrapping="Wrap" Text="{Binding}" />
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <StackPanel Grid.Row="4" Margin="0,10,0,0">
+        <StackPanel Grid.Row="6" Margin="0,10,0,0">
             <ProgressBar Height="7" Minimum="0"
                          Maximum="{Binding ProgressMaximum, Mode=OneWay}"
                          Value="{Binding ProgressValue, Mode=OneWay}" />

@@ -1214,7 +1214,7 @@ namespace VIBN_Tools.Application.VM
                   "Mit „Ja“ bestätigen Sie ausdrücklich einen Diagnoseexport. Der Export wird sichtbar mit einem " +
                   "zusätzlichen Container „Fehler“ gekennzeichnet."
                 : string.Empty;
-            var confirmation = MessageBox.Show(
+            var confirmation = summary.HasWarnings ? MessageBox.Show(
                 summary.ToDisplayText() +
                 Environment.NewLine +
                 Environment.NewLine +
@@ -1227,7 +1227,7 @@ namespace VIBN_Tools.Application.VM
                 "Prüfzusammenfassung vor Export",
                 MessageBoxButton.YesNo,
                 summary.HasWarnings ? MessageBoxImage.Error : MessageBoxImage.Information,
-                summary.HasWarnings ? MessageBoxResult.No : MessageBoxResult.Yes);
+                summary.HasWarnings ? MessageBoxResult.No : MessageBoxResult.Yes) : MessageBoxResult.Yes;
 
             if (confirmation != MessageBoxResult.Yes)
             {

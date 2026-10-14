@@ -20,8 +20,9 @@ internal static partial class Program
             throw new InvalidOperationException("Robot-axis exclusions are too broad or incomplete.");
         var special = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root",
             [new(Guid.NewGuid(), "Device", "LogicObject", "Grob_Sensor", IsSpecialDevice: true)], [], []);
-        if (special.Snapshot.ContainerCount != 0 || special.UnmappedObjects.Count != 1)
-            throw new InvalidOperationException("A SpecialDevice was silently exported as a normal container.");
+        if (special.Snapshot.ContainerCount != 1 || special.UnmappedObjects.Count != 0 ||
+            special.ObjectAssociations.Single().Role != "SpecialDevice")
+            throw new InvalidOperationException("A live SpecialDevice was not retained as its own logic-typed container.");
     }
 
     private static void VerifyLogicAssignmentAndCachedRootSelection()

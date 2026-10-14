@@ -303,7 +303,7 @@ public sealed record VisualSignalConnectionState(
     VisualSignalConnectionKind Kind,
     string Description)
 {
-    public bool IsVerified => Kind is VisualSignalConnectionKind.Linked or VisualSignalConnectionKind.NotRequired;
+    public bool IsVerified => Kind == VisualSignalConnectionKind.Linked;
 }
 
 public enum VisualSimObjectConnectionKind

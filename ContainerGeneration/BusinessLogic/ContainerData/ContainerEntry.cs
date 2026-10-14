@@ -18,6 +18,15 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         private string _note = string.Empty;
         private string _signalId = string.Empty;
         private string _assignmentWarning = string.Empty;
+        private string _requirementsLocation = string.Empty;
+        [XmlIgnore]
+        [DisplayName("Req-XML-Fundstelle")]
+        [ReadOnly(true)]
+        public string RequirementsLocation
+        {
+            get => _requirementsLocation;
+            set => SetPropertyChange(ref _requirementsLocation, value ?? string.Empty);
+        }
 
         /// <summary>
         /// Stable identity of this signal inside a VIBN Tools workspace.
@@ -278,7 +287,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
                 _signal = _signal, _slot = _slot, _note = _note,
                 _reviewState = _reviewState, _reviewMessage = _reviewMessage,
                 _isManuallyEdited = _isManuallyEdited, _isChangeAcknowledged = _isChangeAcknowledged,
-                _validationError = _validationError, _assignmentWarning = _assignmentWarning
+                _validationError = _validationError, _assignmentWarning = _assignmentWarning, _requirementsLocation = _requirementsLocation
             };
         }
 

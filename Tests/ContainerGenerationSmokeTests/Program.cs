@@ -1777,6 +1777,9 @@ internal static class Program
         var filtered = result.FilteredSignals.Single();
         var excluded = result.UnassignedSignals.Single(item => item.Signal == "Legacy");
         var duplicate = result.UnassignedSignals.Single(item => item.Signal == "Motor");
+        if (filtered.RequirementsLocation != filtered.ReviewMessage || excluded.RequirementsLocation != excluded.ReviewMessage ||
+            duplicate.RequirementsLocation != duplicate.ReviewMessage || excluded.Clone().RequirementsLocation != excluded.RequirementsLocation)
+            throw new InvalidOperationException("Req-XML locations were not retained in generated diagnostics and clones.");
         if (!filtered.ReviewMessage.Contains("FilterList", StringComparison.Ordinal) ||
             !filtered.ReviewMessage.Contains("Zeile", StringComparison.Ordinal) ||
             !excluded.ReviewMessage.Contains("Exclude-Key", StringComparison.Ordinal) ||

@@ -203,7 +203,8 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                     new SignalResolutionRequest(
                         "unknown-signals",
                         "Unbekannte Signale",
-                        signal)))
+                        signal,
+                        FindUnknownSignalNodeId(plan, signal, usedSignalNodeIds))))
                 .ToArray();
             var selectedInterfaceGuids = plan.ExistingInterfaceSelections
                 .Select(item => item.InterfaceGuid)
@@ -223,6 +224,13 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
                 reusableInterfaces,
                 selectedSignalAssignments,
                 treatConflictsAsMissing: forcedRun);
+            var globalSignals = SignalResolutionPlanner.Build(signalRequests, runtimeInterfaces.Values, plan.SignalAssignments);
+            var missingGuids = signalPlan.MissingSignals.Select(item => item.Signal.Guid).ToHashSet();
+            if (!globalSignals.IsValid || globalSignals.ExistingBindings.Any(item => missingGuids.Contains(item.Request.Signal.Guid)))
+                return new VisualExecutionResult(false,
+                    "Ein benötigtes Signal existiert bereits außerhalb der ausgewählten Interfaces oder ist mehrdeutig. Interface auswählen bzw. die vorhandene Signalzuordnung prüfen; es wurde kein Signal dupliziert.",
+                    globalSignals.Issues.Append(new VisualIssue(VisualIssueSeverity.Warning, "EXISTING_SIGNAL_CREATION_BLOCKED",
+                        "Bereits vorhandene Signale werden nicht neu erzeugt.")).ToArray());
             if (!signalPlan.IsValid && !forcedRun)
             {
                 return new VisualExecutionResult(
@@ -426,15 +434,6 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            if (binding.UnknownSignals.Count > 0)
-            {
-                foreach (var signal in binding.UnknownSignals)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await signal.CreateSignalAsync(generationInterface);
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-            }
 
             logger.Information(
                 $"Visuelle Generierung abgeschlossen: {selectedContainers.Length} Container " +
@@ -490,6 +489,19 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
 
     private static string Truncate(string value, int maximumLength) =>
         value.Length <= maximumLength ? value : value[..(maximumLength - 1)] + "…";
+
+    private static string? FindUnknownSignalNodeId(VisualPlan plan, FeeInterfaceSignal signal, ISet<string> usedNodeIds)
+    {
+        var location = string.IsNullOrWhiteSpace(signal.Path) ? signal.Address : signal.Path;
+        var node = plan.Nodes.Where(item => item.Kind == VisualNodeKind.UnknownSignal &&
+                !plan.IsSignalRemoved(item.Id) && !usedNodeIds.Contains(item.Id) &&
+                string.Equals(item.Name, signal.Tag, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => string.Equals(item.SourceLocation, location, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(item => string.Equals(item.TypeName, signal.IOTypeString, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault();
+        if (node is not null) usedNodeIds.Add(node.Id);
+        return node?.Id;
+    }
 
     private static string? FindSignalNodeId(
         VisualPlan plan,

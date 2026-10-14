@@ -17,6 +17,7 @@ internal static partial class Program
 {
     private static void VerifyCurrentFeeStateRegressions()
     {
+        VerifyLiveSpecialDeviceAndSignalEditing();
         VerifyCachedAssignmentAndReverseDetails();
         VerifyFeeRootReadFailures();
         VerifyOptionalRequirementsRegressions();

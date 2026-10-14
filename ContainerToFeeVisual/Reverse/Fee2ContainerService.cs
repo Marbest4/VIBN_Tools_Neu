@@ -26,7 +26,8 @@ public sealed record Fee2ContainerRoot(
     IReadOnlyList<FeeContainerObjectAssociation>? ObjectAssociations = null,
     IReadOnlyList<FeeContainerObjectDetails>? ObjectDetails = null,
     IReadOnlyList<FeeContainerLiveVariable>? LiveVariables = null,
-    IReadOnlyList<FeeContainerLiveAssignment>? LiveAssignments = null)
+    IReadOnlyList<FeeContainerLiveAssignment>? LiveAssignments = null,
+    IReadOnlyList<VIBN_Tools.SpecialDevices.Fee2SpecialDeviceRoot>? SpecialDevices = null)
 {
     public bool HasProvenance => Provenance is not null && UsesExactProvenance;
     public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : "FEE-Struktur (rekonstruiert)";
@@ -488,7 +489,7 @@ public sealed class Fee2ContainerService
         {
             var variables = await Services.ApiInstance!.Interface.GetAllVariablesAsync() ?? [];
             return variables.Select(signal => new FeeContainerLiveVariable(signal.VariableGuid,
-                signal.Tag ?? "", signal.Address ?? "", signal.Path ?? "", signal.Type.ToString(), signal.Comment ?? ""))
+                signal.Tag ?? "", signal.Address ?? "", signal.Path ?? "", signal.Type.ToString(), signal.Comment ?? "", signal.Usage.ToString()))
                 .DistinctBy(signal => signal.VariableGuid).ToArray();
         }, cancellationToken);
         EnsureLiveConnection(connectionRevision);
@@ -546,6 +547,7 @@ public sealed class Fee2ContainerService
                     .Select(item => item with { ParentName = details[item.ObjectGuid].ParentName,
                         LogicDefinitionName = details[item.ObjectGuid].LogicDefinitionName, ConnectionText = details[item.ObjectGuid].ConnectionText }).ToArray();
                 var rootVariables = assignments.Select(item => item.VariableGuid).ToHashSet();
+                var devices = VIBN_Tools.SpecialDevices.FeeSpecialDeviceLiveProjector.Project(scoped.OfType<FeeLogic>().ToArray(), liveVariables, assignments);
                 AttachInventory(reconstructed.Snapshot, scoped, liveVariables.Where(variable => rootVariables.Contains(variable.VariableGuid)).ToArray());
                 if (requirements is not null)
                     reconstructed.Snapshot.ContainerDocument.Root?.SetAttributeValue("autoCreateFile",
@@ -556,7 +558,7 @@ public sealed class Fee2ContainerService
                     UsesExactProvenance: false, reconstructed.InspectedObjectCount, reconstructed.IgnoredObjectCount,
                     rootIssues, reconstructed.UnmappedObjects, associations,
                     scoped.Select(item => details[item.Guid]).ToArray(),
-                    liveVariables.Where(variable => rootVariables.Contains(variable.VariableGuid)).ToArray(), assignments));
+                    liveVariables.Where(variable => rootVariables.Contains(variable.VariableGuid)).ToArray(), assignments, devices));
                 resultIssues.AddRange(reconstructed.Issues.Select(issue =>
                     new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, root.Name, issue.Message)));
             }

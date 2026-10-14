@@ -23,7 +23,8 @@ public sealed record FeeContainerLiveVariable(
     string Address,
     string Path,
     string DataType,
-    string Comment);
+    string Comment,
+    string Usage = "");
 
 public sealed record FeeContainerLiveAssignment(
     Guid VariableGuid,
@@ -106,7 +107,12 @@ public static class FeeContainerLiveReconstructor
 
         foreach (var item in sourceObjects)
         {
-            if (item.IsSpecialDevice) continue;
+            if (item.IsSpecialDevice && !string.IsNullOrWhiteSpace(item.LogicDefinitionName))
+            {
+                candidates.Add(new ContainerCandidate(item, item.LogicDefinitionName, item.LogicDefinitionName, item.Name));
+                relevantObjectGuids.Add(item.Guid);
+                continue;
+            }
             var liveSlots = (assignmentsByObject.GetValueOrDefault(item.Guid) ?? []).Select(assignment => assignment.TargetSlot).ToArray();
             var liveSignals = (assignmentsByObject.GetValueOrDefault(item.Guid) ?? []).Select(assignment => variableByGuid.GetValueOrDefault(assignment.VariableGuid)?.Signal)
                 .Where(signal => signal is not null).Cast<string>().ToArray();
@@ -126,7 +132,9 @@ public static class FeeContainerLiveReconstructor
         issues.AddRange(candidates.Where(candidate => candidateWarnings.ContainsKey(candidate.Object.Guid))
             .Select(candidate => new FeeContainerReconstructionIssue(candidate.Object.Guid, candidateWarnings[candidate.Object.Guid])));
 
-        var objectAssociations = ResolveAllObjectAssociations(sourceObjects.Where(item => !item.IsSpecialDevice).ToArray(), candidates, issues);
+        var objectAssociations = ResolveAllObjectAssociations(sourceObjects, candidates, issues)
+            .Select(item => byGuid.GetValueOrDefault(item.ContainerObjectGuid)?.IsSpecialDevice == true && item.ObjectGuid == item.ContainerObjectGuid
+                ? item with { Role = "SpecialDevice" } : item).ToArray();
         relevantObjectGuids.Clear();
         relevantObjectGuids.UnionWith(objectAssociations.Select(item => item.ObjectGuid));
 
@@ -201,7 +209,9 @@ public static class FeeContainerLiveReconstructor
                 var variable = entry.Variable;
                 dataList.Add(new XElement("Entry",
                     new XElement("ID", variable.Comment ?? string.Empty),
-                    new XElement("Address", string.IsNullOrWhiteSpace(variable.Path)
+                    new XElement("Address", candidate.Object.IsSpecialDevice && !string.IsNullOrWhiteSpace(variable.Address)
+                        ? variable.Address
+                        : string.IsNullOrWhiteSpace(variable.Path)
                         ? variable.Address ?? string.Empty
                         : variable.Path),
                     new XElement("DataType", variable.DataType ?? string.Empty),
@@ -222,7 +232,7 @@ public static class FeeContainerLiveReconstructor
                 dataList,
                 new XElement("SimObjects", members.Select(item => ContainerFileXml.Object(
                     item.ObjectGuid.ToString("D"), item.ObjectName, item.ObjectType,
-                    item.ObjectGuid == candidate.Object.Guid ? "Primary" : IsHelper(item.ObjectType) ? "TechnicalHelper" : "SimObject")))));
+                    item.Role)))));
         }
 
         var document = new XDocument(
@@ -416,6 +426,8 @@ public static class FeeContainerLiveReconstructor
         if (!variables.TryGetValue(assignment.VariableGuid, out var variable))
             return null;
         var runtimeSlot = assignment.TargetSlot?.Trim() ?? "";
+        if (candidate.Object.IsSpecialDevice)
+            return runtimeSlot.Length == 0 ? null : new ResolvedEntry(variable, runtimeSlot);
         var allowed = requirements?.Slots(candidate.XmlType) ?? [];
         var slot = allowed.FirstOrDefault(slot => string.Equals(slot, runtimeSlot, StringComparison.OrdinalIgnoreCase)) ??
             MapRuntimeSlot(candidate.RuntimeType, runtimeSlot);

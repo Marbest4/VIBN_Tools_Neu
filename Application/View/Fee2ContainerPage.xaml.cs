@@ -1,6 +1,8 @@
 using System.Windows.Controls;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Input;
+using System.Windows.Controls.Primitives;
 
 namespace VIBN_Tools.Application.View;
 
@@ -9,6 +11,17 @@ public partial class Fee2ContainerPage : UserControl
     public Fee2ContainerPage()
     {
         InitializeComponent();
+        PreviewKeyDown += OnDeleteKey;
+    }
+    private void OnDeleteKey(object sender, KeyEventArgs args)
+    {
+        if (args.Handled || args.Key != Key.Delete || Keyboard.FocusedElement is TextBoxBase or PasswordBox or ComboBox ||
+            DataContext is not VIBN_Tools.Application.VM.Fee2ContainerPageVM vm || vm.IsBusy) return;
+        var grid = FindGrids(this).FirstOrDefault(item => item.IsKeyboardFocusWithin);
+        if (grid is null) return;
+        var selected = grid.SelectedItems.OfType<VIBN_Tools.Application.VM.Fee2ContainerFoundSignalVM>().ToArray();
+        foreach (var signal in selected) vm.RemoveSignalCommand.Execute(signal);
+        if (selected.Length > 0) args.Handled = true;
     }
     private void CommitPendingEdits(object sender, RoutedEventArgs args)
     {
@@ -27,6 +40,15 @@ public partial class Fee2ContainerPage : UserControl
                 if (string.Equals(tab.Header?.ToString(), "FEE2SpecialDevices", StringComparison.Ordinal) && tab.IsEnabled)
                 {
                     tabs.SelectedItem = tab;
+                    _ = Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+                    {
+                        if (tab.Content is LazyPageHost host) host.EnsureContent();
+                        var target = FindControls<Fee2SpecialDevicesPage>(main).FirstOrDefault();
+                        if (target?.DataContext is not VIBN_Tools.Application.VM.Fee2SpecialDevicesPageVM devices) return;
+                        var current = (DataContext as VIBN_Tools.Application.VM.Fee2ContainerPageVM)?.SelectedRoot?.Root.SpecialDevices;
+                        if (current is { Count: > 0 }) devices.LoadDevices(current);
+                        else if (devices.RefreshCommand.CanExecute(null)) devices.RefreshCommand.Execute(null);
+                    }));
                     return;
                 }
     }

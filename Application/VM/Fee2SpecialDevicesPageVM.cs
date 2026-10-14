@@ -118,7 +118,7 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
     public string SelectionSummary => SelectedRoot is null
         ? "Kein Root ausgewählt."
         : $"{SelectedRoot.SourceKind}; {SelectedRoot.Snapshot.Manufacturer} / {SelectedRoot.Snapshot.DeviceType}; " +
-          $"{SelectedRoot.Snapshot.Signals.Count} Signale im Snapshot, {SelectedRoot.CurrentSignalCount} aktuell verbunden, " +
+          $"{SelectedRoot.ExpectedSignalCount} Signale, {SelectedRoot.CurrentSignalCount} aktuell verbunden, " +
           $"{SelectedRoot.MissingSignalCount} fehlend.";
 
     private async Task RefreshAsync()
@@ -131,6 +131,7 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
         IsBusy = true;
         try
         {
+            Roots.Clear(); Issues.Clear(); SelectedRoot = null;
             ProgressValue = 0;
             ProgressMaximum = 1;
             var progress = new Progress<Fee2SpecialDevicesProgress>(item =>
@@ -150,8 +151,8 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
             OnPropertyChanged(nameof(CanExportAll));
             OnPropertyChanged(nameof(CanRemoveAll));
             StatusText = result.Roots.Count == 0
-                ? $"Keine eindeutig exportierbaren Geräte gefunden. {result.IgnoredWithoutProvenance} BasicFrames waren nicht rekonstruierbar."
-                : $"{result.Roots.Count} Gerät(e) in der gesamten BasicFrame-Hierarchie gefunden; {result.IgnoredWithoutProvenance} Frames nicht eindeutig rekonstruierbar; {result.Issues.Count} Hinweis(e).";
+                ? $"Keine bekannte Gerätelogik gefunden; {result.Issues.Count} Hinweis(e)."
+                : $"{result.Roots.Count} Gerät(e) aus der aktuellen FEE-Struktur eingelesen; {result.Issues.Count} Hinweis(e).";
             ApplicationLogService.Instance.Information("FEE2SpecialDevices", StatusText);
         }
         catch (Exception exception)
@@ -163,6 +164,16 @@ public sealed class Fee2SpecialDevicesPageVM : MvvmBase
         {
             IsBusy = false;
         }
+    }
+
+    public void LoadDevices(IEnumerable<Fee2SpecialDeviceRoot> devices)
+    {
+        Roots.Clear(); Issues.Clear();
+        foreach (var device in devices.DistinctBy(item => item.Guid)) Roots.Add(device);
+        SelectedRoot = Roots.FirstOrDefault();
+        OnPropertyChanged(nameof(CanExportAll)); OnPropertyChanged(nameof(CanRemoveAll));
+        StatusText = $"{Roots.Count} Gerät(e) aus dem aktuellen FEE2Container-Snapshot übernommen.";
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private Task ExportAllAsync()

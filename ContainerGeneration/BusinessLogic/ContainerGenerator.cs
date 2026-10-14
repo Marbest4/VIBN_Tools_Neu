@@ -153,7 +153,9 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                     entry.ReviewMessage = exclusionDiagnostics.Count > 0
                         ? "Requirements.xml: ausgeschlossen durch " +
                           string.Join(" | ", exclusionDiagnostics.Distinct(StringComparer.Ordinal))
-                        : DescribeSearchScope(request.Requirements);
+                        : string.Empty;
+                    entry.RequirementsLocation = exclusionDiagnostics.Count > 0 ? entry.ReviewMessage : string.Empty;
+                    if (exclusionDiagnostics.Count > 0) entry.ReviewState = ContainerEntryReviewState.NeedsReview;
                 }
                 else if (matchingComponents.Count > 1)
                 {
@@ -169,6 +171,8 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                             .Select(match => match.RequirementLocation)
                             .Where(location => !string.IsNullOrWhiteSpace(location))
                             .Distinct(StringComparer.Ordinal));
+                    entry.RequirementsLocation = entry.ReviewMessage;
+                    entry.ReviewState = ContainerEntryReviewState.NeedsReview;
                     notMatchingSignals.Add(entry);
                 }
                 else
@@ -269,6 +273,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                 signal.Note = "Excluded by FilterList";
                 signal.ReviewMessage =
                     $"Requirements.xml: FilterList > Key „{matchingKey.Value.Trim()}“{DescribeLine(matchingKey)}.";
+                signal.RequirementsLocation = signal.ReviewMessage;
             }
 
             return result;
@@ -653,6 +658,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic
                         ContainerEntry entry = cEntry.Clone();
                         string containerName = FilterTextByKeyData(entry.Signal.Trim(), keyData);
                         entry.Slot = slotName;
+                        entry.RequirementsLocation = DescribeRequirementLocation(component, slot);
                         matchingDataList.Add(new MatchingData(
                             componentName,
                             componentType,

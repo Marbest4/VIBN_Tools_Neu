@@ -530,8 +530,10 @@ public sealed partial class ContainerToFeeVisualPlanService
                 StringComparison.OrdinalIgnoreCase))
             .ToArray();
         var container = node.ContainerId is null ? null : plan.FindNode(node.ContainerId);
-        if (container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
+        if (container is null)
             return new(VisualSignalConnectionKind.LinkMissing, "Der Container besitzt kein auflösbares FEE-Ziel.");
+        if (!ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
+            return new(VisualSignalConnectionKind.NotRequired, "Signal vorhanden; dieser nicht unterstützte Containertyp besitzt kein Objektziel und kann keine Slotverknüpfung herstellen.");
         if (!string.IsNullOrWhiteSpace(descriptor.ExpectedLogicName) && FindExistingContainerLogics(container.Id).Count != 1)
             return new(VisualSignalConnectionKind.LinkMissing, "Passende Containerlogik mit Logic Component und Slots fehlt oder ist nicht eindeutig.");
 
@@ -685,6 +687,17 @@ public sealed partial class ContainerToFeeVisualPlanService
             pair => pair.Key,
             pair => (IReadOnlyList<string>)pair.Value.ToArray(),
             StringComparer.OrdinalIgnoreCase);
+    }
+
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> FindNotLinkableSignalNodeIds()
+    {
+        if (CurrentPlan is not { } plan) return new Dictionary<string, IReadOnlyList<string>>();
+        var selected = plan.ExistingInterfaceSelections.Select(item => item.InterfaceGuid).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var items = plan.Nodes.Where(node => node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal && !plan.IsSignalRemoved(node.Id))
+            .Select(node => (Node: node, Signal: ResolveSignalForNode(plan, node, selected)))
+            .Where(item => item.Signal is not null && GetSignalConnectionState(item.Node.Id, item.Signal.GuidString).Kind == VisualSignalConnectionKind.NotRequired);
+        return items.GroupBy(item => item.Signal!.GuidString, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<string>)group.Select(item => item.Node.Id).ToArray(), StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
