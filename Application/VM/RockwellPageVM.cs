@@ -20,6 +20,7 @@ public sealed class RockwellPageVM : MvvmBase
     private string _projectSummary = "Kein Projekt geladen.";
     private bool _isBusy;
     private bool _isHelpVisible;
+    private bool _includeSafetySignals;
     private RockwellStandardDefinition? _selectedStandard;
 
     public RockwellPageVM()
@@ -71,6 +72,18 @@ public sealed class RockwellPageVM : MvvmBase
     public string SelectedStandardDescription => SelectedStandard?.Description ??
         "Keine Auswahl. Es werden keine standardabhängigen L5X-Änderungen angeboten.";
 
+    public bool IncludeSafetySignals
+    {
+        get => _includeSafetySignals;
+        set
+        {
+            if (_includeSafetySignals == value)
+                return;
+            _includeSafetySignals = value;
+            OnPropertyChanged();
+        }
+    }
+
     public bool IsHelpVisible
     {
         get => _isHelpVisible;
@@ -80,6 +93,7 @@ public sealed class RockwellPageVM : MvvmBase
     public string WorkflowHelp =>
         "Voraussetzung: ein L5X-Export des Studio-5000-Projekts. Der erste Bereich erzeugt daraus die " +
         "Allen-Bradley-Excel-Schnittstelle wie der InterfaceCreator (Member D*, PtStatus* und VS*). " +
+        "Mit 'Safety-Signale einschließen' werden zusätzlich benannte Safety-Ein-/Ausgänge und Safety-Modul-I/Os exportiert. " +
         "Danach optional GCCS auswählen. 'Kein Standard' verändert die L5X nicht. Schritt 1 sucht im Controller nach " +
         "DataTypes, AddOnInstructionDefinitions und Tags und ergänzt SIMULATION_MODES, SimulationMode sowie die Standard-/Safety-Tags. " +
         "Schritt 2 sucht in jedem Standardprogramm B001_MapInputs und A000_Main, erzeugt daraus A001_Simulation und ersetzt dort " +
@@ -218,6 +232,8 @@ public sealed class RockwellPageVM : MvvmBase
         if (dialog.ShowDialog() != true)
             return;
 
+        var sourcePath = SourcePath;
+        var includeSafetySignals = IncludeSafetySignals;
         IsBusy = true;
         using var measurement = PerformanceMeasurementService.Instance.Start(
             LogArea,
@@ -226,7 +242,7 @@ public sealed class RockwellPageVM : MvvmBase
         {
             StatusText = "Allen-Bradley-Tags und Kommentare werden aus der L5X gelesen …";
             var result = await Task.Run(() =>
-                AllenBradleyInterfaceExcelExporter.Export(SourcePath, dialog.FileName));
+                AllenBradleyInterfaceExcelExporter.Export(sourcePath, dialog.FileName, includeSafetySignals: includeSafetySignals));
             Messages.Clear();
             foreach (var warning in result.Warnings)
                 Messages.Add(warning);
