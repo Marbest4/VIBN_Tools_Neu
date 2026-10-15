@@ -14,6 +14,7 @@ public sealed record MergeContainersResult(
 /// <summary>
 /// Centralized, identity-based operations for the editable generation
 /// workspace. An imported signal may exist in exactly one location.
+/// Moving a signal out of a container preserves its recognized slot.
 /// </summary>
 public static class GenerationWorkspaceEditor
 {
@@ -155,7 +156,7 @@ public static class GenerationWorkspaceEditor
             foreach (var entry in selection)
             {
                 if (target is not null) target.DataList.Add(entry);
-                else { entry.Slot = string.Empty; openTarget!.Add(entry); }
+                else openTarget!.Add(entry);
             }
             RemoveEmptyContainers(containers, target);
         }
@@ -208,8 +209,6 @@ public static class GenerationWorkspaceEditor
         RemoveAllMatches(unassigned, entry);
         RemoveAllMatches(filtered, entry);
         target.Add(entry);
-
-        entry.Slot = string.Empty;
 
         var removedEmptyContainers = RemoveEmptyContainers(containers);
 

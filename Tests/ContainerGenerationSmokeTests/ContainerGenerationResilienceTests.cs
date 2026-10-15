@@ -11,6 +11,7 @@ internal static class ContainerGenerationResilienceTests
     public static void Verify()
     {
         VerifyBatchMoves();
+        VerifyUnassignmentPreservesSlots();
         VerifyIndependentUndoCapture();
         VerifyDuplicateEntrySubscriptions();
         VerifyAcknowledgment();
@@ -45,11 +46,45 @@ internal static class ContainerGenerationResilienceTests
             sources.Any(source => source.ValidationPasses > 1) || target.ValidationPasses > 1)
             throw new InvalidOperationException("Batch movement lost identities, left duplicate locations, or validated once per signal.");
         GenerationWorkspaceEditor.MoveToFilteredBatch(selected.Take(500), containers, unassigned, filtered);
-        if (target.DataList.Count != 500 || filtered.Count != 501 || selected.Take(500).Any(entry => entry.Slot != ""))
-            throw new InvalidOperationException("Moving a batch to the filtered list failed.");
+        if (target.DataList.Count != 500 || filtered.Count != 501 || selected.Take(500).Any(entry => entry.Slot != "PLC_IN_Test"))
+            throw new InvalidOperationException("Moving a batch to the filtered list failed or erased recognized slots.");
         GenerationWorkspaceEditor.MoveToUnassignedBatch([selected[0]], containers, unassigned, filtered);
-        if (unassigned.Count != 1 || filtered.Contains(selected[0]))
-            throw new InvalidOperationException("A batch signal exists in two open lists.");
+        if (unassigned.Count != 1 || filtered.Contains(selected[0]) || unassigned[0].Slot != "PLC_IN_Test")
+            throw new InvalidOperationException("A batch signal exists in two open lists or lost its recognized slot.");
+    }
+
+    private static void VerifyUnassignmentPreservesSlots()
+    {
+        var entry = Entry("Removed");
+        var source = new ContainerData { Component = "Source" };
+        source.DataList.Add(entry);
+        var containers = new ObservableCollection<ContainerData> { source };
+        var unassigned = new ObservableCollection<ContainerEntry> { entry.Clone() };
+        var filtered = new ObservableCollection<ContainerEntry> { entry.Clone() };
+        var result = GenerationWorkspaceEditor.MoveToUnassigned(entry, entry.Signal, containers, unassigned, filtered);
+        if (!result.WasAssigned || result.RemovedEmptyContainers != 1 || containers.Count != 0 || filtered.Count != 0 ||
+            unassigned.Count != 1 || !ReferenceEquals(unassigned[0], entry) || entry.Slot != "PLC_IN_Test")
+            throw new InvalidOperationException("Removing a signal lost its recognized slot or left duplicate assignments.");
+
+        var target = new ContainerData { Component = "Target" };
+        GenerationWorkspaceEditor.MoveToContainer(entry, target, containers, unassigned, filtered);
+        if (target.DataList.Single().Slot != "PLC_IN_Test" || unassigned.Count != 0)
+            throw new InvalidOperationException("Reassigning a removed signal required its recognized slot to be entered again.");
+
+        // Clearing a signal cell restores its previous name in the open list.
+        entry.Signal = string.Empty;
+        GenerationWorkspaceEditor.MoveToUnassigned(entry, "Removed", containers, unassigned, filtered);
+        if (entry.Signal != "Removed" || entry.Slot != "PLC_IN_Test")
+            throw new InvalidOperationException("Restoring a cleared signal cell lost its name or slot.");
+        GenerationWorkspaceEditor.MoveToFiltered(entry, containers, unassigned, filtered);
+        if (filtered.Single().Slot != "PLC_IN_Test" || unassigned.Count != 0)
+            throw new InvalidOperationException("Moving an unassigned signal to the filtered list erased its recognized slot.");
+
+        var unknown = Entry("Unknown");
+        unknown.Slot = string.Empty;
+        GenerationWorkspaceEditor.MoveToUnassignedBatch([unknown], containers, unassigned, filtered);
+        if (unknown.Slot != string.Empty)
+            throw new InvalidOperationException("Moving a signal invented a slot that was not recognized.");
     }
 
     private static void VerifyAcknowledgment()

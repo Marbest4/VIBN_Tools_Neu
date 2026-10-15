@@ -15,6 +15,7 @@ internal static partial class Program
     private static void VerifyContainerGenerationWorkflowRegressions()
     {
         VerifyContainerDropViewUpdates();
+        VerifyRemovedSignalKeepsSlot();
         var page = new ContainerGenerationPage();
         var vm = (ContainerGenerationPageVM)page.DataContext;
         vm.Settings.AutoSaveEnabled = false;
@@ -71,6 +72,36 @@ internal static partial class Program
             if (!vm.CanEditWorkspace) throw new InvalidOperationException("An async failure left the workspace disabled.");
         }
         finally { window.Close(); vm.OnViewUnloaded(); }
+    }
+
+    private static void VerifyRemovedSignalKeepsSlot()
+    {
+        var vm = new ContainerGenerationPageVM();
+        vm.Settings.AutoSaveEnabled = false;
+        var entry = new ContainerEntry
+        { SignalId = "removed", Signal = "Detected", Slot = "PLC_IN", Address = "%I0.0", DataType = "Bool" };
+        var container = new ContainerData { Component = "Sensor", Type = "Sensor" };
+        container.DataList.Add(entry);
+        vm.ContainerList.Add(container);
+        try
+        {
+            vm.DeleteItem.Execute(entry);
+            if (vm.ContainerList.Count != 0 || vm.UnassignedEntries.Single().Slot != "PLC_IN")
+                throw new InvalidOperationException("The remove-signal command erased the recognized slot.");
+            vm.UndoLastAction.Execute(null);
+            if (vm.UnassignedEntries.Count != 0 || vm.ContainerList.Single().DataList.Single().Slot != "PLC_IN")
+                throw new InvalidOperationException("Undo did not restore the signal with its recognized slot.");
+            vm.RedoLastAction.Execute(null);
+            if (vm.ContainerList.Count != 0 || vm.UnassignedEntries.Single().Slot != "PLC_IN")
+                throw new InvalidOperationException("Redo erased the removed signal's recognized slot.");
+
+            vm.UndoLastAction.Execute(null);
+            vm.ContainerList.Single().DataList.Single().Signal = string.Empty;
+            var removed = vm.UnassignedEntries.Single();
+            if (removed.Signal != "Detected" || removed.Slot != "PLC_IN" || removed.SignalId != "removed")
+                throw new InvalidOperationException("Clearing the signal cell lost its source identity, name, or recognized slot.");
+        }
+        finally { vm.OnViewUnloaded(); }
     }
 
     private static void AssertContainerColor(DataGrid grid, ContainerData container, string expected)

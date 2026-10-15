@@ -23,6 +23,7 @@ internal static partial class Program
         VerifyWorkstationColumnReset();
         VerifyContentElementDragParent();
         VerifyAssembliesParentScope();
+        VerifyValidationProgressBinding();
         VerifyValidationColourFilters();
         VerifyPhysicalRoleCannotBypassNames();
         VerifyProvenanceObjectIsolation();
@@ -89,6 +90,32 @@ internal static partial class Program
         if ((string)scope[1]! != "Plant") throw new InvalidOperationException("Missing Assemblies did not fall back to the topmost node.");
         plant.Parent = direct; // Invalid ancestry must terminate rather than hanging discovery.
         _ = resolve.Invoke(null, [obj]);
+    }
+
+    private static void VerifyValidationProgressBinding()
+    {
+        // Construct the real page: a default TwoWay binding to the private
+        // progress setter fails during InitializeComponent, before it opens.
+        var page = new ModelValidationPage();
+        var vm = (ModelValidationPageVM)page.DataContext;
+        var window = new Window { Content = page, Width = 1000, Height = 700, ShowInTaskbar = false };
+        try
+        {
+            window.Show();
+            PumpDispatcher(TimeSpan.FromMilliseconds(40));
+            var progress = FindVisualChildren<ProgressBar>(page).Single(bar =>
+                bar.GetBindingExpression(ProgressBar.ValueProperty)?.ParentBinding.Path?.Path == nameof(vm.UpdateProgress));
+            if (progress.GetBindingExpression(ProgressBar.ValueProperty)?.ParentBinding.Mode != System.Windows.Data.BindingMode.OneWay)
+                throw new InvalidOperationException("ModelValidation progress attempts to write to its read-only source.");
+            foreach (var value in new[] { 37, 100, 0 })
+            {
+                typeof(ModelValidationPageVM).GetProperty(nameof(vm.UpdateProgress))!.SetValue(vm, value);
+                PumpDispatcher(TimeSpan.FromMilliseconds(20));
+                if (progress.Value != value)
+                    throw new InvalidOperationException("ModelValidation progress does not reflect view-model updates.");
+            }
+        }
+        finally { window.Close(); }
     }
 
     private static void VerifyValidationColourFilters()

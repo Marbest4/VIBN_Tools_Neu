@@ -713,7 +713,7 @@
 
         <WrapPanel Grid.Row="0">
             <ux:Button Margin="5" Content="Update Objects" Command="{Binding UpdateFeeObjectData}" IsBusy="{Binding IsBusyUpdatingFeeData}"/>
-            <ProgressBar Margin="5" Width="150" Height="10" Minimum="0" Maximum="100" Value="{Binding UpdateProgress}" VerticalAlignment="Center" />
+            <ProgressBar Margin="5" Width="150" Height="10" Minimum="0" Maximum="100" Value="{Binding UpdateProgress, Mode=OneWay}" VerticalAlignment="Center" />
             <TextBlock Margin="10,5" MaxWidth="440" VerticalAlignment="Center" Text="{Binding UpdateStatusText}" TextWrapping="Wrap" />
             <ux:Button Margin="15,5,5,5" ux:Icon.Kind="Minimize" Command="{Binding CollapseAll}"/>
             <ux:Button Margin="5" ux:Icon.Kind="Maximize" Command="{Binding ExpandAll}"/>
