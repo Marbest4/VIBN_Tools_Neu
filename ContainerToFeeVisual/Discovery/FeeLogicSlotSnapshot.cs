@@ -9,13 +9,15 @@ internal static class FeeLogicSlotSnapshot
     // refresh, never on root/interface selection. Existing assignment GUIDs stay intact.
     internal static async Task PopulateAsync(IEnumerable<FeeAbstractObject> objects, CancellationToken token)
     {
-        using var throttle = new SemaphoreSlim(4);
-        var reads = objects.OfType<FeeLogic>().Where(item => item.LogicDefinitionGuid != Guid.Empty &&
+        var candidates = objects.OfType<FeeLogic>().Where(item => item.LogicDefinitionGuid != Guid.Empty &&
                 (item.Slots?.Count is not > 0 || string.Equals(item.LogicDefinitionName, "UNDEFINED", StringComparison.OrdinalIgnoreCase) ||
                     VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(item.LogicDefinitionName)))
-            .Select(async logic =>
+            .ToArray();
+        var completed = 0;
+        FeeReadProgressScope.Report("Logik-Slots lesen", 0, candidates.Length, "Logiken");
+        foreach (var logic in candidates)
             {
-                await throttle.WaitAsync(token);
+                token.ThrowIfCancellationRequested();
                 try
                 {
                     token.ThrowIfCancellationRequested();
@@ -29,9 +31,8 @@ internal static class FeeLogicSlotSnapshot
                 {
                     new VisualPlanLogger().Warning($"Slots der Logik '{logic.Name}' konnten nicht gelesen werden: {exception.GetBaseException().Message}");
                 }
-                finally { throttle.Release(); }
-            });
-        await Task.WhenAll(reads);
+                finally { FeeReadProgressScope.Report("Logik-Slots lesen", Interlocked.Increment(ref completed), candidates.Length, "Logiken"); }
+            }
         token.ThrowIfCancellationRequested();
     }
 }

@@ -30,9 +30,12 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
         var links = new FeeSlotSnapshot(sceneObjects ?? candidates, variables).ObjectLinks(candidates).ToList();
         var failures = 0;
         var resolvedSlotCount = 0;
+        var completed = 0;
+        FeeReadProgressScope.Report("SimObject-Verknüpfungen lesen", 0, candidates.Length);
         foreach (var item in candidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            FeeReadProgressScope.Report("SimObject-Verknüpfungen lesen", completed, candidates.Length, detail: item.Name ?? item.GuidString);
             var slots = requiredSlots is null ? GetRelevantSlotNames(item) :
                 GetRelevantSlotNames(item).Concat(requiredSlots.GetValueOrDefault(item.Guid) ?? [])
                     .Distinct(StringComparer.OrdinalIgnoreCase);
@@ -50,6 +53,7 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
                 // cannot find the actual container logic behind that group.
                 try
                 {
+                    FeeReadProgressScope.Report("SimObject-Verknüpfungen lesen", completed, candidates.Length, detail: $"{item.Name} / {slotName}");
                     var assignments = await readSlotLinks(item.Guid, slotName);
                     if (assignments is null)
                         continue;
@@ -84,6 +88,7 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
                     failures++;
                 }
             }
+            FeeReadProgressScope.Report("SimObject-Verknüpfungen lesen", ++completed, candidates.Length);
         }
 
         var distinct = links.Distinct().ToArray();

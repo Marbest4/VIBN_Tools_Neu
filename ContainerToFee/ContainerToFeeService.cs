@@ -37,6 +37,7 @@ namespace VIBN_Tools.ContainerToFee
                 {typeof(GrobStop_Container), new LogicSimObjectContainerFactory() },
 
                 {typeof(Button_Container), new SimObjectContainerFactory() },
+                {typeof(Cabinet_Container), new SimObjectContainerFactory() },
                 {typeof(Stacklight_Container), new SimObjectContainerFactory() },
                 {typeof(SimpleMove_Container), new SimObjectContainerFactory() },
                 {typeof(SimpleNot_Container), new SimObjectContainerFactory() },
@@ -140,6 +141,7 @@ namespace VIBN_Tools.ContainerToFee
             {
                 "BeltControl" => new GrobBeltControl_Container(),
                 "Button" => new Button_Container(),
+                "Cabinet" => new Cabinet_Container(),
                 "Clamping" => new GrobClamping_Container(),
                 "Conveyor" => new GrobConveyor_Container(),
                 "Cylinder" or "FeedSafetyDoor" => new GrobCylinder_Container(),

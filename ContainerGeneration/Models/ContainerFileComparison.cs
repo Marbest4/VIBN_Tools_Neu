@@ -115,7 +115,8 @@ public static class ContainerFileComparison
     }
 
     private static string Identity(XElement container) =>
-        (container.Element("Component")?.Value?.Trim() ?? "") + "\u001f" + (container.Element("Type")?.Value?.Trim() ?? "");
+        (container.Element("Component")?.Value?.Trim() ?? "") + "\u001f" + (container.Element("Type")?.Value?.Trim() ?? "") +
+        (container.Attribute("parentName") is { Value.Length: > 0 } parent ? "\u001f" + parent.Value : "");
 
     private static Dictionary<string, XElement> ReviewIndex(XDocument document)
     {
@@ -147,7 +148,7 @@ public static class ContainerFileComparison
             var type = container.Element("Type")?.Value?.Trim();
             if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(type))
                 throw new InvalidDataException("Ein Container besitzt keinen Namen oder Typ.");
-            if (!result.TryAdd(name + "\u001f" + type, container))
+            if (!result.TryAdd(Identity(container), container))
                 throw new InvalidDataException($"Container '{name}' ({type}) ist mehrfach vorhanden. Bitte eindeutige Container herstellen.");
         }
         return result;
@@ -166,6 +167,8 @@ public static class ContainerFileComparison
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         if (container is null) return result;
+        foreach (var attribute in new[] { "parentName", "parentGuid", "address" })
+            if (container.Attribute(attribute) is { } value) result["@" + attribute] = value.Value;
         // Container IDs are export-local. Name and type identify the container;
         // signal/FEE GUIDs remain significant to distinguish actual assignments.
         foreach (var element in container.Elements().Where(item => item.Name != "DataList" && item.Name != "SimObjects"))

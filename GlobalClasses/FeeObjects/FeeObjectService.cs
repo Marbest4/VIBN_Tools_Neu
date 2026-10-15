@@ -210,6 +210,20 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             }
         }
 
+        private static async Task<string[]> ReadSceneXmlWithProgressAsync(string[] guids)
+        {
+            var values = new List<string>(guids.Length);
+            FeeReadProgressScope.Report("Szenenbestand lesen", 0, guids.Length);
+            foreach (var batch in guids.Chunk(128))
+            {
+                var data = (await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(batch) ?? []).ToArray();
+                if (data.Length != batch.Length) throw new InvalidOperationException($"FEE lieferte {data.Length} statt {batch.Length} Objektdatensätze.");
+                values.AddRange(data);
+                FeeReadProgressScope.Report("Szenenbestand lesen", values.Count, guids.Length);
+            }
+            return values.ToArray();
+        }
+
         private static async Task<List<FeeAbstractObject>> GetFeeSceneObjectsForDiscoveryAsync(CancellationToken cancellationToken)
         {
             // The SDK shares request state across its API facades. Read each
@@ -226,6 +240,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             var logicDefinitions = (IReadOnlyList<ApiLogicDefinition>)(await Services.ApiInstance.Logic
                 .GetAllAvailableLogicDefinitionsAsync() ?? []).ToArray();
             var xmlTexts = new List<string>(guidTexts.Length);
+            FeeReadProgressScope.Report("Szenenbestand lesen", 0, guidTexts.Length);
             foreach (var batch in guidTexts.Chunk(128))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -237,6 +252,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                     if (response.Length != batch.Length)
                         throw new InvalidOperationException($"FEE lieferte {response.Length} statt {batch.Length} XML-Datensätze.");
                     xmlTexts.AddRange(response);
+                    FeeReadProgressScope.Report("Szenenbestand lesen", xmlTexts.Count, guidTexts.Length);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
                 catch (Exception exception)
@@ -312,7 +328,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
 
 
             // Create Global Batch Tasks
-            var xmlTask = Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(stringGuids);
+            var xmlTask = ReadSceneXmlWithProgressAsync(stringGuids);
 
             // Properties
             var posTask = Services.ApiInstance.Object.GetPropertiesAsync(stringGuids, nameof(SceneObject.Transform.Position), nameof(SceneObject.Transform));
@@ -382,6 +398,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
             // List of BatchData
             var batchData = new FeePropertyBatchData[guids.Length];
 
+            FeeReadProgressScope.Report("Objekte aufbereiten", 0, guids.Length);
             for (int i = 0; i < guids.Length; i++)
             {
                 var id = guids[i];
@@ -412,6 +429,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                     // one array avoids one complete list copy per scene object.
                     AllLogicDefinitions = allLogicDefinitions,
                 };
+                FeeReadProgressScope.Report("Objekte aufbereiten", i + 1, guids.Length);
             }
 
 
@@ -644,7 +662,10 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
         {
             var basicFrames = feeObjects.Where(x => x.FeeType == nameof(FeeBasicFrame)).OfType<FeeBasicFrame>().ToList();
 
-            await Parallel.ForEachAsync(feeObjects, async (obj, token) =>
+            var validationObjects = feeObjects.ToArray();
+            var checkedObjects = 0;
+            FeeReadProgressScope.Report("Plausibilität prüfen", 0, validationObjects.Length);
+            await Parallel.ForEachAsync(validationObjects, async (obj, token) =>
             {
                 EnsureCurrentConnection(connectionRevision);
                 // Delete all issues before
@@ -662,6 +683,7 @@ namespace VIBN_Tools.GlobalClasses.FeeObjects
                 {
                     await frameChecker.CheckObjectIssuesAsync(basicFrames);
                 }
+                FeeReadProgressScope.Report("Plausibilität prüfen", Interlocked.Increment(ref checkedObjects), validationObjects.Length);
             });
         }
 

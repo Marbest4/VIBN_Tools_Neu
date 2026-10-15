@@ -53,12 +53,17 @@ public static class ContainerFileWorkspaceReader
                 Signal = Child(entry, "Signal"),
                 Slot = Child(entry, "Slot"),
                 Note = Child(entry, "Note"),
-                FeeGuid = entry.Attribute("feeGuid")?.Value ?? string.Empty
+                FeeGuid = entry.Attribute("feeGuid")?.Value ?? string.Empty,
+                InterfaceGuid = entry.Attribute("interfaceGuid")?.Value ?? "", InterfaceName = entry.Attribute("interfaceName")?.Value ?? "",
+                FeeType = entry.Attribute("feeType")?.Value ?? ""
             })
             .ToArray();
         return new ComponentContainer
         {
             Id = element.Attribute("id")?.Value?.Trim() ?? string.Empty,
+            ParentName = element.Attribute("parentName")?.Value ?? "", ParentGuid = element.Attribute("parentGuid")?.Value ?? "",
+            ParentContainerId = element.Attribute("parentContainerId")?.Value ?? "", RecognitionSource = element.Attribute("recognitionSource")?.Value ?? "",
+            RecognitionOrigin = element.Attribute("origin")?.Value ?? "", BaseAddress = element.Attribute("address")?.Value ?? "", IsSpecialDevice = element.Attribute("specialDevice")?.Value == "true",
             Component = Child(element, "Component"),
             Type = Child(element, "Type"),
             DataList = new ObservableCollection<ContainerEntry>(entries),
@@ -66,6 +71,7 @@ public static class ContainerFileWorkspaceReader
                 element.Element("SimObjects")?.Elements("SimObject").Select(item => new ContainerFeeObject
                 {
                     Guid = Child(item, "Guid"), Name = Child(item, "Name"), FeeType = Child(item, "FeeType"),
+                    LogicDefinitionName = Child(item, "LogicDefinitionName"),
                     Role = Child(item, "Role"), Target = Child(item, "Target"), ClrType = Child(item, "ClrType"),
                     AssignmentKind = item.Attribute("assignment")?.Value ?? "Automatic",
                     Slots = item.Element("Slots")?.Elements("Slot").Select(slot => new ContainerFeeSlot

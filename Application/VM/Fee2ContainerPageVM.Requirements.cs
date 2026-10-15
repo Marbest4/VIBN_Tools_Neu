@@ -21,7 +21,7 @@ public sealed partial class Fee2ContainerPageVM
         get => _useRequirements;
         set
         {
-            if (_useRequirements == value || IsBusy) return;
+            if (!value || _useRequirements == value || IsBusy) return;
             _useRequirements = value;
             OnPropertyChanged();
             RefreshRequirementDefinitions();
@@ -29,7 +29,7 @@ public sealed partial class Fee2ContainerPageVM
         }
     }
     public string RequirementsDescription => _service.Requirements is null
-        ? "Standardkatalog aus FEE-Typen und Logikdefinitionen; Req-XML ist optional."
+        ? "Req.xml erforderlich: Datei laden oder aus ContainerGeneration übernehmen."
         : $"Req-XML: {(string.IsNullOrWhiteSpace(_requirementsSourcePath) ? "aus ContainerGeneration übernommen" : _requirementsSourcePath)} · {_service.Requirements.Types.Count} Typ(en); weitere bekannte FEE-Typen bleiben erkennbar.";
 
     private void RefreshRequirementDefinitions()
@@ -47,12 +47,13 @@ public sealed partial class Fee2ContainerPageVM
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(type => type, StringComparer.OrdinalIgnoreCase).ToArray();
         OnPropertyChanged(nameof(SupportedContainerTypes));
         OnPropertyChanged(nameof(RequirementsDescription));
+        NotifyWorkflow();
     }
 
     private async Task OpenRequirementsAsync()
     {
         if (IsBusy) return;
-        var dialog = new OpenFileDialog { Title = "Optionale Req-XML für FEE2Container auswählen", Filter = "Req-XML (*.xml)|*.xml|Alle Dateien (*.*)|*.*" };
+        var dialog = new OpenFileDialog { Title = "Erforderliche Req-XML für FEE2Container auswählen", Filter = "Req-XML (*.xml)|*.xml|Alle Dateien (*.*)|*.*" };
         if (dialog.ShowDialog() != true) return;
         BeginOperation();
         var token = _operationCancellation!.Token;

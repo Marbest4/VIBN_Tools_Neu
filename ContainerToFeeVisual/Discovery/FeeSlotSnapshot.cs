@@ -41,12 +41,14 @@ internal sealed class FeeSlotSnapshot
             .Distinct().ToArray();
     }
 
-    internal static bool IsRoutingHelper(FeeAbstractObject item) => item is FeeSimpleMove or FeeSimpleNot or FeeSimpleAnd or FeeSimpleOr;
+    internal static bool IsRoutingHelper(FeeAbstractObject item) => item is FeeSimpleMove or FeeSimpleNot or FeeSimpleAnd or FeeSimpleOr || VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.IsSimpleLogicType(item.FeeType);
 
     internal static IEnumerable<string> RoutingSlots(FeeAbstractObject item, string connectedSlot)
     {
         if (!IsRoutingHelper(item)) return [];
-        if (connectedSlot.Trim().StartsWith("Input", StringComparison.OrdinalIgnoreCase)) return ["Output 01"];
+        if (connectedSlot.Trim().StartsWith("Input", StringComparison.OrdinalIgnoreCase))
+            return (item.Slots?.Keys ?? Enumerable.Empty<string>()).Where(slot => slot.StartsWith("Output", StringComparison.OrdinalIgnoreCase))
+                .Concat(["Output 01"]).Distinct(StringComparer.OrdinalIgnoreCase);
         if (!connectedSlot.Trim().StartsWith("Output", StringComparison.OrdinalIgnoreCase)) return [];
         var defaults = item is FeeSimpleAnd or FeeSimpleOr ? new[] { "Input 01", "Input 02" } : ["Input 01"];
         return (item.Slots?.Keys ?? Enumerable.Empty<string>()).Where(slot => slot.StartsWith("Input", StringComparison.OrdinalIgnoreCase))

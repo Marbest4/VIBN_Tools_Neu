@@ -154,8 +154,8 @@ internal static partial class Program
             if (!reverse.SupportedContainerTypes.Contains("CustomerLogic") || !reverse.RequirementsDescription.Contains(path))
                 throw new InvalidOperationException("FEE2Container did not reuse the loaded Req file or show its source.");
             reverse.UseRequirements = false;
-            if (reverse.SupportedContainerTypes.Contains("CustomerLogic") || !reverse.SupportedContainerTypes.Contains("Sensor"))
-                throw new InvalidOperationException("Disabling Req removed standard type detection or retained inactive definitions.");
+            if (!reverse.UseRequirements || !reverse.SupportedContainerTypes.Contains("CustomerLogic") || !reverse.SupportedContainerTypes.Contains("Sensor"))
+                throw new InvalidOperationException("Mandatory Req definitions could be disabled or standard types disappeared.");
             generation = new ContainerGenerationPageVM(); generation.Settings.AutoSaveEnabled = false;
             if (!ReferenceEquals(generation.RequirementsFile, source) || !generation.ComponentTypes.Contains("CustomerLogic"))
                 throw new InvalidOperationException("Opening ContainerGeneration discarded the already loaded shared Req file.");

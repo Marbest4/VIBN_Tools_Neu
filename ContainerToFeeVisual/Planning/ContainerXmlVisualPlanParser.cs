@@ -165,16 +165,25 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
             var displayName = string.IsNullOrWhiteSpace(componentName)
                 ? $"Unbenannter Container ({xmlType})"
                 : componentName;
+            var parentId = rootId;
+            var parentKey = element.Attribute("parentContainerId")?.Value;
+            var parents = containerElements.Where(item => !string.IsNullOrWhiteSpace(parentKey) && item.Attribute("id")?.Value == parentKey && ChildValue(item, "Type") == "Cabinet").ToArray();
+            if (parents.Length == 1)
+                parentId = CreateContainerId(parents[0].Attribute("id")?.Value ?? "", ChildValue(parents[0], "Component"), "Cabinet", 1);
             var containerNode = new VisualNode(
                 containerId,
-                rootId,
+                parentId,
                 containerId,
                 VisualNodeKind.Container,
                 displayName,
                 xmlType,
                 null,
                 false,
-                descriptor?.SupportsCreation == true);
+                descriptor?.SupportsCreation == true)
+            {
+                ExpectedParentGuid = element.Attribute("parentGuid")?.Value ?? "", ExpectedParentName = element.Attribute("parentName")?.Value ?? "",
+                SourceObjectGuid = VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects(element).FirstOrDefault(item => item.Element("Role")?.Value == "Primary")?.Element("Guid")?.Value ?? ""
+            };
             AddNode(nodes, edges, containerNode);
 
             if (string.IsNullOrWhiteSpace(componentName))
@@ -292,8 +301,10 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     false));
             }
 
-            foreach (var (helperName, helperIndex) in descriptor.TechnicalHelpers.Select((name, index) => (name, index)))
+            foreach (var (defaultHelperName, helperIndex) in descriptor.TechnicalHelpers.Select((name, index) => (name, index)))
             {
+                var helperName = xmlType == "Cabinet" ? displayName : defaultHelperName == descriptor.CabinetName &&
+                    element.Attribute("parentName") is { } savedParent && !string.IsNullOrWhiteSpace(savedParent.Value) ? savedParent.Value : defaultHelperName;
                 AddNode(nodes, edges, new VisualNode(
                     $"{containerId}:helper:{helperIndex}",
                     logicNodeId ?? containerId,
@@ -350,7 +361,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     descriptor);
             }
 
-            if (entries.Count == 0)
+            if (entries.Count == 0 && xmlType != "Cabinet")
             {
                 issues.Add(new VisualIssue(
                     VisualIssueSeverity.Warning,
@@ -371,7 +382,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
             {
                 if (!Guid.TryParse(item.Element("Guid")?.Value, out var guid)) continue;
                 var role = item.Element("Role")?.Value;
-                if (role == "TechnicalHelper" || role == "Primary" && item.Element("FeeType")?.Value is "LogicObject" or "CabinetElement" or "BoolNot" or "MoveBit" or "BoolAnd" or "BoolOr") continue;
+                if (role == "TechnicalHelper" || role == "Primary" && VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.IsStructuralObjectAssociation(item.Element("FeeType")?.Value, role)) continue;
                 var targetName = item.Element("Target")?.Value;
                 var feeType = item.Element("FeeType")?.Value ?? "";
                 var model = VIBN_Tools.GlobalClasses.FeeObjects.FeeObjectFactory.Create(feeType, "", guid.ToString("D"));

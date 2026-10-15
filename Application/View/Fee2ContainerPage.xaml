@@ -12,6 +12,7 @@
     </UserControl.DataContext>
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="ContainerDetailsVisibilityConverter" />
+        <Style TargetType="Button"><Setter Property="ToolTipService.ShowOnDisabled" Value="True" /></Style>
         <Style TargetType="DataGrid">
             <Setter Property="behaviors:SmoothScrollBehavior.IsEnabled" Value="True" />
             <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
@@ -47,20 +48,19 @@
         </StackPanel>
 
         <WrapPanel Grid.Row="1" Margin="0,16,0,10" Orientation="Horizontal">
-            <Button MinWidth="160" MinHeight="34" Content="1. Interfaces einlesen" Command="{Binding ReadInterfacesCommand}" />
-            <Button Margin="8,0,0,0" MinWidth="190" MinHeight="34" Content="Container aus Signalen erstellen" Command="{Binding GenerateSignalContainersCommand}" Click="CommitPendingEdits" />
-            <Button Margin="8,0,0,0" MinWidth="175" MinHeight="34" Content="FEE-Objekte zuordnen" Command="{Binding AssignSceneObjectsCommand}" Click="CommitPendingEdits" />
-            <Button Margin="8,0,0,0" MinWidth="105" MinHeight="34" Content="Rückgängig" Command="{Binding UndoCommand}" Click="CommitPendingEdits" />
+            <Button MinWidth="160" MinHeight="34" Content="1. Interfaces einlesen" Command="{Binding ReadInterfacesCommand}" ToolTip="{Binding ReadInterfacesHelp}" />
+            <Button Margin="8,0,0,0" MinWidth="190" MinHeight="34" Content="Container aus Signalen erstellen" Command="{Binding GenerateSignalContainersCommand}" ToolTip="{Binding GenerateSignalContainersHelp}" Click="CommitPendingEdits" />
+            <Button Margin="8,0,0,0" MinWidth="175" MinHeight="34" Content="FEE-Objekte zuordnen" Command="{Binding AssignSceneObjectsCommand}" ToolTip="{Binding AssignSceneObjectsHelp}" Click="CommitPendingEdits" />
+            <Button Margin="8,0,0,0" MinWidth="105" MinHeight="34" Content="Rückgängig" Command="{Binding UndoCommand}" ToolTip="{Binding UndoHelp}" Click="CommitPendingEdits" />
 
             <Button Margin="0,0,8,0" MinWidth="145" MinHeight="34" Content="Req-XML laden …"
-                    Command="{Binding OpenRequirementsCommand}" ToolTip="Optional: Req-XML einlesen oder eine bereits in ContainerGeneration geladene Datei verwenden." />
-            <CheckBox Margin="0,0,12,0" VerticalAlignment="Center" Content="Req-XML verwenden"
-                      IsChecked="{Binding UseRequirements}" IsEnabled="{Binding CanConfigureRequirements}" />
+                    Command="{Binding OpenRequirementsCommand}" IsEnabled="{Binding CanConfigureRequirements}" ToolTip="Erforderliche Req.xml laden. Eine gültige Datei aus ContainerGeneration wird gemeinsam verwendet. Während eines laufenden Vorgangs gesperrt." />
+            <TextBlock Margin="0,0,12,0" VerticalAlignment="Center" Text="Req.xml erforderlich" />
             <Button MinWidth="150" MinHeight="34"
                     Content="2. FEE-Roots einlesen"
                     Command="{Binding RefreshCommand}"
                     IsEnabled="{Binding CanRefresh}"
-                    ToolTip="{Binding RefreshUnavailableReason}"
+                    ToolTip="{Binding RefreshRootsHelp}"
                     ToolTipService.ShowOnDisabled="True" />
             <Button Margin="8,0,0,0" MinWidth="165" MinHeight="34"
                     Content="ContainerFile exportieren" Click="CommitPendingEdits"
@@ -69,9 +69,9 @@
                     ToolTip="{Binding ExportUnavailableReason}"
                     ToolTipService.ShowOnDisabled="True" />
             <Button Margin="8,0,0,0" MinWidth="160" MinHeight="34" Content="Bearbeiten / Grouping"
-                    Command="{Binding EditContainersCommand}" Click="CommitPendingEdits"/>
+                    Command="{Binding EditContainersCommand}" ToolTip="Bearbeitet den erzeugten Container-Arbeitsstand und die Gruppierung. Erfordert Container und einen abgeschlossenen Lesevorgang." Click="CommitPendingEdits"/>
             <Button Margin="8,0,0,0" MinWidth="100" MinHeight="34"
-                    Content="Abbrechen" Command="{Binding CancelCommand}" />
+                    Content="Abbrechen" Command="{Binding CancelCommand}" ToolTip="Bricht den laufenden Vorgang nach dem aktuellen SDK-Aufruf ab. Ohne laufenden Vorgang gesperrt." />
             <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
             <TextBlock Margin="8,4,0,0" VerticalAlignment="Center" TextWrapping="Wrap" Text="{Binding RequirementsDescription}" />
         </WrapPanel>
@@ -155,14 +155,14 @@
                     <TextBox Width="150" Margin="0,0,12,0" Text="{Binding GroupingSettings.RegexId, UpdateSourceTrigger=PropertyChanged}" ToolTip="Capture-Gruppen für ID, wie in ContainerGeneration" />
                     <CheckBox Margin="0,0,6,0" Content="Address" IsChecked="{Binding GroupingSettings.GroupByAddress}" />
                     <TextBox Width="150" Margin="0,0,12,0" Text="{Binding GroupingSettings.RegexAddress, UpdateSourceTrigger=PropertyChanged}" />
-                    <Button Content="Grouping übernehmen" Padding="10,4" Click="CommitPendingEdits" Command="{Binding GroupContainersCommand}" />
+                    <Button Content="Grouping übernehmen" Padding="10,4" Click="CommitPendingEdits" Command="{Binding GroupContainersCommand}" ToolTip="Wendet die gewählten Grouping-Regeln auf den Arbeitsstand an. Voraussetzung: erzeugte Container, mindestens eine Grouping-Regel und kein laufender Vorgang." />
                 </WrapPanel>
             </Expander>
             <GroupBox Grid.Row="1" Header="Erkannte Container">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                     <DockPanel Margin="4">
-                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="8,3" Command="{Binding ShowLinkedSignalsCommand}">
+                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="8,3" Command="{Binding ShowLinkedSignalsCommand}" ToolTip="Zeigt aktuell verknüpfte Signale ohne vollständige Containerzuordnung. Erfordert einen eingelesenen Signal-Arbeitsstand; während eines Vorgangs gesperrt.">
                             <TextBlock Text="{Binding LinkedUnassignedSignalCount, StringFormat='Verknüpfte Signale ohne Zuordnung ({0})'}" />
                         </Button>
                         <TextBox Padding="6,3" Text="{Binding ContainerSearchText, UpdateSourceTrigger=PropertyChanged}" ToolTip="Container filtern; !Motor blendet Treffer mit Motor aus. Mehrere Suchbegriffe mit Komma trennen." />
@@ -190,15 +190,18 @@
                                 <ComboBox ItemsSource="{Binding DataContext.SupportedContainerTypes, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
                                           SelectedItem="{Binding Type, UpdateSourceTrigger=PropertyChanged}" IsEditable="False" />
                             </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-                            <DataGridTextColumn Header="Signalzeilen" Binding="{Binding DataList.Count}" IsReadOnly="True" Width="90" />
+                            <DataGridTextColumn Header="Signalzeilen" Binding="{Binding DisplaySignalCount}" IsReadOnly="True" Width="90" />
                             <DataGridTextColumn Header="FEE-Objekte" Binding="{Binding AssociatedObjectCount}" IsReadOnly="True" Width="95" />
                             <DataGridTextColumn Header="Prüfstatus" Binding="{Binding ValidationError}" IsReadOnly="True" Width="*" MinWidth="150" />
                             <DataGridCheckBoxColumn Header="geprüft" Binding="{Binding ManuallyChecked, UpdateSourceTrigger=PropertyChanged}" Width="75" />
                             <DataGridTextColumn Header="Interface" Binding="{Binding InterfacesText, Mode=OneWay}" IsReadOnly="True" Width="150" />
+                            <DataGridTextColumn Header="Quelle" Binding="{Binding RecognitionSource, Mode=OneWay}" IsReadOnly="True" Width="100" />
+                            <DataGridTextColumn Header="Parent / Cabinet" Binding="{Binding ParentName, Mode=OneWay}" IsReadOnly="True" Width="160" />
+                            <DataGridTextColumn Header="Adresse" Binding="{Binding BaseAddress, Mode=OneWay}" IsReadOnly="True" Width="110" />
                             <DataGridTextColumn Header="Erkennung" Binding="{Binding RecognitionOrigin, Mode=OneWay}" IsReadOnly="True" Width="220" />
                             <DataGridTemplateColumn Header="SpecialDevices" Width="135" IsReadOnly="True"><DataGridTemplateColumn.CellTemplate><DataTemplate>
                                 <Button Content="+ SpecialDevices" Padding="6,2" Command="{Binding DataContext.AddToSpecialDevicesCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
-                                        CommandParameter="{Binding}" Click="OnAddToSpecialDevices" ToolTip="Vorhandene Logik in FEE2SpecialDevices übernehmen. Unbekannte Definitionen erhalten einen Hinweis." />
+                                        CommandParameter="{Binding}" Click="OnAddToSpecialDevices" ToolTip="{Binding SpecialDeviceButtonHelp}" />
                             </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="Aktion" Width="100"><DataGridTemplateColumn.CellTemplate><DataTemplate>
                                 <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
@@ -209,6 +212,35 @@
                             <DataTemplate>
                                 <Border Padding="8" Background="#FFF7F9FB" BorderBrush="#FFD6DCE3" BorderThickness="0,0,0,1">
                                     <StackPanel>
+                                    <GroupBox Header="CabinetElemente" Margin="0,0,0,8" Visibility="{Binding HasChildContainers, Converter={StaticResource ContainerDetailsVisibilityConverter}}">
+                                        <DataGrid ItemsSource="{Binding ChildContainers}" MaxHeight="500" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionChanged="OnCabinetElementSelectionChanged" RowDetailsVisibilityMode="VisibleWhenSelected">
+                                            <DataGrid.Columns>
+                                                <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="65" />
+                                                <DataGridTextColumn Header="Element" Binding="{Binding Component}" Width="180" />
+                                                <DataGridTemplateColumn Header="Typ" Width="150"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                    <ComboBox ItemsSource="{Binding DataContext.SupportedContainerTypes, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" SelectedItem="{Binding Type}" IsEditable="False" />
+                                                </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                                <DataGridTextColumn Header="Parent / Cabinet" Binding="{Binding ParentName, Mode=OneWay}" IsReadOnly="True" Width="160" />
+                                                <DataGridTextColumn Header="Quelle" Binding="{Binding RecognitionSource, Mode=OneWay}" IsReadOnly="True" Width="100" />
+                                                <DataGridTextColumn Header="Signale" Binding="{Binding DataList.Count, Mode=OneWay}" IsReadOnly="True" Width="80" />
+                                                <DataGridTemplateColumn Header="Aktion" Width="100"><DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                                    <Button Content="Entfernen" Command="{Binding DataContext.RemoveContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" ToolTip="Entfernt dieses CabinetElement aus dem ContainerFile-Arbeitsstand. FEE wird nicht verändert." />
+                                                </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+                                            </DataGrid.Columns>
+                                            <DataGrid.RowDetailsTemplate><DataTemplate>
+                                                <DataGrid ItemsSource="{Binding DataList}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionChanged="OnContainerSignalSelectionChanged">
+                                                    <DataGrid.Columns>
+                                                        <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName, Mode=OneWay}" IsReadOnly="True" Width="140" />
+                                                        <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="260" />
+                                                        <DataGridTextColumn Header="Adresse" Binding="{Binding Address}" Width="140" />
+                                                        <DataGridTextColumn Header="Datentyp" Binding="{Binding DataType}" Width="100" />
+                                                        <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="150" />
+                                                    </DataGrid.Columns>
+                                                </DataGrid>
+                                            </DataTemplate></DataGrid.RowDetailsTemplate>
+                                        </DataGrid>
+                                    </GroupBox>
+
                                         <WrapPanel Margin="0,0,0,8">
                                             <TextBlock Margin="0,0,18,0"><Run FontWeight="SemiBold" Text="Parent / Cabinet: " /><Run Text="{Binding ParentName, Mode=OneWay}" /></TextBlock>
                                             <TextBlock><Run FontWeight="SemiBold" Text="Logik: " /><Run Text="{Binding LogicDefinitionName, Mode=OneWay}" /></TextBlock>
@@ -225,6 +257,7 @@
                                                 </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                                                 <DataGridCheckBoxColumn Header="Export" Binding="{Binding IsIncluded, UpdateSourceTrigger=PropertyChanged}" Width="60" />
                                                 <DataGridTextColumn Header="ID" Binding="{Binding SignalId, UpdateSourceTrigger=LostFocus}" Width="130" />
+                                                <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType, Mode=OneWay}" IsReadOnly="True" Width="130" />
                                                 <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName, Mode=OneWay}" IsReadOnly="True" Width="160" />
                                                 <DataGridTextColumn Header="Address" Binding="{Binding Address, UpdateSourceTrigger=LostFocus}" Width="150" />
                                                 <DataGridTextColumn Header="DataType" Binding="{Binding DataType, UpdateSourceTrigger=LostFocus}" Width="100" />
@@ -232,14 +265,14 @@
                                                 <DataGridTextColumn Header="Slot" Binding="{Binding Slot, UpdateSourceTrigger=LostFocus}" Width="180" />
                                                 <DataGridTextColumn Header="Prüfhinweise" Binding="{Binding Note, UpdateSourceTrigger=LostFocus}" Width="*" MinWidth="160" />
                                                 <DataGridTemplateColumn Header="Aktion" Width="90" IsReadOnly="True"><DataGridTemplateColumn.CellTemplate><DataTemplate>
-                                                    <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
-                                                            CommandParameter="{Binding}" ToolTip="Signalzuordnung entfernen; FEE-Signal bleibt erhalten" />
+                                                    <Button Content="Entfernen" Padding="7,2" Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" ToolTip="Entfernt diese Signalzeile aus dem Arbeitsstand; die FEE-Verbindung bleibt erhalten. Erfordert eine aktive Signalzeile und einen abgeschlossenen Vorgang."
+                                                            CommandParameter="{Binding}" />
                                                 </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                                             </DataGrid.Columns>
                                         </DataGrid>
                                         <DockPanel Margin="0,10,0,4">
                                             <Button DockPanel.Dock="Right" Content="{Binding LinkedUnassignedSignalCount, StringFormat='Verknüpfte Signale ohne Zuordnung ({0})'}" Padding="6,3"
-                                                    Command="{Binding DataContext.ShowLinkedSignalsCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" CommandParameter="{Binding}" />
+                                                    Command="{Binding DataContext.ShowLinkedSignalsCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" ToolTip="Zeigt verknüpfte Signale ohne Zuordnung für die FEE-Objekte dieses Containers. Während eines laufenden Vorgangs gesperrt." CommandParameter="{Binding}" />
                                             <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Zugeordnete FEE-Objekte" />
                                         </DockPanel>
                                         <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -300,7 +333,8 @@
                         <DataGridTextColumn Header="Zugeordnet zu Container" Binding="{Binding Container}" Width="210" IsReadOnly="True" />
                         <DataGridTextColumn Header="Signal" Binding="{Binding Signal}" Width="190" />
                         <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="175" />
-                        <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName, Mode=OneWay}" IsReadOnly="True" Width="160" />
+                        <DataGridTextColumn Header="FEE-Typ" Binding="{Binding FeeType, Mode=OneWay}" IsReadOnly="True" Width="130" />
+                                                <DataGridTextColumn Header="Interface" Binding="{Binding InterfaceName, Mode=OneWay}" IsReadOnly="True" Width="160" />
                         <DataGridTextColumn Header="Adresse/Pfad" Binding="{Binding Address}" Width="150" />
                         <DataGridTextColumn Header="Datentyp" Binding="{Binding DataType}" Width="115" />
                         <DataGridTextColumn Header="Status" Binding="{Binding AssignmentState}" Width="230" IsReadOnly="True" />
@@ -308,7 +342,7 @@
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Button Content="Entfernen" Padding="7,2"
-                                            Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                            Command="{Binding DataContext.RemoveSignalCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" ToolTip="Entfernt diese Signalzeile aus dem Arbeitsstand; die FEE-Verbindung bleibt erhalten. Erfordert eine aktive Signalzeile und einen abgeschlossenen Vorgang."
                                             CommandParameter="{Binding}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -369,7 +403,7 @@
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Button Content="Zu Container hinzufügen" Padding="7,2"
-                                            Command="{Binding DataContext.AddObjectAsContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}"
+                                            Command="{Binding DataContext.AddObjectAsContainerCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}" ToolTip="Legt einen Container mit den aktuellen Signalverbindungen dieses Objekts an. Komponente und Typ müssen angegeben sein; während eines Vorgangs gesperrt. Cabinets werden aus ihren verknüpften CabinetElementen gruppiert."
                                             CommandParameter="{Binding}" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>

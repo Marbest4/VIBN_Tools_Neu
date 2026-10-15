@@ -88,12 +88,12 @@ internal sealed class FeeSimObjectDiscovery(IVisualPlanLogger logger)
                 item.Guid.ToString("D"),
                 item.Name ?? string.Empty,
                 VisualFeeContainerObjectKind.CabinetElement,
-                item.ElementType ?? string.Empty)))
+                item.ElementType ?? string.Empty, ParentGuidString: item.Parent?.GuidString ?? "", ParentName: item.Parent?.Name ?? "")))
             .Concat(allObjects.OfType<FeeCabinet>().Select(item => new VisualFeeContainerObject(
                 item.Guid.ToString("D"),
                 item.Name ?? string.Empty,
                 VisualFeeContainerObjectKind.Cabinet,
-                string.Empty)))
+                string.Empty, ParentGuidString: item.Parent?.GuidString ?? "", ParentName: item.Parent?.Name ?? "")))
             .Concat(helpers.Select(item => new VisualFeeContainerObject(
                 item.GuidString,
                 item.Name ?? string.Empty,

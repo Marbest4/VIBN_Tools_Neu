@@ -23,7 +23,7 @@ public sealed partial class Fee2ContainerPageVM
                 if (existing.ContainerId == container.Id) { existing.IsIncluded = true; continue; }
                 editor.Signals.Remove(existing);
                 signal = new(container.Id, container.Component, container.Type, existing.Signal, existing.Slot,
-                    existing.Address, existing.DataType, existing.SignalId, existing.Note, existing.VariableGuid, existing.InterfaceGuid, existing.InterfaceName);
+                    existing.Address, existing.DataType, existing.SignalId, existing.Note, existing.VariableGuid, existing.InterfaceGuid, existing.InterfaceName) { FeeType = existing.FeeType };
             }
             else
             {

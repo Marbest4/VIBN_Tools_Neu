@@ -30,9 +30,9 @@ public sealed record WorkspaceEntrySnapshot(
     string ReviewMessage,
     string FeeGuid = "",
     bool IsChangeAcknowledged = false,
-    string RequirementsLocation = "", string InterfaceGuid = "", string InterfaceName = "");
+    string RequirementsLocation = "", string InterfaceGuid = "", string InterfaceName = "", string FeeType = "");
 
-public sealed record WorkspaceContainerFeeSnapshot(string Id, string Name, string Type, IReadOnlyList<ContainerFeeObject> Objects);
+public sealed record WorkspaceContainerFeeSnapshot(string Id, string Name, string Type, IReadOnlyList<ContainerFeeObject> Objects, ComponentContainer? Context = null);
 
 public sealed class GenerationWorkspaceSnapshot
 {
@@ -322,9 +322,12 @@ public static class GenerationWorkspaceReconciler
                         ContainerEntryReviewState.ManuallyEdited)
                     .ThenBy(entry => entry.Location)
                     .First())
-                .ToList(), sourceContainers.Where(container => container.SimObjects.Count > 0)
+                .ToList(), sourceContainers.Where(container => container.SimObjects.Count > 0 || container.RecognitionSource.Length > 0 ||
+                    container.ParentName.Length > 0 || container.BaseAddress.Length > 0 || container.IsSpecialDevice)
                     .Select(container => new WorkspaceContainerFeeSnapshot(container.Id, container.Component, container.Type,
-                        container.SimObjects.Select(item => item.Clone()).ToArray())).ToArray());
+                        container.SimObjects.Select(item => item.Clone()).ToArray(), new ComponentContainer
+                        { ParentName = container.ParentName, ParentGuid = container.ParentGuid, ParentContainerId = container.ParentContainerId, RecognitionSource = container.RecognitionSource,
+                            RecognitionOrigin = container.RecognitionOrigin, BaseAddress = container.BaseAddress, IsSpecialDevice = container.IsSpecialDevice })).ToArray());
     }
 
     public static ReimportSummary Reconcile(
@@ -594,9 +597,11 @@ public static class GenerationWorkspaceReconciler
             var container = matches.SingleOrDefault();
             if (container is null)
             {
+                if (previous.Objects.Count == 0) continue;
                 container = new ContainerData { Id = previous.Id, Component = previous.Name, Type = previous.Type };
                 containers.Add(container);
             }
+            if (previous.Context is { } context) container.CopyFeeContextFrom(context);
             foreach (var item in previous.Objects)
                 if (!container.SimObjects.Any(existing => existing.Guid == item.Guid)) container.SimObjects.Add(item.Clone());
         }
@@ -762,6 +767,7 @@ public static class GenerationWorkspaceReconciler
 
     public static string CreatePrimaryKey(ContainerEntry entry)
     {
+        if (Guid.TryParse(entry.FeeGuid, out var guid) && guid != Guid.Empty) return $"fee:{guid:D}";
         var id = Normalize(entry.ID);
         var address = Normalize(entry.Address);
 
@@ -800,7 +806,7 @@ public static class GenerationWorkspaceReconciler
             entry.Note,
             entry.IsManuallyEdited,
             entry.ReviewState,
-            entry.ReviewMessage, entry.FeeGuid, entry.IsChangeAcknowledged, entry.RequirementsLocation, entry.InterfaceGuid, entry.InterfaceName);
+            entry.ReviewMessage, entry.FeeGuid, entry.IsChangeAcknowledged, entry.RequirementsLocation, entry.InterfaceGuid, entry.InterfaceName, entry.FeeType);
     }
 
     private static IEnumerable<CurrentEntry> EnumerateCurrentEntries(
@@ -863,7 +869,7 @@ public static class GenerationWorkspaceReconciler
             ReviewState = snapshot.ReviewState,
             ReviewMessage = snapshot.ReviewMessage,
             RequirementsLocation = snapshot.RequirementsLocation,
-            InterfaceGuid = snapshot.InterfaceGuid, InterfaceName = snapshot.InterfaceName,
+            InterfaceGuid = snapshot.InterfaceGuid, InterfaceName = snapshot.InterfaceName, FeeType = snapshot.FeeType,
             IsChangeAcknowledged = snapshot.IsChangeAcknowledged
         };
 

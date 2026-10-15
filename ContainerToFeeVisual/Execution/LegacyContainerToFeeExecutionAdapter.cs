@@ -124,10 +124,7 @@ internal sealed class LegacyContainerToFeeExecutionAdapter(IVisualPlanLogger log
             foreach (var item in selectedBindings.Where(item => item.RuntimeContainer is Interfaces.ICabinetElementOwner))
             {
                 var expectedType = ContainerExistingObjectReuse.GetExpectedCabinetElementType(item.RuntimeContainer);
-                var matches = existingCabinetElements.Where(element =>
-                        string.Equals(element.Name, item.RuntimeContainer.ComponentName, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(element.ElementType, expectedType, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
+                var matches = ContainerExistingObjectReuse.FindCabinetElements(item.RuntimeContainer, existingCabinetElements);
                 if (matches.Length > 1)
                 {
                     if (forcedRun)

@@ -16,6 +16,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         public string InterfaceGuid { get; set; } = string.Empty;
         [XmlAttribute("interfaceName")]
         public string InterfaceName { get; set; } = string.Empty;
+        [DefaultValue(""), XmlAttribute("feeType")] public string FeeType { get; set; } = string.Empty;
         private string _id = string.Empty;
         private string _address = string.Empty;
         private string _dataType = string.Empty;
@@ -286,7 +287,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
             // for every signal in a complete undo/reimport snapshot.
             return new ContainerEntry
             {
-                _signalId = EnsureSignalId(), FeeGuid = FeeGuid, InterfaceGuid = InterfaceGuid, InterfaceName = InterfaceName,
+                _signalId = EnsureSignalId(), FeeGuid = FeeGuid, InterfaceGuid = InterfaceGuid, InterfaceName = InterfaceName, FeeType = FeeType,
                 _id = _id, _address = _address, _dataType = _dataType,
                 _signal = _signal, _slot = _slot, _note = _note,
                 _reviewState = _reviewState, _reviewMessage = _reviewMessage,

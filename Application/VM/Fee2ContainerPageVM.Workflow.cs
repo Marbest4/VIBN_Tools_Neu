@@ -26,9 +26,9 @@ public sealed partial class Fee2ContainerPageVM
     public ICommand UndoCommand { get; private set; } = null!;
     public ICommand AddToSpecialDevicesCommand { get; private set; } = null!;
     public bool CanReadInterfaces => CanRefresh;
-    public bool CanGenerateSignalContainers => !IsBusy && Connection.CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent && _signalsSnapshot is not null && Interfaces.Any(item => item.IsSelected) &&
+    public bool CanGenerateSignalContainers => HasRequiredRequirements && !IsBusy && Connection.CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent && _signalsSnapshot is not null && Interfaces.Any(item => item.IsSelected) &&
         _signalsSnapshot.ConnectionRevision == Connection.ConnectionRevision;
-    public bool CanAssignSceneObjects => !IsBusy && Connection.CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent && SelectedRoot is not null && ObjectRoots.Any(item => item.IsSelected) &&
+    public bool CanAssignSceneObjects => HasRequiredRequirements && !IsBusy && Connection.CanUseFeeFeatures && Connection.AreModelValidationObjectsCurrent && SelectedRoot is not null && ObjectRoots.Any(item => item.IsSelected) &&
         _signalsSnapshot?.ConnectionRevision == Connection.ConnectionRevision && GeneratedScopeMatchesSelection;
     private bool GeneratedScopeMatchesSelection => SelectedRoot?.Editor.LiveVariables.Select(item => item.InterfaceGuid).ToHashSet(StringComparer.OrdinalIgnoreCase)
         .SetEquals(Interfaces.Where(item => item.IsSelected && item.SignalCount > 0).Select(item => item.Guid)) == true;
@@ -49,6 +49,7 @@ public sealed partial class Fee2ContainerPageVM
     {
         OnPropertyChanged(nameof(CanReadInterfaces)); OnPropertyChanged(nameof(CanGenerateSignalContainers));
         OnPropertyChanged(nameof(CanAssignSceneObjects)); OnPropertyChanged(nameof(CanUndo));
+        NotifyButtonHelp();
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -58,6 +59,7 @@ public sealed partial class Fee2ContainerPageVM
         BeginOperation(); var token = _operationCancellation!.Token;
         try
         {
+            RefreshRequirementDefinitions();
             _signalsSnapshot = null;
             ClearDiscoveredRoots(); ObjectRoots.Clear(); Interfaces.Clear(); _undo.Clear(); _lastWorkspaceState = null;
             var snapshot = await _signalsService.ReadInterfacesAsync(token);
@@ -92,11 +94,14 @@ public sealed partial class Fee2ContainerPageVM
                 { ProgressValue = item.Percent; StatusText = item.Message; }
             });
             var routes = await _signalsService.ReadRoutesAsync(variables, snapshot.ConnectionRevision, token, progress);
-            var requirements = UseRequirements && RequirementsProvider.RequirementsFile is { IsInitialized: true } source ? new XDocument(source.Document) : null;
-            var root = await Task.Run(() => FeeSignalContainerBuilder.Build(variables, routes.Assignments, requirements, token), token);
+            var endpoints = await _signalsService.ReadEndpointsAsync(routes.Assignments, snapshot.ConnectionRevision, token, progress);
+            var requirements = RequirementsProvider.RequirementsFile is { IsInitialized: true } source ? new XDocument(source.Document) :
+                throw new InvalidOperationException("Eine gültige Req.xml ist erforderlich.");
+            var root = await Task.Run(() => FeeSignalContainerBuilder.Build(variables, routes.Assignments, requirements, token, endpoints.Objects), token);
             ReplaceWorkspace([new(root, true)]);
             PushUndo(previous); _lastWorkspaceState = CaptureWorkspace();
-            Issues.ReplaceWith(routes.Issues); IsIssuesExpanded = Issues.Count > 0;
+            Issues.ReplaceWith(routes.Issues.Concat(endpoints.Issues)); IsIssuesExpanded = Issues.Count > 0;
+            ProgressValue = 100;
             StatusText = $"{root.ContainerCount} Container aus {root.UpdatedSignalCount} aktiv verknüpften Signalen erstellt. FEE-Objekte sind noch nicht zugeordnet.";
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested) { StatusText = "Signal-Erkennung abgebrochen."; }
@@ -147,7 +152,7 @@ public sealed partial class Fee2ContainerPageVM
             var knownDevice = editor.SourceRoot.SpecialDevices?.FirstOrDefault(item => item.Guid == owner);
             return VIBN_Tools.SpecialDevices.FeeSpecialDeviceCandidateFactory.Create(container.Component, container.Type,
                 container.LogicDefinitionName, container.ParentName, owner, editor.LiveVariables.Where(item => signals.Contains(item.VariableGuid)).ToArray(),
-                editor.LiveAssignments.Where(item => signals.Contains(item.VariableGuid) && objects.Contains(item.TargetObjectGuid)).ToArray(),
+                editor.LiveAssignments.Where(item => signals.Contains(item.VariableGuid) && (FeeRobotExchangeGrouping.IsExchange(container.Type) || objects.Contains(item.TargetObjectGuid))).ToArray(),
                 knownDevice?.SignalCoverage);
         }).ToArray();
     }

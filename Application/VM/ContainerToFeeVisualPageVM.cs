@@ -1608,6 +1608,9 @@ public sealed partial class ContainerToFeeVisualPageVM : MvvmBase
 
     private async Task<FeeRefreshSnapshot> RefreshFeeStateAsync(CancellationToken cancellationToken)
     {
+        var readOperation = _operationCancellation;
+        using var readProgress = FeeReadProgressScope.Begin(new Progress<FeeReadProgress>(update =>
+        { if (IsBusy && ReferenceEquals(_operationCancellation, readOperation) && !cancellationToken.IsCancellationRequested) { GenerationProgress = update.Percent; GenerationProgressText = update.Text; } }));
         var totalWatch = Stopwatch.StartNew();
         var stageWatch = Stopwatch.StartNew();
         GenerationProgressText = "1/6: FEE-SimObjects und Modellzustand werden gelesen …";

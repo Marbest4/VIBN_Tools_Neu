@@ -111,6 +111,15 @@ var document = ContainerFileXml.Document([duplicateObjects, Container("Manual", 
         new XElement("Path", ""), new XElement("DataType", "Bool")))));
 document.Validate(schema, (_, args) => throw new InvalidOperationException(args.Message));
 empty.Validate(schema, (_, args) => throw new InvalidOperationException(args.Message));
+var cabinetLeft = Container("Selector", "CabinetSwitch"); cabinetLeft.SetAttributeValue("parentName", "Cabinet A");
+var cabinetRight = new XElement(cabinetLeft); cabinetRight.SetAttributeValue("parentName", "Cabinet B");
+var cabinets = ContainerFileXml.Document([cabinetLeft, cabinetRight]);
+Assert(ContainerFileComparison.Compare(cabinets, new XDocument(cabinets)).Count == 2, "Elements in different cabinets were treated as ambiguous duplicates.");
+var changedParent = new XElement(cabinetLeft); changedParent.SetAttributeValue("parentGuid", secondGuid);
+Assert(ContainerFileComparison.Align(cabinetLeft, changedParent).Any(row => row.IsDifferent), "A cabinet parent GUID change disappeared from comparison.");
+foreach (var type in new[] { "BoolRo", "BoolCopy", "BoolCopy5Outputs", "MoveByte", "CounterSLO" })
+    Assert(ContainerFileXml.IsSimpleLogicType(type), "A live SimpleLogic type was treated as unknown: " + type);
+
 var active = 0; var peak = 0;
 await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => VIBN_Tools.GlobalClasses.FeeObjects.FeeMutationScope.RunAsync(async () =>
 {

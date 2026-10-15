@@ -39,7 +39,8 @@ public static class FeeContainerFileGrouping
         var destinations = original.ToDictionary(container => container, _ => new List<XElement>());
         var index = 0;
         var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var group in groups)
+        foreach (var group in groups.SelectMany(pair => pair.Value.GroupBy(item => origins[item].Container.Attribute("parentContainerId")?.Value ?? "")
+            .Select(part => new KeyValuePair<string, List<MatchingData>>(pair.Key + "\u001f" + part.Key, part.ToList()))))
         {
             var separator = group.Key.IndexOf('\u001f');
             var component = group.Value[0].ContainerName;
@@ -53,6 +54,12 @@ public static class FeeContainerFileGrouping
             var target = new XElement("Container", new XAttribute("id", $"group:{++index}"),
                 new XElement("Component", component), new XElement("Type", group.Value[0].ComponentType),
                 new XElement("DataList", group.Value.Select(item => new XElement(origins[item].Entry))));
+            var sourceContexts = group.Value.Select(item => origins[item].Container).Distinct().ToArray();
+            foreach (var attribute in new[] { "parentName", "parentGuid", "parentContainerId", "recognitionSource", "origin", "address" })
+            {
+                var values = sourceContexts.Select(item => item.Attribute(attribute)?.Value ?? "").Distinct().ToArray();
+                if (values.Length == 1 && values[0].Length > 0) target.SetAttributeValue(attribute, values[0]);
+            }
             result.Add(target);
             foreach (var container in group.Value.Select(item => origins[item].Container).Distinct())
                 destinations[container].Add(target);

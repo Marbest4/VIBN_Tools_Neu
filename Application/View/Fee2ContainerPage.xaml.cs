@@ -43,6 +43,14 @@ public partial class Fee2ContainerPage : UserControl
         }
     }
 
+    private void OnCabinetElementSelectionChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (sender is DataGrid grid && args.OriginalSource == grid &&
+            grid.SelectedItem is VIBN_Tools.Application.VM.Fee2ContainerFoundContainerVM element &&
+            DataContext is VIBN_Tools.Application.VM.Fee2ContainerPageVM vm)
+        { vm.SelectedFoundSignal = element.DataList.FirstOrDefault(); args.Handled = true; }
+    }
+
     private void OpenSpecialDevices(object sender, RoutedEventArgs args)
         => TransferSpecialDevices(append: false);
 

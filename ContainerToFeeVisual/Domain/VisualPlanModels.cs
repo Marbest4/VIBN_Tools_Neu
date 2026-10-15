@@ -76,6 +76,9 @@ public sealed class VisualNode
     public string? ParentId { get; }
 
     public string? ContainerId { get; }
+    public string ExpectedParentGuid { get; internal set; } = "";
+    public string ExpectedParentName { get; internal set; } = "";
+    public string SourceObjectGuid { get; internal set; } = "";
 
     public VisualNodeKind Kind { get; internal set; }
 
@@ -220,7 +223,7 @@ public sealed record VisualFeeContainerObject(
     string Name,
     VisualFeeContainerObjectKind Kind,
     string Definition,
-    string? ProvenanceContainerId = null);
+    string? ProvenanceContainerId = null, string ParentGuidString = "", string ParentName = "");
 
 public enum VisualFeeNodePresenceKind
 {

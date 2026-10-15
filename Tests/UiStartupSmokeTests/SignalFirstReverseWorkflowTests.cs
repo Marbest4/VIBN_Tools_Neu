@@ -29,7 +29,7 @@ internal static partial class Program
             generatedSnapshot.ContainerDocument.Descendants("Container").Count(item => item.Attribute("origin")?.Value == "Signal und Req. XML") != 2 ||
             generatedSnapshot.ContainerDocument.Descendants("Entry").Any(entry => entry.Attribute("interfaceName") is null))
             throw new InvalidOperationException("Signal-only generation mixed interfaces, included inactive variables or preassigned objects.");
-        var selected = FeeSignalContainerBuilder.Build(variables.Where(item => item.InterfaceGuid == ifaceA).ToArray(), routes, null);
+        var selected = FeeSignalContainerBuilder.Build(variables.Where(item => item.InterfaceGuid == ifaceA).ToArray(), routes, req);
         if (selected.Provenance!.SignalBindings.Any(item => item.VariableGuid == second) || selected.LiveAssignments!.Any(item => item.VariableGuid == second))
             throw new InvalidOperationException("An excluded interface leaked into generation.");
         var filteredRequirements = new XDocument(req);

@@ -149,7 +149,7 @@ internal static partial class Program
         var stale = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", objects, variables,
             [new(signal, helper, "Output 01")]);
         if (stale.Snapshot.SignalCount != 1 || stale.Snapshot.ContainerDocument.Descendants("Container").Single(item =>
-                item.Element("Component")?.Value == "OtherHelper").Element("Type")?.Value != "N/A")
+                item.Element("Component")?.Value == "OtherHelper").Element("Type")?.Value != "MoveBit")
             throw new InvalidOperationException("A helper-only active signal disappeared or old provenance assigned it to the wrong container.");
         var result = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", objects, variables,
             [new(signal, helper, "Output 01"), new(signal, primary, "Output 01")]);

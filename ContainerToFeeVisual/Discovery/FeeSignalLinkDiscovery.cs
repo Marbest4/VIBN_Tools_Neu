@@ -43,6 +43,8 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
         var results = new List<SignalRead>(candidates.Length);
         // Cache each helper port across variables; the SDK calls are serialized.
         var helperLinks = new Dictionary<(Guid, string), IReadOnlyList<IndirectLink>>();
+        var completed = 0;
+        FeeReadProgressScope.Report("Aktuelle Signalrouten lesen", 0, candidates.Length, "Signale");
         foreach (var signal in candidates)
         {
             try
@@ -50,6 +52,7 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
                 cancellationToken.ThrowIfCancellationRequested();
                 var variableGuid = Guid.Parse(signal.GuidString);
                 var endpoints = new List<RawLink>();
+                FeeReadProgressScope.Report("Aktuelle Signalrouten lesen", completed, candidates.Length, "Signale", signal.Tag);
                 var assignments = await Services.ApiInstance.Interface
                     .GetAssignedSceneObjectsAsync(variableGuid);
                 if (assignments is null)
@@ -113,6 +116,7 @@ internal sealed class FeeSignalLinkDiscovery(IVisualPlanLogger logger)
             {
                 results.Add(new SignalRead([], exception));
             }
+            finally { FeeReadProgressScope.Report("Aktuelle Signalrouten lesen", ++completed, candidates.Length, "Signale"); }
         }
 
         cancellationToken.ThrowIfCancellationRequested();

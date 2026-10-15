@@ -63,7 +63,11 @@
             <Style x:Key="ReviewEntryTextBoxStyle" TargetType="TextBox">
                 <Setter Property="BorderBrush" Value="White"/>
                 <Setter Property="BorderThickness" Value="1"/>
-                <Setter Property="MinHeight" Value="21"/>
+                <Setter Property="MinHeight" Value="26"/>
+                <Setter Property="Height" Value="26"/>
+                <Setter Property="Margin" Value="0"/>
+                <Setter Property="Padding" Value="2,0"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding ReviewState}" Value="NeedsReview">
                         <Setter Property="Background" Value="#FFFFE0B2"/>
@@ -122,7 +126,10 @@
             <Style x:Key="SlotEntryComboBoxStyle" TargetType="ComboBox">
                 <Setter Property="Background" Value="White"/>
                 <Setter Property="MinWidth" Value="100"/>
-                <Setter Property="MaxHeight" Value="21"/>
+                <Setter Property="Height" Value="26"/>
+                <Setter Property="MaxHeight" Value="26"/>
+                <Setter Property="Margin" Value="0"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
                 <Style.Triggers>
                     <DataTrigger Binding="{Binding HasAssignmentWarning}" Value="True">
                         <Setter Property="Background" Value="#FFFFE0B2"/>
@@ -516,7 +523,7 @@
 
             <!-- Row 3 - Container data -->
             <DataGrid x:Name="ContainerListDataGrid" Grid.Row="3" Margin="5" AutoGenerateColumns="False" CanUserAddRows="True" Height="Auto" MinColumnWidth="100" MinRowHeight="25" ItemsSource="{Binding ContainerList}"
-                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Standard" EnableRowVirtualization="True" EnableColumnVirtualization="True" ScrollViewer.CanContentScroll="True"
+                      VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Standard" EnableRowVirtualization="True" EnableColumnVirtualization="True" ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel"
                       SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True" IsEnabled="{Binding CanEditWorkspace}">
                 <i:Interaction.Triggers>
                     <i:EventTrigger EventName="SelectionChanged">
@@ -539,6 +546,7 @@
                     </i:EventTrigger>
                 </i:Interaction.Triggers>
 
+                <DataGrid.CellStyle><Style TargetType="DataGridCell"><Setter Property="VerticalContentAlignment" Value="Top"/><Setter Property="Padding" Value="0"/></Style></DataGrid.CellStyle>
                 <DataGrid.RowStyle>
                     <Style TargetType="DataGridRow">
                         <Setter Property="Background" Value="White"/>
@@ -585,13 +593,12 @@
                     <DataGridTemplateColumn Header="ID">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
+                                <ItemsControl ItemsSource="{Binding DataList}" Margin="0" Padding="0" VerticalAlignment="Top">
+                                    <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="0"/></Style></ItemsControl.ItemContainerStyle>
                                     <!--Activate Virtualization-->
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel 
-                                                IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                            <StackPanel />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -617,7 +624,7 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <ListBox ItemsSource="{Binding DataList}"
-                                         Tag="SignalIdDragSource"
+                                         Tag="SignalIdDragSource" Padding="0" Margin="0" VerticalContentAlignment="Top"
                                          SelectionMode="Single"
                                          Background="Transparent"
                                          BorderThickness="0"
@@ -630,12 +637,15 @@
                                     <ListBox.ItemContainerStyle>
                                         <Style TargetType="ListBoxItem">
                                             <Setter Property="Padding" Value="0"/>
+                                            <Setter Property="Margin" Value="0"/>
+                                            <Setter Property="Height" Value="26"/>
+                                            <Setter Property="BorderThickness" Value="0"/>
                                             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                         </Style>
                                     </ListBox.ItemContainerStyle>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid MinHeight="21">
+                                            <Grid Height="26">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
@@ -662,13 +672,12 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
 
-                                <ItemsControl ItemsSource="{Binding DataList}">
+                                <ItemsControl ItemsSource="{Binding DataList}" Margin="0" Padding="0" VerticalAlignment="Top">
+                                    <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="0"/></Style></ItemsControl.ItemContainerStyle>
                                     <!--Activate Virtualization-->
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel 
-                                                IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                            <StackPanel />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -696,13 +705,12 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
 
-                                <ItemsControl ItemsSource="{Binding DataList}">
+                                <ItemsControl ItemsSource="{Binding DataList}" Margin="0" Padding="0" VerticalAlignment="Top">
+                                    <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="0"/></Style></ItemsControl.ItemContainerStyle>
                                     <!--Activate Virtualization-->
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel 
-                                                IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                            <StackPanel />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -730,13 +738,12 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
 
-                                <ItemsControl ItemsSource="{Binding DataList}">
+                                <ItemsControl ItemsSource="{Binding DataList}" Margin="0" Padding="0" VerticalAlignment="Top">
+                                    <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="0"/></Style></ItemsControl.ItemContainerStyle>
                                     <!--Activate Virtualization-->
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel 
-                                                IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                            <StackPanel />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -768,7 +775,8 @@
                                             Width="320">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <ItemsControl ItemsSource="{Binding DataList}">
+                                <ItemsControl ItemsSource="{Binding DataList}" Margin="0" Padding="0" VerticalAlignment="Top">
+                                    <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="0"/></Style></ItemsControl.ItemContainerStyle>
                                     <ItemsControl.Template>
                                         <ControlTemplate TargetType="ItemsControl">
                                             <ItemsPresenter />
@@ -778,9 +786,9 @@
                                         <DataTemplate>
                                             <TextBlock Text="{Binding ReviewMessage}"
                                                        ToolTip="{Binding ReviewMessage}"
-                                                       TextWrapping="Wrap"
-                                                       MinHeight="21"
-                                                       Padding="3,1"/>
+                                                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                                       Height="26" VerticalAlignment="Top"
+                                                       Padding="3,0"/>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -792,12 +800,11 @@
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
 
-                                <ItemsControl ItemsSource="{Binding DataList}">
+                                <ItemsControl ItemsSource="{Binding DataList}" Margin="0" Padding="0" VerticalAlignment="Top">
+                                    <ItemsControl.ItemContainerStyle><Style TargetType="ContentPresenter"><Setter Property="Height" Value="26"/><Setter Property="Margin" Value="0"/></Style></ItemsControl.ItemContainerStyle>
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
-                                            <VirtualizingStackPanel 
-                                                IsVirtualizing="True"
-                                                VirtualizationMode="Standard" />
+                                            <StackPanel />
                                         </ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
 
@@ -809,7 +816,7 @@
 
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid>
+                                            <Grid Height="26">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
@@ -891,7 +898,7 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="0" ItemsSource="{Binding UnassignedEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedUnassignedEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" AutoGeneratingColumn="AuxiliaryGrid_AutoGeneratingColumn" IsEnabled="{Binding CanEditWorkspace}" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True"
+                          MinColumnWidth="100" AutoGenerateColumns="True" AutoGeneratingColumn="AuxiliaryGrid_AutoGeneratingColumn" AutoGeneratedColumns="AuxiliaryGrid_AutoGeneratedColumns" IsEnabled="{Binding CanEditWorkspace}" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" AllowDrop="True"
                           ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">
@@ -962,7 +969,7 @@
                 </Grid>
 
                 <DataGrid Margin="5" Grid.Row="1" Grid.Column="2" ItemsSource="{Binding FilteredEntries, NotifyOnSourceUpdated=True}" SelectedItem="{Binding SelectedFilteredEntry, UpdateSourceTrigger=PropertyChanged}" 
-                          MinColumnWidth="100" AutoGenerateColumns="True" AutoGeneratingColumn="AuxiliaryGrid_AutoGeneratingColumn" IsEnabled="{Binding CanEditWorkspace}" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
+                          MinColumnWidth="100" AutoGenerateColumns="True" AutoGeneratingColumn="AuxiliaryGrid_AutoGeneratingColumn" AutoGeneratedColumns="AuxiliaryGrid_AutoGeneratedColumns" IsEnabled="{Binding CanEditWorkspace}" CanUserAddRows="False" IsReadOnly="True" SelectionMode="Single" SelectionUnit="FullRow" AllowDrop="True"
                           ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
                     <DataGrid.RowStyle>
                         <Style TargetType="DataGridRow">

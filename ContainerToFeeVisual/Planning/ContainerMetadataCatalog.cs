@@ -18,6 +18,7 @@ internal static class ContainerMetadataCatalog
         {
             ["BeltControl"] = Describe<GrobBeltControl_Container>("Grob_BeltControl"),
             ["Button"] = Describe<Button_Container>(simObjectName: "Button"),
+            ["Cabinet"] = Describe<Cabinet_Container>(technicalHelpers: ["Cabinet"]),
             ["Clamping"] = Describe<GrobClamping_Container>("Grob_Clamping"),
             ["Conveyor"] = Describe<GrobConveyor_Container>("Grob_Conveyor"),
             ["Cylinder"] = Describe<GrobCylinder_Container>("Grob_Cylinder", ["Move-Bit-Hilfslogik"]),

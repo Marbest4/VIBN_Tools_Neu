@@ -149,7 +149,7 @@ public static class FeeContainerLiveReconstructor
             }
             var ownVariables = assignmentsByObject[item.Guid].Select(route => route.VariableGuid).ToHashSet();
             attached |= candidates.Any(candidate => (assignmentsByObject.GetValueOrDefault(candidate.Object.Guid) ?? []).Any(route => ownVariables.Contains(route.VariableGuid)));
-            if (!attached) candidates.Add(new(item, "N/A", "N/A", item.Name));
+            if (!attached) candidates.Add(new(item, item.FeeType.Split('.').Last(), item.FeeType.Split('.').Last(), item.Name));
         }
         candidates = candidates.Where(item => !IsRedundantLegacySimObject(item, candidates, byGuid)).ToList();
         issues.AddRange(candidates.Where(candidate => candidateWarnings.ContainsKey(candidate.Object.Guid))
@@ -251,6 +251,7 @@ public static class FeeContainerLiveReconstructor
 
             containerElements.Add(new XElement("Container",
                 new XAttribute("id", $"fee:{candidate.Object.Guid:D}"),
+                new XAttribute("recognitionSource", candidate.RecognitionSource),
                 new XElement("Component", componentName),
                 new XElement("Type", candidate.XmlType),
                 dataList,
@@ -424,6 +425,7 @@ public static class FeeContainerLiveReconstructor
         candidate = null;
         ambiguity = null;
         var feeType = item.FeeType ?? string.Empty;
+        var recognitionSource = "Logik";
         var hint = item.ProvenanceContainerType switch
         { "Switch" => "CabinetSwitch", "Fuse" => "CabinetFuse", var type => type };
         string? xmlType = null;
@@ -437,6 +439,8 @@ public static class FeeContainerLiveReconstructor
         if (logicMatches.Count > 0)
         {
             xmlType = logicMatches.FirstOrDefault(type => string.Equals(type, hint, StringComparison.OrdinalIgnoreCase)) ?? logicMatches[0];
+            if (configuredLogics.Length == 1 || resolvedLogics.Length == 1) recognitionSource = "Req.xml";
+            else if (logicMatches.Count > 1 && logicMatches.Contains(hint ?? "", StringComparer.OrdinalIgnoreCase)) recognitionSource = "Provenienz";
             if (logicMatches.Count > 1 && !logicMatches.Contains(hint ?? "", StringComparer.OrdinalIgnoreCase))
                 ambiguity = $"Die aktuelle Logik '{item.LogicDefinitionName}' passt zu {string.Join(" oder ", logicMatches)}; '{xmlType}' bitte prüfen.";
             else if (!string.IsNullOrWhiteSpace(hint) && !logicMatches.Contains(hint, StringComparer.OrdinalIgnoreCase))
@@ -454,6 +458,8 @@ public static class FeeContainerLiveReconstructor
             var compatibleHint = compatibleTypes.FirstOrDefault(type =>
                 string.Equals(type, hint, StringComparison.OrdinalIgnoreCase));
             xmlType = compatibleHint ?? compatibleTypes[0];
+            if (configured.Length == 1 || resolvedHelpers.Length == 1) recognitionSource = "Req.xml";
+            else if (compatibleHint is not null && compatibleTypes.Length > 1) recognitionSource = "Provenienz";
             if (compatibleHint is null && compatibleTypes.Length > 1)
                 ambiguity = "Ein BoolNot ist ohne passende Typinformation nicht sicher als ReturnCircuit oder SafeArea unterscheidbar; ReturnCircuit bitte prüfen.";
         }
@@ -491,7 +497,7 @@ public static class FeeContainerLiveReconstructor
             IReadOnlyList<string> slotMatches = EndsWithType(feeType, "CabinetElement") && xmlType is not null ? [] : requirements.TypesMatchingSlots(liveSlots);
             if (slotMatches.Count == 1)
             {
-                xmlType = slotMatches[0];
+                xmlType = slotMatches[0]; recognitionSource = "Req.xml";
                 ambiguity = $"'{item.Name}' wurde anhand aktueller FEE-Slots als Req-XML-Typ '{xmlType}' erkannt; Definition und Zuordnung bitte prüfen.";
             }
             else if (xmlType is not null)
@@ -509,7 +515,7 @@ public static class FeeContainerLiveReconstructor
         var componentName = EndsWithType(feeType, "CabinetElement")
             ? FirstNotBlank(item.Label, item.Name?.Split(';')[0])
             : item.Name;
-        candidate = new ContainerCandidate(item, xmlType, runtimeType ?? xmlType, componentName ?? string.Empty);
+        candidate = new ContainerCandidate(item, xmlType, runtimeType ?? xmlType, componentName ?? string.Empty, recognitionSource);
         return true;
     }
 
@@ -523,7 +529,7 @@ public static class FeeContainerLiveReconstructor
         if (!variables.TryGetValue(assignment.VariableGuid, out var variable))
             return null;
         var runtimeSlot = assignment.TargetSlot?.Trim() ?? "";
-        if (candidate.Object.IsSpecialDevice || candidate.XmlType == "N/A")
+        if (candidate.Object.IsSpecialDevice || candidate.XmlType == "N/A" || ContainerFileXml.IsSimpleLogicType(candidate.RuntimeType) && !ContainerMetadataCatalog.TryGet(candidate.RuntimeType, out _))
             return runtimeSlot.Length == 0 ? null : new ResolvedEntry(variable, runtimeSlot);
         var allowed = requirements?.Slots(candidate.XmlType) ?? [];
         var slot = allowed.FirstOrDefault(slot => string.Equals(slot, runtimeSlot, StringComparison.OrdinalIgnoreCase)) ??
@@ -666,7 +672,7 @@ public static class FeeContainerLiveReconstructor
         FeeContainerLiveObject Object,
         string XmlType,
         string RuntimeType,
-        string ComponentName);
+        string ComponentName, string RecognitionSource = "Logik");
 
     private sealed record ResolvedEntry(FeeContainerLiveVariable Variable, string XmlSlot);
 }

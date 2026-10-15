@@ -19,6 +19,7 @@ internal static partial class Program
     {
         VerifyReverseEditingAndStructuralMembers();
         VerifySignalFirstReverseWorkflow();
+        VerifyReverseHierarchyAndExchanges();
         VerifyLiveSpecialDeviceAndSignalEditing();
         VerifyCachedAssignmentAndReverseDetails();
         VerifyFeeRootReadFailures();

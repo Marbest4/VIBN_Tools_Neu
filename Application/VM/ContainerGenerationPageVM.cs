@@ -837,7 +837,7 @@ namespace VIBN_Tools.Application.VM
             if (RequirementsFile.IsInitialized)
             {
                 Settings.PathRequirementsXml = RequirementsProvider.SourcePath;
-                foreach (var type in RequirementsFile.GetComponentTypes().OrderBy(type => type)) ComponentTypes.Add(type);
+                RebuildComponentTypeChoices(ContainerList);
             }
             ReloadGroupingPresetFiles(false);
 
@@ -908,12 +908,7 @@ namespace VIBN_Tools.Application.VM
                 RequirementsProvider.RequirementsFile = RequirementsFile;
                 RequirementsProvider.SourcePath = filePath;
                 Settings.PathRequirementsXml = filePath;
-                ComponentTypes.Clear();
-                var components = RequirementsFile.GetComponentTypes().OrderBy(x => x).ToList();
-                foreach (var component in components)
-                {
-                    ComponentTypes.Add(component);
-                }
+                RebuildComponentTypeChoices(ContainerList);
 
                 CommitSuccessfulImport(importMode, "Requirements-XML");
                 if (HasWorkspaceData)
@@ -986,9 +981,7 @@ namespace VIBN_Tools.Application.VM
 
                 RequirementsProvider.SourcePath = Settings.PathRequirementsXml;
 
-                ComponentTypes.Clear();
-                foreach (var component in RequirementsFile.GetComponentTypes().OrderBy(x => x))
-                    ComponentTypes.Add(component);
+                RebuildComponentTypeChoices(ContainerList);
 
                 CommitSuccessfulImport(importMode, "Projekt-Einstellungen");
                 OnPropertyChanged(nameof(CanGenerate));
@@ -2235,6 +2228,13 @@ namespace VIBN_Tools.Application.VM
             WasGenerated = false;
         }
 
+        private void RebuildComponentTypeChoices(IEnumerable<ContainerData> containers)
+        {
+            var types = RequirementsFile.IsInitialized ? RequirementsFile.GetComponentTypes() : Enumerable.Empty<string>();
+            ComponentTypes = new ObservableCollection<string>(types.Concat(containers.Select(item => item.Type))
+                .Where(type => !string.IsNullOrWhiteSpace(type)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(type => type));
+        }
+
         private void ReplaceWorkspace(
             IEnumerable<ContainerData> containers,
             IEnumerable<ContainerEntry> unassigned,
@@ -2257,6 +2257,7 @@ namespace VIBN_Tools.Application.VM
 
             void ApplyRows(ContainerData[] containerRows, ContainerEntry[] unassignedRows, ContainerEntry[] filteredRows)
             {
+                RebuildComponentTypeChoices(containerRows);
                 ClearData();
 
                 foreach (var container in containerRows)
@@ -2809,6 +2810,8 @@ namespace VIBN_Tools.Application.VM
                 return;
             if (e.Data.GetData("DragSource") is not DataGrid)
                 return;
+
+            using var viewport = VIBN_Tools.Application.Behaviors.DataGridViewportPreservation.Capture(DropDataGrid);
 
             var targetRow = FindAncestor<DataGridRow>(source);
             if (e.Data.GetData(typeof(ContainerData[])) is ContainerData[] draggedContainers)

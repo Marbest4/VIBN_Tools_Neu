@@ -36,7 +36,7 @@ public sealed record Fee2ContainerRoot(
 }
 
 public sealed record FeeContainerObjectDetails(Guid Guid, string Name, string FeeType,
-    string ParentName, string LogicDefinitionName, string ConnectionText, bool IsSpecialDevice = false);
+    string ParentName, string LogicDefinitionName, string ConnectionText, bool IsSpecialDevice = false, string ParentGuid = "");
 
 public sealed record Fee2ContainerExportResult(
     FeeContainerProvenanceSnapshot Snapshot,
@@ -283,6 +283,8 @@ public sealed class Fee2ContainerService
                 var clone = new XElement(element);
                 var sourceId = clone.Attribute("id")?.Value ?? "container";
                 clone.SetAttributeValue("id", $"fee-root:{root.Guid:D}:{sourceId}");
+                if (clone.Attribute("parentContainerId") is { Value.Length: > 0 } parent)
+                    parent.Value = $"fee-root:{root.Guid:D}:{parent.Value}";
                 containerElements.Add(clone);
             }
             bindings.AddRange(export.Snapshot.SignalBindings.Select(binding => binding with
@@ -711,7 +713,7 @@ public sealed class Fee2ContainerService
             var connected = signalDetails[item.Guid].Select(link => $"{link.TargetSlot} ↔ Signal {signals.GetValueOrDefault(link.VariableGuid)?.Signal ?? link.VariableGuid.ToString("D")}")
                 .Concat(objectDetails[item.GuidString]).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(text => text, StringComparer.OrdinalIgnoreCase);
             return new FeeContainerObjectDetails(item.Guid, item.Name ?? "", item.FeeType ?? "", parent?.Name ?? "",
-                logic, string.Join("; ", connected), VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(logic));
+                logic, string.Join("; ", connected), VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(logic), parent?.GuidString ?? "");
         });
     }
 

@@ -115,10 +115,7 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
                 }
                 else if (container is ICabinetElementOwner)
                 {
-                    var expected = ContainerExistingObjectReuse.GetExpectedCabinetElementType(container);
-                    var matches = sceneObjects.OfType<FeeCabinetElement>().Where(element =>
-                        string.Equals(element.Name, container.ComponentName, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(element.ElementType, expected, StringComparison.OrdinalIgnoreCase)).ToArray();
+                    var matches = ContainerExistingObjectReuse.FindCabinetElements(container, sceneObjects.OfType<FeeCabinetElement>());
                     if (matches.Length != 1)
                     {
                         issues.Add(new VisualIssue(VisualIssueSeverity.Error, "EXISTING_CABINET_ELEMENT_NOT_UNIQUE",
@@ -243,11 +240,27 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
             return [];
         var names = (await Services.ApiInstance.Object.GetPropertiesAsync(guidStrings, "Name")).ToArray();
         var definitions = (await Services.ApiInstance.Object.GetPropertiesAsync(guidStrings, "Definition")).ToArray();
+        if (names.Length != guidStrings.Length || definitions.Length != guidStrings.Length)
+            throw new InvalidOperationException("FEE lieferte unvollständige CabinetElement-Metadaten.");
+        var parents = new Dictionary<string, FeeCabinet>(StringComparer.OrdinalIgnoreCase);
+        var cabinets = (await Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync("Cabinet") ?? []).ToArray();
+        foreach (var batch in cabinets.Chunk(128))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var xml in await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(batch) ?? [])
+            {
+                var element = System.Xml.Linq.XElement.Parse(xml);
+                var parent = new FeeCabinet { GuidString = element.Attribute("Guid")?.Value ?? "", Name = element.Attribute("Name")?.Value ?? "" };
+                foreach (var child in element.Element("Children")?.Elements() ?? [])
+                    if (child.Attribute("Guid") is { } id) parents[id.Value] = parent;
+            }
+        }
         return guidStrings.Select((guid, index) => new FeeCabinetElement
         {
             Guid = Guid.Parse(guid),
             Name = Services.ApiInstance.XmlHelper.ConvertToString(names[index]),
             ElementType = Services.ApiInstance.XmlHelper.ConvertToString(definitions[index]),
+            Parent = parents.GetValueOrDefault(guid),
         }).ToArray();
     }
 

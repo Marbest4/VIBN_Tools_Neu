@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Xml.Serialization;
 
 namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
@@ -13,6 +14,20 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         /// </summary>
         [XmlAttribute("id")]
         public string Id { get; set; } = string.Empty;
+
+        [DefaultValue(""), XmlAttribute("parentName")] public string ParentName { get; set; } = string.Empty;
+        [DefaultValue(""), XmlAttribute("parentGuid")] public string ParentGuid { get; set; } = string.Empty;
+        [DefaultValue(""), XmlAttribute("parentContainerId")] public string ParentContainerId { get; set; } = string.Empty;
+        [DefaultValue(""), XmlAttribute("recognitionSource")] public string RecognitionSource { get; set; } = string.Empty;
+        [DefaultValue(""), XmlAttribute("origin")] public string RecognitionOrigin { get; set; } = string.Empty;
+        [DefaultValue(""), XmlAttribute("address")] public string BaseAddress { get; set; } = string.Empty;
+        [DefaultValue(false), XmlAttribute("specialDevice")] public bool IsSpecialDevice { get; set; }
+
+        public void CopyFeeContextFrom(ComponentContainer source)
+        {
+            ParentName = source.ParentName; ParentGuid = source.ParentGuid; ParentContainerId = source.ParentContainerId;
+            RecognitionSource = source.RecognitionSource; RecognitionOrigin = source.RecognitionOrigin; BaseAddress = source.BaseAddress; IsSpecialDevice = source.IsSpecialDevice;
+        }
 
         /// <summary>
         /// Gets or sets the container name. Serializes to an element.

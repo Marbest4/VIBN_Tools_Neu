@@ -1,4 +1,5 @@
 ﻿using System.Numerics;
+using System.Xml.Linq;
 using VIBN_Tools.GlobalClasses;
 using VIBN_Tools.GlobalClasses.FeeObjects;
 
@@ -7,17 +8,20 @@ namespace VIBN_Tools.ContainerToFee
     public class CabinetContainerManager
     {
         private readonly Dictionary<string, FeeAbstractObject> _cabinets = new Dictionary<string, FeeAbstractObject>();
+        private long _connectionRevision = -1;
         private readonly Dictionary<string, Vector2> _elementPositions = new Dictionary<string, Vector2>();
 
 
         public async Task<FeeAbstractObject> GetOrCreateCabinetAsync(
             string cabinetType,
             FeeAbstractObject parentObject,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default, Guid? preferredGuid = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (_cabinets.TryGetValue(cabinetType, out var cachedCabinet))
-                return cachedCabinet;
+            var revision = Services.Connection.ConnectionRevision;
+            if (_connectionRevision != revision) { _cabinets.Clear(); _elementPositions.Clear(); _connectionRevision = revision; }
+            var key = $"{parentObject.Guid:D}:{preferredGuid}:{cabinetType}";
+            if (_cabinets.TryGetValue(key, out var cachedCabinet)) return cachedCabinet;
 
             var guidStrings = (await Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync("Cabinet"))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -32,10 +36,22 @@ namespace VIBN_Tools.ContainerToFee
                 .Select((guid, index) => new
                 {
                     Guid = Guid.Parse(guid),
-                    Name = names[index],
+                    Name = index < names.Length ? names[index] : "",
                 })
-                .Where(item => string.Equals(item.Name, cabinetType, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
+            var preferred = preferredGuid is { } id ? matches.Where(item => item.Guid == id).ToArray() : [];
+            if (preferred.Length == 1) matches = preferred;
+            else
+            {
+                // A name in another BasicFrame is not this cabinet. The live
+                // parent's Children list is authoritative when a saved GUID vanished.
+                var xml = (await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync([parentObject.GuidString]) ?? []).ToArray();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (xml.Length != 1) throw new InvalidOperationException("Cabinet-Parent konnte nicht eindeutig gelesen werden.");
+                var children = XElement.Parse(xml[0]).Element("Children")?.Elements().Select(item => item.Attribute("Guid")?.Value)
+                    .Where(value => value is not null).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+                matches = matches.Where(item => string.Equals(item.Name, cabinetType, StringComparison.OrdinalIgnoreCase) && children.Contains(item.Guid.ToString("D"))).ToArray();
+            }
             if (matches.Length > 1)
             {
                 throw new InvalidOperationException(
@@ -48,10 +64,10 @@ namespace VIBN_Tools.ContainerToFee
             {
                 cabinet = new FeeCabinet
                 {
-                    Name = cabinetType,
+                    Name = matches[0].Name,
                     Guid = matches[0].Guid,
                 };
-                _cabinets[cabinetType] = cabinet;
+                _cabinets[key] = cabinet;
             }
             else
             {
@@ -60,10 +76,10 @@ namespace VIBN_Tools.ContainerToFee
                 cancellationToken.ThrowIfCancellationRequested();
                 await cabinet.SendAndWaitAsync();
                 cancellationToken.ThrowIfCancellationRequested();
-                _cabinets[cabinetType] = cabinet;
+                _cabinets[key] = cabinet;
             }
 
-            _elementPositions.TryAdd(cabinetType, new Vector2(-20f, 100f));
+            _elementPositions.TryAdd(cabinet.GuidString, new Vector2(-20f, 100f));
 
             return cabinet;
         }

@@ -24,6 +24,9 @@ namespace VIBN_Tools.Application.VM
         public double NameColumnWidth { get; set; }
         public double IssueColumnWidth { get; set; }
 
+        private int _updateProgress;
+        public int UpdateProgress { get => _updateProgress; private set { _updateProgress = value; OnPropertyChanged(); } }
+
         private string _updateStatusText = "FEE-Objekte noch nicht aktualisiert.";
         public string UpdateStatusText
         {
@@ -198,6 +201,9 @@ namespace VIBN_Tools.Application.VM
                 return;
 
             IsBusyUpdatingFeeData = true;
+            UpdateProgress = 0;
+            using var progress = FeeReadProgressScope.Begin(new Progress<FeeReadProgress>(update =>
+            { if (IsBusyUpdatingFeeData) { UpdateStatusText = update.Text; UpdateProgress = update.Percent; } }));
             UpdateStatusText = "FEE-Objekte und Validierungsdaten werden aktualisiert …";
             try
             {
@@ -210,7 +216,7 @@ namespace VIBN_Tools.Application.VM
             }
             catch (Exception exception)
             {
-                UpdateStatusText = "Update Objects ist fehlgeschlagen. Details stehen im Protokoll.";
+                UpdateStatusText = $"Update Objects ist fehlgeschlagen: {exception.GetBaseException().Message}. Details stehen im Protokoll.";
                 ApplicationLogService.Instance.Error("Model Validation", UpdateStatusText, exception);
             }
             finally

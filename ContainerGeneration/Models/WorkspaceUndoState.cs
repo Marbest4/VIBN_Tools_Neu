@@ -44,17 +44,20 @@ public sealed class WorkspaceUndoState
                 container.Id, container.Component, container.Type, container.MinSignals, container.MaxSignals,
                 container.ManuallyChecked, container.Slots.ToArray(),
                 container.DataList.Select(entry => entry.Clone()).ToArray(),
-                container.SimObjects.Select(item => item.Clone()).ToArray())).ToArray(),
+                container.SimObjects.Select(item => item.Clone()).ToArray(),
+                new ComponentContainer { ParentName = container.ParentName, ParentGuid = container.ParentGuid, ParentContainerId = container.ParentContainerId,
+                    RecognitionSource = container.RecognitionSource, RecognitionOrigin = container.RecognitionOrigin, BaseAddress = container.BaseAddress, IsSpecialDevice = container.IsSpecialDevice })).ToArray(),
             unassigned.Select(entry => entry.Clone()).ToList(),
             filtered.Select(entry => entry.Clone()).ToList(), feeInventory);
 
     private sealed record ContainerSnapshot(string Id, string Component, string Type,
         int? MinSignals, int? MaxSignals, bool ManuallyChecked, string[] Slots,
-        ContainerEntry[] Entries, ContainerFeeObject[] SimObjects);
+        ContainerEntry[] Entries, ContainerFeeObject[] SimObjects, ComponentContainer Context);
 
     private static ContainerData RestoreContainer(ContainerSnapshot source)
     {
         var clone = new ContainerData();
+        clone.CopyFeeContextFrom(source.Context);
         using var updates = clone.DeferUpdates();
         clone.Id = source.Id;
         clone.Component = source.Component;

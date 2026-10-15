@@ -195,6 +195,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
         /// <param name="container">The component container to initialize from.</param>
         public ContainerData(ComponentContainer container) : base()
         {
+            CopyFeeContextFrom(container);
             Id = container.Id;
             Component = container.Component;
             Type = container.Type;
@@ -218,7 +219,7 @@ namespace VIBN_Tools.ContainerGeneration.Models
             bool TempValid = true;
             StringBuilder ErrorBuilder = new StringBuilder();
             // check for empty or duplicate key slots
-            if (DataList.Count == 0)
+            if (DataList.Count == 0 && !string.Equals(Type, "Cabinet", StringComparison.OrdinalIgnoreCase))
             {
                 TempValid = false;
                 ErrorBuilder.Append("No signals attached." + Environment.NewLine);
@@ -302,7 +303,8 @@ namespace VIBN_Tools.ContainerGeneration.Models
         {
             return dataList.Select(item => new ComponentContainer
             {
-                Id = item.Id,
+                Id = item.Id, ParentName = item.ParentName, ParentGuid = item.ParentGuid, ParentContainerId = item.ParentContainerId,
+                RecognitionSource = item.RecognitionSource, RecognitionOrigin = item.RecognitionOrigin, BaseAddress = item.BaseAddress, IsSpecialDevice = item.IsSpecialDevice,
                 Component = item.Component,
                 Type = item.Type,
                 DataList = new ObservableCollection<ContainerEntry>(item.DataList),

@@ -45,7 +45,14 @@ public static class ContainerFileXml
     };
 
     public static bool IsTechnicalHelperType(string? feeType) =>
-        TechnicalHelperTypes.Contains((feeType ?? "").Split('.').Last());
+        TechnicalHelperTypes.Contains((feeType ?? "").Split('.').Last()) || IsSimpleLogicType(feeType);
+
+    public static bool IsSimpleLogicType(string? feeType)
+    {
+        var type = (feeType ?? "").Split('.').Last();
+        return type.StartsWith("Bool", StringComparison.OrdinalIgnoreCase) || type.StartsWith("Move", StringComparison.OrdinalIgnoreCase) ||
+            type.StartsWith("Convert", StringComparison.OrdinalIgnoreCase) || type.Equals("CounterSLO", StringComparison.OrdinalIgnoreCase);
+    }
 
     public static bool IsTechnicalHelperAssociation(string? feeType, string? role) =>
         string.Equals(role, "TechnicalHelper", StringComparison.OrdinalIgnoreCase) && IsTechnicalHelperType(feeType);
@@ -53,7 +60,7 @@ public static class ContainerFileXml
     public static bool IsStructuralObjectAssociation(string? feeType, string? role) =>
         IsTechnicalHelperAssociation(feeType, role) ||
         string.Equals(role, "Primary", StringComparison.OrdinalIgnoreCase) &&
-        (new[] { "CabinetElement", "LogicObject" }.Contains((feeType ?? "").Split('.').Last(), StringComparer.OrdinalIgnoreCase) ||
+        (new[] { "Cabinet", "CabinetElement", "LogicObject" }.Contains((feeType ?? "").Split('.').Last(), StringComparer.OrdinalIgnoreCase) ||
             IsTechnicalHelperType(feeType) && !string.Equals(feeType, "Cabinet", StringComparison.OrdinalIgnoreCase));
 
     public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName) =>
