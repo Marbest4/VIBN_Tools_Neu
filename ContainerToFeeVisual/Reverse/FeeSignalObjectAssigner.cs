@@ -11,13 +11,24 @@ public static class FeeSignalObjectAssigner
         var source = workspace.Provenance ?? throw new InvalidOperationException("Zuerst Container aus den ausgewählten Interfaces erstellen.");
         var document = new XDocument(source.ContainerDocument);
         var scope = (workspace.LiveVariables ?? []).Select(item => item.InterfaceGuid).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var variables = selectedRoots.SelectMany(root => root.LiveVariables ?? []).Where(item => scope.Contains(item.InterfaceGuid))
+        var variables = selectedRoots.SelectMany(root => root.LiveVariables ?? []).Concat(workspace.LiveVariables ?? []).Where(item => scope.Contains(item.InterfaceGuid))
             .DistinctBy(item => item.VariableGuid).ToArray();
         var currentVariables = variables.ToDictionary(item => item.VariableGuid);
+        var previousVariables = (workspace.LiveVariables ?? []).DistinctBy(item => item.VariableGuid).ToDictionary(item => item.VariableGuid);
         var currentGuids = currentVariables.Keys.ToHashSet();
-        var routes = selectedRoots.SelectMany(root => root.LiveAssignments ?? []).Where(item => currentGuids.Contains(item.VariableGuid)).Distinct().ToArray();
+        var refreshedObjects = selectedRoots.SelectMany(root => root.ObjectDetails ?? []).Select(item => item.Guid).ToHashSet();
+        var routes = selectedRoots.SelectMany(root => root.LiveAssignments ?? []).Concat((workspace.LiveAssignments ?? []).Where(item => !refreshedObjects.Contains(item.TargetObjectGuid)))
+            .Where(item => currentGuids.Contains(item.VariableGuid)).Distinct().ToArray();
         var details = selectedRoots.SelectMany(root => root.ObjectDetails ?? []).DistinctBy(item => item.Guid).ToArray();
         var byGuid = details.ToDictionary(item => item.Guid);
+        var links = selectedRoots.Any(root => root.ObjectLinks is not null) ? selectedRoots.SelectMany(root => root.ObjectLinks ?? []).Distinct().ToArray() : workspace.ObjectLinks ?? [];
+        var endpoints = (workspace.SignalEndpoints ?? new Dictionary<Guid, FeeSignalEndpoint>()).ToDictionary(item => item.Key, item => item.Value);
+        foreach (var detail in details) endpoints[detail.Guid] = new(detail.Guid, detail.Name, detail.FeeType,
+            detail.LogicDefinitionName, detail.SlotNames, detail.ParentGuid, detail.ParentName, detail.CabinetDefinition);
+        var graph = new FeeSignalOwnershipGraph(endpoints, links);
+        routes = routes.Concat(routes.SelectMany(route => graph.Owners(route.TargetObjectGuid).Where(owner => owner.Guid != route.TargetObjectGuid && owner.Slot.Length > 0)
+            .Select(owner => new FeeContainerLiveAssignment(route.VariableGuid, owner.Guid, owner.Slot, IsIndirect: true)))).Distinct().ToArray();
+        FeeSignalContainerTopology.Apply(document, variables, routes, endpoints, links, token);
         var routesByVariable = routes.ToLookup(item => item.VariableGuid);
         var routesByTarget = routes.ToLookup(item => item.TargetObjectGuid);
         var sourceAssociations = selectedRoots.SelectMany(root => root.ObjectAssociations ?? []).ToArray();
@@ -54,16 +65,22 @@ public static class FeeSignalObjectAssigner
                             ParentName: actual.ParentName, LogicDefinitionName: actual.LogicDefinitionName, ConnectionText: actual.ConnectionText));
             }
             else if (targetGuid != Guid.Empty && byGuid.TryGetValue(targetGuid, out var detail) &&
-                routesByTarget[targetGuid].Any(route => entryGuids.Contains(route.VariableGuid)))
+                (routesByTarget[targetGuid].Any(route => entryGuids.Contains(route.VariableGuid)) ||
+                 entryGuids.SelectMany(guid => routesByVariable[guid]).Any(route => graph.Owners(route.TargetObjectGuid).Any(owner => owner.Guid == targetGuid))))
             {
-                container.SetElementValue("Component", detail.Name);
+                if (container.Attribute("recognitionSource")?.Value != "Manuell") container.SetElementValue("Component", detail.Name);
                 var ownerRoot = ownerRoots.GetValueOrDefault(targetGuid);
                 if (ownerRoot is not null) container.SetAttributeValue("feeRootGuid", ownerRoot.Guid.ToString("D"));
                 members.Add(new(targetGuid, detail.Name, detail.FeeType, targetGuid, id,
                     "Über aktive Signal-GUID und aktuelle Slotverbindung zugeordnet", "Primary", ParentName: detail.ParentName,
                     LogicDefinitionName: detail.LogicDefinitionName, ConnectionText: detail.ConnectionText));
-                members.AddRange(associationsByOwner[targetGuid].Where(item => item.ObjectGuid != targetGuid && (item.Role == "TechnicalHelper" || ContainerFileXml.HasMatchingObjectName(item.ObjectName, detail.Name)))
+                members.AddRange(associationsByOwner[targetGuid].Where(item => item.ObjectGuid != targetGuid && (item.Role == "TechnicalHelper" || ContainerFileXml.HasMatchingObjectName(item.ObjectName, detail.Name)) &&
+                    (!ContainerFileXml.IsSimpleLogicType(item.ObjectType) || graph.Owners(item.ObjectGuid).Any(owner => owner.Guid == targetGuid)))
                     .Select(item => item with { ContainerId = id }));
+                foreach (var helperGuid in graph.Members(targetGuid).Where(guid => guid != targetGuid))
+                    if (byGuid.TryGetValue(helperGuid, out var helper) && ContainerFileXml.IsSimpleLogicType(helper.FeeType))
+                        members.Add(new(helperGuid, helper.Name, helper.FeeType, targetGuid, id, "Eingang der Hilfslogik ist mit diesem Containerobjekt verbunden", "TechnicalHelper",
+                            ParentName: helper.ParentName, LogicDefinitionName: helper.LogicDefinitionName, ConnectionText: helper.ConnectionText));
                 if (ContainerFileXml.IsSimpleLogicType(detail.FeeType))
                 {
                     container.SetAttributeValue("origin", $"Aktives Signal an SimpleLogicObject ({detail.FeeType})");
@@ -71,7 +88,9 @@ public static class FeeSignalObjectAssigner
                 }
                 var definition = matches.Where(candidate => associationsByRootContainer[(candidate.Root.Guid, candidate.Container.Attribute("id")?.Value ?? "")].Any(item =>
                     item.ObjectGuid == targetGuid && (item.Role is "Primary" or "SpecialDevice"))).ToArray();
-                if (container.Element("Type")?.Value == "N/A" && definition.Length == 1 && definition[0].Container.Element("Type")?.Value is { } actualType && actualType != "N/A")
+                if (container.Element("Type")?.Value == "N/A" && definition.Length == 1 && definition[0].Container.Element("Type")?.Value is { } actualType && actualType != "N/A" &&
+                    (detail.FeeType.Split('.').Last() != "LogicObject" || ContainerMetadataCatalog.FindXmlTypesByLogicName(detail.LogicDefinitionName).Contains(actualType, StringComparer.OrdinalIgnoreCase) ||
+                        string.Equals(actualType, detail.LogicDefinitionName, StringComparison.OrdinalIgnoreCase)))
                 {
                     container.SetElementValue("Type", actualType);
                     container.SetAttributeValue("recognitionSource", definition[0].Container.Attribute("recognitionSource")?.Value ?? "Logik");
@@ -110,6 +129,13 @@ public static class FeeSignalObjectAssigner
             foreach (var entry in container.Element("DataList")?.Elements("Entry") ?? [])
                 if (Guid.TryParse(entry.Attribute("feeGuid")?.Value, out var guid))
                 {
+                    if (currentVariables.TryGetValue(guid, out var actual) && previousVariables.TryGetValue(guid, out var previous))
+                    {
+                        if (entry.Element("Address")?.Value == previous.Address || entry.Element("Address")?.Value == previous.Path)
+                            entry.SetElementValue("Address", string.IsNullOrWhiteSpace(actual.Address) ? actual.Path : actual.Address);
+                        if (entry.Element("Signal")?.Value == previous.Signal) entry.SetElementValue("Signal", actual.Signal);
+                        if (entry.Element("DataType")?.Value == previous.DataType) entry.SetElementValue("DataType", actual.DataType);
+                    }
                     var types = string.Join(", ", routesByVariable[guid].Select(route => byGuid.GetValueOrDefault(route.TargetObjectGuid)?.FeeType)
                         .Where(type => !string.IsNullOrWhiteSpace(type)).Distinct());
                     if (types.Length > 0) entry.SetAttributeValue("feeType", types);
@@ -131,8 +157,8 @@ public static class FeeSignalObjectAssigner
         var snapshot = source with { ContainerDocument = document, SignalBindings = bindings, ContainerCount = containers.Length, SignalCount = bindings.Length };
         // Retain project-wide direct routes as well: helper-only variables must remain visible.
         return workspace with { Provenance = snapshot, ObjectAssociations = allAssociations, ObjectDetails = details,
-            NonContainerObjects = unassigned, LiveAssignments = (workspace.LiveAssignments ?? []).Concat(routes).Distinct().ToArray(),
-            LiveVariables = (workspace.LiveVariables ?? []).Select(old => currentVariables.GetValueOrDefault(old.VariableGuid) ?? old).ToArray(),
+            NonContainerObjects = unassigned, LiveAssignments = routes,
+            LiveVariables = variables, SignalEndpoints = endpoints, ObjectLinks = links,
             SpecialDevices = selectedRoots.SelectMany(root => root.SpecialDevices ?? []).DistinctBy(item => item.Guid).ToArray() };
     }
 

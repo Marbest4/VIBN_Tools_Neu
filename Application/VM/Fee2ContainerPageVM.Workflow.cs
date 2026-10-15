@@ -50,6 +50,7 @@ public sealed partial class Fee2ContainerPageVM
         OnPropertyChanged(nameof(CanReadInterfaces)); OnPropertyChanged(nameof(CanGenerateSignalContainers));
         OnPropertyChanged(nameof(CanAssignSceneObjects)); OnPropertyChanged(nameof(CanUndo));
         NotifyButtonHelp();
+        OnPropertyChanged(nameof(CanExportUnknownLogics)); OnPropertyChanged(nameof(ExportUnknownLogicsHelp));
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -97,7 +98,7 @@ public sealed partial class Fee2ContainerPageVM
             var endpoints = await _signalsService.ReadEndpointsAsync(routes.Assignments, snapshot.ConnectionRevision, token, progress);
             var requirements = RequirementsProvider.RequirementsFile is { IsInitialized: true } source ? new XDocument(source.Document) :
                 throw new InvalidOperationException("Eine gültige Req.xml ist erforderlich.");
-            var root = await Task.Run(() => FeeSignalContainerBuilder.Build(variables, routes.Assignments, requirements, token, endpoints.Objects), token);
+            var root = await Task.Run(() => FeeSignalContainerBuilder.Build(variables, routes.Assignments, requirements, token, endpoints.Objects, endpoints.ObjectLinks), token);
             ReplaceWorkspace([new(root, true)]);
             PushUndo(previous); _lastWorkspaceState = CaptureWorkspace();
             Issues.ReplaceWith(routes.Issues.Concat(endpoints.Issues)); IsIssuesExpanded = Issues.Count > 0;

@@ -14,8 +14,9 @@ public static class FeeRobotExchangeGrouping
     private static readonly Regex Plc = new(@"^(?:SendToPLC|ReceiveFromPLC)_Byte", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public static IReadOnlyList<XElement> Create(IReadOnlyList<FeeContainerLiveVariable> variables, IReadOnlyList<FeeContainerLiveAssignment> routes,
-        IReadOnlyDictionary<Guid, FeeSignalEndpoint> endpoints)
+        IReadOnlyDictionary<Guid, FeeSignalEndpoint> endpoints, IReadOnlyList<VisualFeeObjectLink>? objectLinks = null)
     {
+        var graph = new FeeSignalOwnershipGraph(endpoints, objectLinks ?? []);
         var routesByVariable = routes.ToLookup(item => item.VariableGuid);
         var groups = new Dictionary<string, Group>(StringComparer.OrdinalIgnoreCase);
         var byVariable = new Dictionary<Guid, string>();
@@ -30,10 +31,12 @@ public static class FeeRobotExchangeGrouping
         }
         var bridgeOwners = routes.Where(route => byVariable.ContainsKey(route.VariableGuid) &&
             string.Equals(endpoints.GetValueOrDefault(route.TargetObjectGuid)?.FeeType, "MoveByte", StringComparison.OrdinalIgnoreCase))
-            .GroupBy(route => route.TargetObjectGuid).ToDictionary(group => group.Key, group => group.Select(route => byVariable[route.VariableGuid]).Distinct().ToArray());
+            .SelectMany(route => graph.Owners(route.TargetObjectGuid).Select(owner => (Owner: owner.Guid, Group: byVariable[route.VariableGuid])))
+            .GroupBy(item => item.Owner).ToDictionary(group => group.Key, group => group.Select(item => item.Group).Distinct().ToArray());
         foreach (var variable in variables.Where(item => Plc.IsMatch(item.Signal)))
         {
-            var connected = routesByVariable[variable.VariableGuid].SelectMany(route => bridgeOwners.GetValueOrDefault(route.TargetObjectGuid) ?? [])
+            var connected = routesByVariable[variable.VariableGuid].SelectMany(route => graph.Owners(route.TargetObjectGuid))
+                .SelectMany(owner => bridgeOwners.GetValueOrDefault(owner.Guid) ?? [])
                 .Distinct().Where(key => groups[key].Variables.Any(peer => !peer.InterfaceGuid.Equals(variable.InterfaceGuid, StringComparison.OrdinalIgnoreCase))).ToArray();
             var key = connected.Length == 1 ? connected[0] : variable.InterfaceGuid + ":plc";
             if (!groups.TryGetValue(key, out var group)) groups[key] = group = new(PlcRobotType, $"{variable.InterfaceName}_PLC_Roboter");

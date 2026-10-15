@@ -93,10 +93,13 @@ internal static partial class Program
             : new FeeAbstractObject { Guid = item.Guid, Name = item.Name, FeeType = item.FeeType }).ToArray();
         var projected = ProjectObjectAssociations(result.Snapshot, result, live);
         var root = new Fee2ContainerRoot(Guid.NewGuid(), "Root", result.Snapshot, 4, 0, 4, 0, false,
-            NonContainerObjects: result.UnmappedObjects, ObjectAssociations: projected, LiveVariables: variables, LiveAssignments: routes);
+            NonContainerObjects: result.UnmappedObjects, ObjectAssociations: projected, LiveVariables: variables, LiveAssignments: routes,
+            ObjectDetails: objects.Select(item => new FeeContainerObjectDetails(item.Guid, item.Name, item.FeeType,
+                item.ParentGuid == cabinet ? "Cabinet" : "", item.LogicDefinitionName ?? "", "", ParentGuid: item.ParentGuid?.ToString("D") ?? "",
+                CabinetDefinition: item.CabinetDefinition ?? "")).ToArray());
         var editor = new Fee2ContainerRootEditor(root);
         var roundTrip = Fee2ContainerRootEditor.FromDocument(root, editor.CreateSnapshot(includeExcluded: true).ContainerDocument);
-        if (roundTrip.CreateObjectAssociations().Count(item => item.ObjectGuid == cabinet) != 2 ||
+        if (roundTrip.CreateObjectAssociations().Count(item => item.ObjectGuid == cabinet) != 1 ||
             helpers.Any(guid => roundTrip.CreateObjectAssociations().Count(item => item.ObjectGuid == guid) != 1) ||
             roundTrip.NonContainerObjects.Any(item => helpers.Contains(item.Guid) || item.Guid == cabinet))
             throw new InvalidOperationException("Round-trip discarded linked differently named helpers or shared Cabinets.");

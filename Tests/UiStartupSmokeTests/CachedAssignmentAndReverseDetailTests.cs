@@ -85,7 +85,7 @@ internal static partial class Program
     private static void VerifyReverseDetailsAndUnassignedSignalOverview()
     {
         var cabinet = new FeeCabinet { Name = "Cabinet A" };
-        var element = new FeeCabinetElement { Name = "Switch", Parent = cabinet };
+        var element = new FeeCabinetElement { Name = "Switch", Parent = cabinet, ElementType = "CabinetSwitch" };
         var helper = new FeeAbstractObject { Guid = Guid.NewGuid(), Name = "Counter", FeeType = "CounterSLO", Parent = cabinet };
         var first = Guid.NewGuid(); var second = Guid.NewGuid();
         var variables = new[] { new FeeContainerLiveVariable(first, "Assigned", "%I0.0", "", "Bool", ""),
@@ -99,6 +99,7 @@ internal static partial class Program
             !details[helper.Guid].ConnectionText.Contains("Signal Counter reset"))
             throw new InvalidOperationException("Cabinet/SimpleLogic peer names, slots, parents or variables are absent.");
         var doc = ContainerFileXml.Document([CurrentContainer("Switch", "Assigned", "%I0.0")]);
+        doc.Descendants("Container").Single().SetElementValue("Type", "CabinetSwitch");
         var snapshot = new FeeContainerProvenanceSnapshot(new Dictionary<string, string>(), doc,
             [new FeeContainerSignalBinding(0, 0, first)], 1, 1, "");
         var id = doc.Descendants("Container").Single().Attribute("id")!.Value;
@@ -108,16 +109,17 @@ internal static partial class Program
             ObjectDetails: details.Values.ToArray(), LiveVariables: variables, LiveAssignments: assignments);
         var page = new Fee2ContainerPageVM { SelectedRoot = new Fee2ContainerRootSelectionVM(root) };
         PumpDispatcher(TimeSpan.FromMilliseconds(50));
+        var child = page.FoundContainers.Single(item => item.Type == "CabinetSwitch");
         if (page.LinkedUnassignedSignalCount != 1 || page.LinkedUnassignedSignals.Single().Signal != "Counter reset" ||
-            page.FoundContainers.Single().DataList.Single().Signal != "Assigned" || page.NonContainerObjects.Single().ParentName != "Cabinet A")
+            child.DataList.Single().Signal != "Assigned" || page.NonContainerObjects.Single().ParentName != "Cabinet A")
             throw new InvalidOperationException("Shared container rows or linked-but-unassigned signals were lost.");
         page.ObjectTypeFilters.Single().IsVisible = false;
         if (page.NonContainerObjectsView.Cast<object>().Any()) throw new InvalidOperationException("The FEE-type filter did not hide CounterSLO.");
         page.SelectedRoot!.Editor.Signals.Single().IsIncluded = false;
-        if (page.LinkedUnassignedSignalCount != 2 || page.FoundContainers.Single().LinkedUnassignedSignalCount != 1)
-            throw new InvalidOperationException("Signal counts were not recalculated after editing the export/assignment.");
-        page.ShowLinkedSignalsCommand.Execute(page.FoundContainers.Single());
-        if (page.LinkedUnassignedSignals.Single().Signal != "Assigned" || page.SelectedResultTabIndex != 3)
+        if (page.LinkedUnassignedSignalCount != 1 || child.LinkedUnassignedSignalCount != 0)
+            throw new InvalidOperationException("Disabling signal export incorrectly removed its container assignment.");
+        page.ShowLinkedSignalsCommand.Execute(child);
+        if (page.LinkedUnassignedSignals.Count != 0 || page.SelectedResultTabIndex != 3)
             throw new InvalidOperationException("The per-container linked signal button selected another scope.");
     }
 }

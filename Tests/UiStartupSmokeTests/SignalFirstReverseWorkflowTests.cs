@@ -26,7 +26,7 @@ internal static partial class Program
         var generatedSnapshot = generated.Provenance ?? throw new InvalidOperationException("No signal-first snapshot.");
         if (generated.ContainerCount != 3 || generatedSnapshot.SignalBindings.Any(item => item.VariableGuid == unused) ||
             generatedSnapshot.ContainerDocument.Descendants("SimObject").Any() ||
-            generatedSnapshot.ContainerDocument.Descendants("Container").Count(item => item.Attribute("origin")?.Value == "Signal und Req. XML") != 2 ||
+            generatedSnapshot.ContainerDocument.Descendants("Container").Count(item => item.Attribute("recognitionSource")?.Value == "Req.xml") != 2 ||
             generatedSnapshot.ContainerDocument.Descendants("Entry").Any(entry => entry.Attribute("interfaceName") is null))
             throw new InvalidOperationException("Signal-only generation mixed interfaces, included inactive variables or preassigned objects.");
         var selected = FeeSignalContainerBuilder.Build(variables.Where(item => item.InterfaceGuid == ifaceA).ToArray(), routes, req);
@@ -35,9 +35,9 @@ internal static partial class Program
         var filteredRequirements = new XDocument(req);
         filteredRequirements.Root!.Add(new XElement("FilterList", new XElement("Key", new XAttribute("match", "exact"), "CopyInput")));
         var filtered = FeeSignalContainerBuilder.Build(variables, routes, filteredRequirements);
-        if (filtered.Provenance!.SignalBindings.Any(item => item.VariableGuid == helperSignal) ||
+        if (!filtered.Provenance!.SignalBindings.Any(item => item.VariableGuid == helperSignal) ||
             !filtered.LiveAssignments!.Any(item => item.VariableGuid == helperSignal))
-            throw new InvalidOperationException("Req-excluded live signals were recreated as fallback containers or lost their live routes.");
+            throw new InvalidOperationException("A Req.xml filter hid an actively connected signal or lost its live route.");
         var liveObjects = new FeeContainerLiveObject[] { new(primary, "MotorReady", "LogicObject", "Grob_Sensor"),
             new(helper, "CopyUnit", "BoolCopy5Outputs") };
         var scene = FeeContainerLiveReconstructor.Reconstruct(Guid.NewGuid(), "Root", liveObjects, variables, routes, requireConnectedSignal: true);

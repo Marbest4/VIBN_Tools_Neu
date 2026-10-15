@@ -29,7 +29,8 @@ public sealed record FeeContainerLiveVariable(
 public sealed record FeeContainerLiveAssignment(
     Guid VariableGuid,
     Guid TargetObjectGuid,
-    string TargetSlot);
+    string TargetSlot,
+    bool IsIndirect = false);
 
 public sealed record FeeContainerReconstructionIssue(
     Guid? ObjectGuid,
@@ -233,11 +234,7 @@ public static class FeeContainerLiveReconstructor
                 var variable = entry.Variable;
                 dataList.Add(new XElement("Entry",
                     new XElement("ID", variable.Comment ?? string.Empty),
-                    new XElement("Address", candidate.Object.IsSpecialDevice && !string.IsNullOrWhiteSpace(variable.Address)
-                        ? variable.Address
-                        : string.IsNullOrWhiteSpace(variable.Path)
-                        ? variable.Address ?? string.Empty
-                        : variable.Path),
+                    new XElement("Address", string.IsNullOrWhiteSpace(variable.Address) ? variable.Path : variable.Address),
                     new XElement("DataType", variable.DataType ?? string.Empty),
                     new XElement("Signal", variable.Signal ?? string.Empty),
                     new XElement("Slot", entry.XmlSlot),
@@ -633,7 +630,7 @@ public static class FeeContainerLiveReconstructor
              ContainerFileXml.HasMatchingObjectName(other.ComponentName, candidate.ComponentName)));
     }
 
-    private static string? MapCabinetType(string? definition)
+    internal static string? MapCabinetType(string? definition)
     {
         var normalized = NormalizeToken(definition);
         if (normalized.Contains("GROBNOTAUS", StringComparison.Ordinal))

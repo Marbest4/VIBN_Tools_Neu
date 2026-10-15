@@ -6,37 +6,22 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 public sealed record FeeSignalWorkspaceSnapshot(IReadOnlyList<VisualFeeInterface> Interfaces,
     IReadOnlyList<FeeContainerLiveVariable> Variables, long ConnectionRevision);
 public sealed record FeeSignalRouteSnapshot(IReadOnlyList<FeeContainerLiveAssignment> Assignments, IReadOnlyList<string> Issues);
-public sealed record FeeSignalEndpoint(Guid Guid, string Name, string FeeType);
-public sealed record FeeSignalEndpointSnapshot(IReadOnlyDictionary<Guid, FeeSignalEndpoint> Objects, IReadOnlyList<string> Issues);
+public sealed record FeeSignalEndpoint(Guid Guid, string Name, string FeeType, string LogicDefinitionName = "",
+    IReadOnlyList<string>? SlotNames = null, string ParentGuid = "", string ParentName = "", string CabinetDefinition = "");
+public sealed record FeeSignalEndpointSnapshot(IReadOnlyDictionary<Guid, FeeSignalEndpoint> Objects, IReadOnlyList<string> Issues,
+    IReadOnlyList<VisualFeeObjectLink>? ObjectLinks = null);
 
-/// <summary>Signal discovery deliberately does not enumerate scene objects or assign them to a container.</summary>
-public sealed class FeeSignalWorkspaceService
+/// <summary>Reads current signal endpoints and bounded helper chains; scene-object assignment remains a separate step.</summary>
+public sealed partial class FeeSignalWorkspaceService
 {
     public async Task<FeeSignalEndpointSnapshot> ReadEndpointsAsync(IEnumerable<FeeContainerLiveAssignment> routes, long revision,
         CancellationToken token, IProgress<Fee2ContainerProgress>? progress = null)
     {
-        var guids = routes.Select(item => item.TargetObjectGuid).Where(guid => guid != Guid.Empty).Distinct().ToArray();
-        var result = new Dictionary<Guid, FeeSignalEndpoint>(); var issues = new List<string>();
-        foreach (var batch in guids.Chunk(128))
-        {
-            CheckRevision(revision); token.ThrowIfCancellationRequested();
-            progress?.Report(new(90 + result.Count * 8 / Math.Max(1, guids.Length), $"Signalendpunkte / SimObject-Typen: {result.Count}/{guids.Length} gelesen …"));
-            try
-            {
-                var text = batch.Select(guid => guid.ToString("D")).ToArray();
-                var types = (await Services.ApiInstance!.Object.GetPropertiesAsync(text, "Type") ?? []).ToArray();
-                token.ThrowIfCancellationRequested();
-                var names = (await Services.ApiInstance!.Object.GetPropertiesAsync(text, "Name") ?? []).ToArray();
-                for (var index = 0; index < batch.Length; index++)
-                    result[batch[index]] = new(batch[index], index < names.Length ? Services.ApiInstance.XmlHelper.ConvertToString(names[index]) ?? "" : "",
-                        index < types.Length ? (Services.ApiInstance.XmlHelper.ConvertToString(types[index]) ?? "").Split('.').Last() : "");
-            }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
-            catch (Exception exception) { issues.Add($"Signalendpunkt-Typen konnten nicht vollständig gelesen werden: {Fee2ContainerReadPhase.Describe(exception)}"); }
-        }
         CheckRevision(revision); token.ThrowIfCancellationRequested();
-        progress?.Report(new(98, $"Signalendpunkte / SimObject-Typen: {result.Count}/{guids.Length} gelesen."));
-        return new(result, issues);
+        var assignments = routes.ToArray();
+        var result = assignments.Select(item => item.TargetObjectGuid).Where(guid => guid != Guid.Empty).Distinct()
+            .ToDictionary(guid => guid, guid => new FeeSignalEndpoint(guid, "", ""));
+        return await ReadEndpointGraphAsync(result, [], assignments.Select(item => item.VariableGuid).ToHashSet(), revision, token, progress);
     }
 
     public async Task<FeeSignalWorkspaceSnapshot> ReadInterfacesAsync(CancellationToken token)

@@ -9,10 +9,7 @@ internal static class FeeLogicSlotSnapshot
     // refresh, never on root/interface selection. Existing assignment GUIDs stay intact.
     internal static async Task PopulateAsync(IEnumerable<FeeAbstractObject> objects, CancellationToken token)
     {
-        var candidates = objects.OfType<FeeLogic>().Where(item => item.LogicDefinitionGuid != Guid.Empty &&
-                (item.Slots?.Count is not > 0 || string.Equals(item.LogicDefinitionName, "UNDEFINED", StringComparison.OrdinalIgnoreCase) ||
-                    VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(item.LogicDefinitionName)))
-            .ToArray();
+        var candidates = objects.OfType<FeeLogic>().DistinctBy(item => item.Guid).ToArray();
         var completed = 0;
         FeeReadProgressScope.Report("Logik-Slots lesen", 0, candidates.Length, "Logiken");
         foreach (var logic in candidates)

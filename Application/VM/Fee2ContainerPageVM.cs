@@ -67,6 +67,7 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
         EditContainersCommand = new RelayCommand(EditContainers, () => SelectedRoot is not null && !IsBusy);
         InitializeLiveDetails();
         InitializeSignalWorkflow();
+        InitializeUnknownLogicExport();
         ConfigureDetailViews();
         _connection.PropertyChanged += OnConnectionPropertyChanged;
     }
@@ -514,6 +515,7 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
         if (args.PropertyName != nameof(Fee2ContainerRootSelectionVM.IsSelected)) return;
         OnPropertyChanged(nameof(CanExport));
         OnPropertyChanged(nameof(ExportUnavailableReason));
+        OnPropertyChanged(nameof(CanExportUnknownLogics)); OnPropertyChanged(nameof(ExportUnknownLogicsHelp));
         CommandManager.InvalidateRequerySuggested();
     }
 
@@ -657,6 +659,12 @@ public sealed partial class Fee2ContainerPageVM : MvvmBase
         item.AddedAsContainer = true;
         editor.NonContainerObjects.Remove(item);
         NonContainerObjects.Remove(item);
+        if (item.FeeType.Split('.').Last() == "CabinetElement" && SelectedRoot is { } cabinetSelection)
+        {
+            cabinetSelection.ApplyRoot(cabinetSelection.CreateEditedRoot(includeExcluded: true));
+            RefreshSelectionDetails(cabinetSelection);
+            container = cabinetSelection.Editor.Containers.First(row => row.Id == container.Id);
+        }
         SelectedFoundContainer = container;
         RefreshSignalRows();
         RefreshLiveDetailViews();
@@ -799,6 +807,7 @@ public sealed class Fee2ContainerRootEditor
 
     public Fee2ContainerRootEditor(Fee2ContainerRoot root)
     {
+        root = FeeCabinetContainerGrouping.Normalize(root);
         _root = root;
         _objectDetailsByGuid = (root.ObjectDetails ?? []).ToDictionary(item => item.Guid);
         // Work on a copy: normalizing legacy IDs must not alter saved root
@@ -830,6 +839,9 @@ public sealed class Fee2ContainerRootEditor
                         StoredParentName = container.Attribute("parentName")?.Value ?? "", ParentGuid = container.Attribute("parentGuid")?.Value ?? "",
                         ParentContainerId = container.Attribute("parentContainerId")?.Value ?? "", RecognitionSource = container.Attribute("recognitionSource")?.Value ?? "Logik",
                         BaseAddress = container.Attribute("address")?.Value ?? "",
+                        StoredLogicDefinitionName = Guid.TryParse(container.Attribute("targetGuid")?.Value, out var logicTarget) ?
+                            new[] { root.SignalEndpoints?.GetValueOrDefault(logicTarget)?.LogicDefinitionName, _objectDetailsByGuid.GetValueOrDefault(logicTarget)?.LogicDefinitionName }
+                                .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)) ?? "" : "",
                         IsManuallySpecialDevice = container.Attribute("specialDevice")?.Value == "true", ManuallyChecked = container.Attribute("manuallyChecked")?.Value == "true" };
                 Containers.Add(row);
                 containerRows[container] = row;
@@ -849,7 +861,8 @@ public sealed class Fee2ContainerRootEditor
                         variableGuid == Guid.Empty ? null : variableGuid,
                         entry.Attribute("interfaceGuid")?.Value ?? liveVariablesByGuid.GetValueOrDefault(variableGuid)?.InterfaceGuid ?? "",
                         entry.Attribute("interfaceName")?.Value ?? liveVariablesByGuid.GetValueOrDefault(variableGuid)?.InterfaceName ?? "")
-                        { IsIncluded = entry.Attribute("export")?.Value != "false", FeeType = entry.Attribute("feeType")?.Value ?? "" });
+                        { IsIncluded = entry.Attribute("export")?.Value != "false", FeeType = entry.Attribute("feeType")?.Value ?? "",
+                            Usage = liveVariablesByGuid.GetValueOrDefault(variableGuid)?.Usage ?? "" });
                 }
             }
         }
@@ -1042,12 +1055,16 @@ public sealed class Fee2ContainerRootEditor
     public void RefreshLiveMetadata()
     {
         var byContainer = Signals.ToLookup(item => item.ContainerId, StringComparer.Ordinal);
+        var variablesByGuid = LiveVariables.DistinctBy(item => item.VariableGuid).ToDictionary(item => item.VariableGuid);
         var linksByObject = LiveAssignments.ToLookup(item => item.TargetObjectGuid);
+        var assigned = Signals.Where(item => item.HasContainerAssignment && item.VariableGuid is not null).Select(item => item.VariableGuid!.Value).ToHashSet();
         var details = _objectDetailsByGuid;
         var devices = (_root.SpecialDevices ?? []).ToDictionary(item => item.Guid);
         foreach (var container in Containers)
         {
             var rows = byContainer[container.Id].ToArray();
+            foreach (var row in rows)
+                if (row.VariableGuid is Guid guid && variablesByGuid.TryGetValue(guid, out var variable)) row.Usage = variable.Usage;
             if (!container.DataList.SequenceEqual(rows)) container.DataList.ReplaceWith(rows);
             var guids = container.AssociatedObjectItems.Select(item => item.ObjectGuid).ToHashSet();
             var device = guids.Select(guid => devices.GetValueOrDefault(guid)).FirstOrDefault(item => item is not null);
@@ -1059,7 +1076,6 @@ public sealed class Fee2ContainerRootEditor
                     LiveAssignments.Where(item => selectedSignals.Contains(item.VariableGuid) && (FeeRobotExchangeGrouping.IsExchange(container.Type) || guids.Contains(item.TargetObjectGuid))).ToArray());
             }
             container.SetSpecialDevice(device);
-            var assigned = rows.Where(item => item.IsAssigned && item.VariableGuid is not null).Select(item => item.VariableGuid!.Value).ToHashSet();
             container.LinkedUnassignedSignalCount = guids.SelectMany(guid => linksByObject[guid]).Where(item =>
                 !assigned.Contains(item.VariableGuid)).Select(item => item.VariableGuid).Distinct().Count();
             container.NotifyValidation();
@@ -1209,6 +1225,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     private bool _isManuallySpecialDevice;
     private int _linkedUnassignedSignalCount;
     private bool _manuallyChecked;
+    private string _recognitionSource = "Logik";
     private VIBN_Tools.SpecialDevices.Fee2SpecialDeviceRoot? _specialDevice;
 
     public Fee2ContainerFoundContainerVM(
@@ -1220,7 +1237,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     {
         Id = id;
         _component = component;
-        _type = type;
+        _type = string.Equals(type, "CabinetElement", StringComparison.OrdinalIgnoreCase) ? "N/A" : type;
         OriginalSignalCount = originalSignalCount;
         _associatedObjects = associatedObjects;
         RecognitionOrigin = recognitionOrigin; SignalTargetGuid = signalTargetGuid;
@@ -1230,7 +1247,7 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     public bool IsExpanded { get => _isExpanded; set => SetPropertyChange(ref _isExpanded, value); }
     public string Name => Component;
     public string RecognitionOrigin { get; }
-    public string RecognitionSource { get; init; } = "Logik";
+    public string RecognitionSource { get => _recognitionSource; set => SetPropertyChange(ref _recognitionSource, value); }
     public string StoredParentName { get; init; } = "";
     public string ParentGuid { get; init; } = "";
     public string ParentContainerId { get; init; } = "";
@@ -1239,7 +1256,8 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
     public bool HasChildContainers => ChildContainers.Count > 0;
     public int DisplaySignalCount => DataList.Count + ChildContainers.Sum(child => child.DataList.Count);
     public void NotifyHierarchy()
-    { OnPropertyChanged(nameof(HasChildContainers)); OnPropertyChanged(nameof(DisplaySignalCount)); OnPropertyChanged(nameof(InterfacesText)); NotifyValidation(); }
+    { OnPropertyChanged(nameof(HasChildContainers)); OnPropertyChanged(nameof(DisplaySignalCount)); OnPropertyChanged(nameof(InterfacesText));
+        OnPropertyChanged(nameof(InputByteText)); OnPropertyChanged(nameof(OutputByteText)); NotifyValidation(); }
     public string SignalTargetGuid { get; }
     public string InterfacesText => string.Join(", ", DataList.Concat(ChildContainers.SelectMany(child => child.DataList)).Select(item => item.InterfaceName).Where(name => name.Length > 0).Distinct());
     public string SpecialDeviceButtonHelp => string.IsNullOrWhiteSpace(LogicDefinitionName)
@@ -1251,8 +1269,11 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
         ? $"Logik '{LogicDefinitionName}' ist noch nicht in SpecialDevices definiert. Die aktuellen Signale bleiben als Kandidat sichtbar." : "";
     public string FeeType => IsSpecialDevice ? "LogicObject" : Type;
     public bool IsSpecialDevice => IsManuallySpecialDevice || FeeRobotExchangeGrouping.IsExchange(Type) || _specialDevice is not null || AssociatedObjectItems.Any(item => item.Role == "SpecialDevice");
-    public string InputByteText => _specialDevice?.InputByteText ?? "—";
-    public string OutputByteText => _specialDevice?.OutputByteText ?? "—";
+    public string InputByteText => MinimumByte(input: true)?.ToString() ?? "—";
+    public string OutputByteText => MinimumByte(input: false)?.ToString() ?? "—";
+    private int? MinimumByte(bool input) => VIBN_Tools.SpecialDevices.FeeSpecialDeviceLiveProjector.MinimumByte(
+        DataList.Concat(ChildContainers.SelectMany(child => child.DataList)).Where(item => item.VariableGuid is not null).Select(item =>
+            new VIBN_Tools.SpecialDevices.FeeSpecialDeviceSignalSnapshot(item.VariableGuid ?? Guid.Empty, item.Signal, item.Address, item.Usage, item.DataType, item.SignalId, "", [])), input);
     public string SignalAddresses => string.Join("; ", DataList.Where(item => !string.IsNullOrWhiteSpace(item.Signal))
         .Select(item => $"{item.Signal}: {item.Address}"));
     public void SetSpecialDevice(VIBN_Tools.SpecialDevices.Fee2SpecialDeviceRoot? device)
@@ -1263,8 +1284,27 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
         OnPropertyChanged(nameof(InterfacesText)); OnPropertyChanged(nameof(SpecialDeviceWarning)); OnPropertyChanged(nameof(SpecialDeviceButtonHelp));
     }
 
-    public string Component { get => _component; set { if (SetPropertyChange(ref _component, value)) OnPropertyChanged(nameof(Name)); } }
-    public string Type { get => _type; set { if (SetPropertyChange(ref _type, value)) OnPropertyChanged(nameof(FeeType)); } }
+    public string Component
+    {
+        get => _component;
+        set
+        {
+            if (string.Equals(_component, value, StringComparison.Ordinal)) return;
+            RecognitionSource = "Manuell";
+            if (SetPropertyChange(ref _component, value)) OnPropertyChanged(nameof(Name));
+        }
+    }
+    public string Type
+    {
+        get => _type;
+        set
+        {
+            if (string.Equals(value, "CabinetElement", StringComparison.OrdinalIgnoreCase)) value = "N/A";
+            if (string.Equals(_type, value, StringComparison.Ordinal)) return;
+            RecognitionSource = "Manuell";
+            if (SetPropertyChange(ref _type, value)) OnPropertyChanged(nameof(FeeType));
+        }
+    }
     public int OriginalSignalCount { get; }
     public string AssociatedObjects => _associatedObjects;
     public int AssociatedObjectCount => AssociatedObjectItems.Count;
@@ -1278,10 +1318,12 @@ public sealed class Fee2ContainerFoundContainerVM : NotifyBase
             if (FeeRobotExchangeGrouping.IsExchange(Type)) return Type;
             var primary = AssociatedObjectItems.Where(item => item.Role is "Primary" or "SpecialDevice")
                 .Select(item => item.LogicDefinitionName).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().ToArray();
-            return string.Join(", ", primary.Length > 0 ? primary : AssociatedObjectItems.Select(item => item.LogicDefinitionName)
+            var result = string.Join(", ", primary.Length > 0 ? primary : AssociatedObjectItems.Select(item => item.LogicDefinitionName)
                 .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct());
+            return result.Length > 0 ? result : StoredLogicDefinitionName;
         }
     }
+    public string StoredLogicDefinitionName { get; init; } = "";
     public string ConnectionText => string.Join("; ", AssociatedObjectItems.Select(item => item.ConnectionText).Where(text => !string.IsNullOrWhiteSpace(text)).Distinct());
     public bool ManuallyChecked { get => _manuallyChecked; set => SetPropertyChange(ref _manuallyChecked, value); }
     public bool HasErrors => string.IsNullOrWhiteSpace(Component) || string.IsNullOrWhiteSpace(Type);
@@ -1358,6 +1400,7 @@ public sealed class Fee2ContainerFoundSignalVM : NotifyBase
     public Guid? VariableGuid { get; }
     public string InterfaceGuid { get; }
     public string InterfaceName { get; }
+    public string Usage { get; internal set; } = "";
     public string FeeType { get; init; } = "";
     public bool IsIncluded { get => _isIncluded; set { if (SetPropertyChange(ref _isIncluded, value)) NotifyAssignment(); } }
     public bool IsRelatedToSelection
@@ -1365,11 +1408,13 @@ public sealed class Fee2ContainerFoundSignalVM : NotifyBase
         get => _isRelatedToSelection;
         set => SetPropertyChange(ref _isRelatedToSelection, value);
     }
-    public bool IsAssigned => IsIncluded && !string.IsNullOrWhiteSpace(Signal) && !string.IsNullOrWhiteSpace(Slot);
+    public bool HasContainerAssignment => !string.IsNullOrWhiteSpace(Signal) && !string.IsNullOrWhiteSpace(Slot);
+    public bool IsAssigned => IsIncluded && HasContainerAssignment;
     public string AssignmentState => IsAssigned ? "Zugeordnet" : IsIncluded ? "Zuordnung unvollständig" : "Vom Export ausgeschlossen";
 
     private void NotifyAssignment()
     {
+        OnPropertyChanged(nameof(HasContainerAssignment));
         OnPropertyChanged(nameof(IsAssigned));
         OnPropertyChanged(nameof(AssignmentState));
     }

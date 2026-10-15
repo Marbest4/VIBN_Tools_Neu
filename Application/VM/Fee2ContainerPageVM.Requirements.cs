@@ -44,6 +44,7 @@ public sealed partial class Fee2ContainerPageVM
         }
         _supportedContainerTypes = (_service.Requirements?.Types ?? []).Concat(FeeContainerLiveReconstructor.SupportedContainerTypes)
             .Concat(Roots.SelectMany(root => root.Editor.Containers).Select(container => container.Type))
+            .Where(type => !string.Equals(type, "CabinetElement", StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(type => type, StringComparer.OrdinalIgnoreCase).ToArray();
         OnPropertyChanged(nameof(SupportedContainerTypes));
         OnPropertyChanged(nameof(RequirementsDescription));

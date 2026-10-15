@@ -70,6 +70,8 @@
                     ToolTipService.ShowOnDisabled="True" />
             <Button Margin="8,0,0,0" MinWidth="160" MinHeight="34" Content="Bearbeiten / Grouping"
                     Command="{Binding EditContainersCommand}" ToolTip="Bearbeitet den erzeugten Container-Arbeitsstand und die Gruppierung. Erfordert Container und einen abgeschlossenen Lesevorgang." Click="CommitPendingEdits"/>
+            <Button Margin="8,0,0,0" MinWidth="170" MinHeight="34" Content="N/A-Logiken exportieren"
+                    Command="{Binding ExportUnknownLogicsCommand}" ToolTip="{Binding ExportUnknownLogicsHelp}" ToolTipService.ShowOnDisabled="True" Click="CommitPendingEdits"/>
             <Button Margin="8,0,0,0" MinWidth="100" MinHeight="34"
                     Content="Abbrechen" Command="{Binding CancelCommand}" ToolTip="Bricht den laufenden Vorgang nach dem aktuellen SDK-Aufruf ab. Ohne laufenden Vorgang gesperrt." />
             <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Text="{Binding SelectionSummary}" />
@@ -196,6 +198,9 @@
                             <DataGridCheckBoxColumn Header="geprüft" Binding="{Binding ManuallyChecked, UpdateSourceTrigger=PropertyChanged}" Width="75" />
                             <DataGridTextColumn Header="Interface" Binding="{Binding InterfacesText, Mode=OneWay}" IsReadOnly="True" Width="150" />
                             <DataGridTextColumn Header="Quelle" Binding="{Binding RecognitionSource, Mode=OneWay}" IsReadOnly="True" Width="100" />
+                            <DataGridTextColumn Header="Logikdefinition" Binding="{Binding LogicDefinitionName, Mode=OneWay}" IsReadOnly="True" Width="210" />
+                            <DataGridTextColumn Header="E-Adresse (Byte)" Binding="{Binding InputByteText, Mode=OneWay}" IsReadOnly="True" Width="105" />
+                            <DataGridTextColumn Header="A-Adresse (Byte)" Binding="{Binding OutputByteText, Mode=OneWay}" IsReadOnly="True" Width="105" />
                             <DataGridTextColumn Header="Parent / Cabinet" Binding="{Binding ParentName, Mode=OneWay}" IsReadOnly="True" Width="160" />
                             <DataGridTextColumn Header="Adresse" Binding="{Binding BaseAddress, Mode=OneWay}" IsReadOnly="True" Width="110" />
                             <DataGridTextColumn Header="Erkennung" Binding="{Binding RecognitionOrigin, Mode=OneWay}" IsReadOnly="True" Width="220" />

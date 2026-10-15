@@ -13,6 +13,7 @@ internal static partial class Program
 {
     private static void VerifyReverseHierarchyAndExchanges()
     {
+        VerifyReverseConnectionGraph();
         VerifyRobotInterfaceBridges();
         VerifyStandaloneSimpleLogicTypes();
         VerifyCabinetContextRoundTrip();
@@ -65,7 +66,7 @@ internal static partial class Program
         var root = FeeSignalContainerBuilder.Build(variables, routes, XDocument.Parse("<AutoCreate/>"), endpoints: endpoints.ToDictionary(item => item.Guid));
         var containers = root.Provenance!.ContainerDocument.Descendants("Container").ToArray();
         if (containers.Length != types.Length || containers.Any(item => !types.Contains(item.Element("Type")?.Value ?? "")) ||
-            containers.Any(item => item.Attribute("recognitionSource")?.Value != "Logik" || item.Descendants("SimObject").Any()))
+            containers.Any(item => item.Attribute("recognitionSource")?.Value != "Logik/Signal" || item.Descendants("SimObject").Any()))
             throw new InvalidOperationException("Standalone SimpleLogic endpoints lost their actual types or were assigned as scene objects too early.");
     }
 

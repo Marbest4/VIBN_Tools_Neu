@@ -27,7 +27,9 @@ public sealed record Fee2ContainerRoot(
     IReadOnlyList<FeeContainerObjectDetails>? ObjectDetails = null,
     IReadOnlyList<FeeContainerLiveVariable>? LiveVariables = null,
     IReadOnlyList<FeeContainerLiveAssignment>? LiveAssignments = null,
-    IReadOnlyList<VIBN_Tools.SpecialDevices.Fee2SpecialDeviceRoot>? SpecialDevices = null)
+    IReadOnlyList<VIBN_Tools.SpecialDevices.Fee2SpecialDeviceRoot>? SpecialDevices = null,
+    IReadOnlyDictionary<Guid, FeeSignalEndpoint>? SignalEndpoints = null,
+    IReadOnlyList<VisualFeeObjectLink>? ObjectLinks = null)
 {
     public bool HasProvenance => Provenance is not null && UsesExactProvenance;
     public string SourceKind => HasProvenance ? "Container2FEE-Provenienz" : Guid == System.Guid.Empty ? "Signal-Interfaces (rekonstruiert)" : "FEE-Struktur (rekonstruiert)";
@@ -36,7 +38,8 @@ public sealed record Fee2ContainerRoot(
 }
 
 public sealed record FeeContainerObjectDetails(Guid Guid, string Name, string FeeType,
-    string ParentName, string LogicDefinitionName, string ConnectionText, bool IsSpecialDevice = false, string ParentGuid = "");
+    string ParentName, string LogicDefinitionName, string ConnectionText, bool IsSpecialDevice = false, string ParentGuid = "",
+    IReadOnlyList<string>? SlotNames = null, string CabinetDefinition = "");
 
 public sealed record Fee2ContainerExportResult(
     FeeContainerProvenanceSnapshot Snapshot,
@@ -508,11 +511,14 @@ public sealed class Fee2ContainerService
                 cabinet.Label = await ReadOptionalObjectPropertyAsync(cabinet.Guid, "Label") ?? "";
         }
         progress?.Report(new Fee2ContainerProgress(18, "Aktuelle Variablen- und Hilfslogikrouten werden einmalig gelesen …"));
+        var helperObjects = allObjects.Where(item => ContainerFileXml.IsSimpleLogicType(item.FeeType)).ToArray();
+        var helperRead = await new FeeSimObjectLinkDiscovery(new VisualPlanLogger()).DiscoverAsync(helperObjects, cancellationToken,
+            allObjects, variableGuids: liveVariables.Select(item => item.VariableGuid));
         var assignmentRead = await Fee2ContainerReadPhase.ReadAsync("Aktuelle FEE-Signalzuordnungen lesen",
             () => ReadAssignmentsAsync(liveVariables.Select(signal => signal.VariableGuid),
-                allObjects.Select(item => item.Guid).ToHashSet(), cancellationToken, progress, allObjects), cancellationToken);
+                allObjects.Select(item => item.Guid).ToHashSet(), cancellationToken, progress, allObjects, helperRead.Links), cancellationToken);
         var objectLinks = new FeeSlotSnapshot(allObjects, liveVariables.Select(signal => signal.VariableGuid))
-            .ObjectLinks(allObjects).Concat(assignmentRead.ObjectLinks ?? []).Distinct().ToArray();
+            .ObjectLinks(allObjects).Concat(helperRead.Links).Concat(assignmentRead.ObjectLinks ?? []).Distinct().ToArray();
         var details = CreateObjectDetails(allObjects, liveVariables, assignmentRead.Assignments, objectLinks);
         var relatedObjects = objectLinks.SelectMany(link => new[] {
             (Object: Guid.Parse(link.ObjectGuidString), Related: Guid.Parse(link.LinkedObjectGuidString)),
@@ -565,7 +571,8 @@ public sealed class Fee2ContainerService
                     UsesExactProvenance: false, reconstructed.InspectedObjectCount, reconstructed.IgnoredObjectCount,
                     rootIssues, reconstructed.UnmappedObjects, associations,
                     scoped.Select(item => details[item.Guid]).ToArray(),
-                    liveVariables.Where(variable => rootVariables.Contains(variable.VariableGuid)).ToArray(), assignments, devices));
+                    liveVariables.Where(variable => rootVariables.Contains(variable.VariableGuid)).ToArray(), assignments, devices,
+                    ObjectLinks: objectLinks));
                 resultIssues.AddRange(reconstructed.Issues.Select(issue =>
                     new Fee2ContainerDiscoveryIssue(issue.ObjectGuid, root.Name, issue.Message)));
             }
@@ -713,7 +720,8 @@ public sealed class Fee2ContainerService
             var connected = signalDetails[item.Guid].Select(link => $"{link.TargetSlot} ↔ Signal {signals.GetValueOrDefault(link.VariableGuid)?.Signal ?? link.VariableGuid.ToString("D")}")
                 .Concat(objectDetails[item.GuidString]).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(text => text, StringComparer.OrdinalIgnoreCase);
             return new FeeContainerObjectDetails(item.Guid, item.Name ?? "", item.FeeType ?? "", parent?.Name ?? "",
-                logic, string.Join("; ", connected), VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(logic), parent?.GuidString ?? "");
+                logic, string.Join("; ", connected), VIBN_Tools.SpecialDevices.FeeSpecialDeviceLogicCatalog.Contains(logic), parent?.GuidString ?? "",
+                item.Slots?.Keys.ToArray() ?? [], (item as FeeCabinetElement)?.ElementType ?? "");
         });
     }
 
@@ -758,7 +766,7 @@ public sealed class Fee2ContainerService
         return null;
     }
 
-    private static async Task<string?> ReadOptionalObjectPropertyAsync(Guid guid, string propertyName)
+    internal static async Task<string?> ReadOptionalObjectPropertyAsync(Guid guid, string propertyName)
     {
         try
         {
@@ -790,7 +798,8 @@ public sealed class Fee2ContainerService
         IReadOnlySet<Guid> scopedObjects,
         CancellationToken cancellationToken,
         IProgress<Fee2ContainerProgress>? progress = null,
-        IReadOnlyList<FeeAbstractObject>? sceneObjects = null)
+        IReadOnlyList<FeeAbstractObject>? sceneObjects = null,
+        IReadOnlyList<VisualFeeObjectLink>? objectLinks = null)
     {
         if (sceneObjects is not null)
         {
@@ -798,9 +807,9 @@ public sealed class Fee2ContainerService
             var guids = variableGuids.Where(guid => guid != Guid.Empty).Distinct().ToArray();
             var signals = guids.Select(guid => new VisualFeeSignal(guid.ToString("D"), "", "", guid.ToString("D"), "", "", "", ""));
             var discovery = await new FeeSignalLinkDiscovery(new VisualPlanLogger()).DiscoverAsync(signals, cancellationToken,
-                sceneObjects, variableGuids: guids);
+                sceneObjects, objectLinks, variableGuids: guids);
             var current = discovery.Links.Select(link => new FeeContainerLiveAssignment(Guid.Parse(link.SignalGuidString),
-                Guid.Parse(link.ObjectGuidString), link.SlotName)).Where(item => scopedObjects.Contains(item.TargetObjectGuid)).Distinct().ToArray();
+                Guid.Parse(link.ObjectGuidString), link.SlotName, link.IsIndirect)).Where(item => scopedObjects.Contains(item.TargetObjectGuid)).Distinct().ToArray();
             var warnings = (discovery.Issues ?? []).Select(issue => new FeeContainerReconstructionIssue(
                 Guid.TryParse(issue.NodeId, out var guid) ? guid : null, issue.Message)).ToArray();
             return new VariableAssignmentRead(current, warnings, discovery.ObjectLinks);

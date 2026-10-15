@@ -46,12 +46,13 @@ internal sealed class FeeSlotSnapshot
     internal static IEnumerable<string> RoutingSlots(FeeAbstractObject item, string connectedSlot)
     {
         if (!IsRoutingHelper(item)) return [];
-        if (connectedSlot.Trim().StartsWith("Input", StringComparison.OrdinalIgnoreCase))
-            return (item.Slots?.Keys ?? Enumerable.Empty<string>()).Where(slot => slot.StartsWith("Output", StringComparison.OrdinalIgnoreCase))
+        var names = FeeSignalOwnershipGraph.HelperSlotNames(item.FeeType, item.Slots?.Keys).ToArray();
+        if (FeeSignalOwnershipGraph.IsInput(connectedSlot))
+            return names.Where(FeeSignalOwnershipGraph.IsOutput)
                 .Concat(["Output 01"]).Distinct(StringComparer.OrdinalIgnoreCase);
-        if (!connectedSlot.Trim().StartsWith("Output", StringComparison.OrdinalIgnoreCase)) return [];
+        if (!FeeSignalOwnershipGraph.IsOutput(connectedSlot)) return [];
         var defaults = item is FeeSimpleAnd or FeeSimpleOr ? new[] { "Input 01", "Input 02" } : ["Input 01"];
-        return (item.Slots?.Keys ?? Enumerable.Empty<string>()).Where(slot => slot.StartsWith("Input", StringComparison.OrdinalIgnoreCase))
+        return names.Where(FeeSignalOwnershipGraph.IsInput)
             .Concat(defaults).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 

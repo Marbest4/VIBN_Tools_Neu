@@ -103,12 +103,13 @@ public sealed partial class Fee2ContainerPageVM
         SelectedRoot?.NotifyCounts();
         OnPropertyChanged(nameof(SelectionSummary));
         TrackWorkspaceChange(); SpecialDevicesView.Refresh();
+        OnPropertyChanged(nameof(CanExportUnknownLogics)); OnPropertyChanged(nameof(ExportUnknownLogicsHelp));
     }
 
     private static int CountLinkedUnassignedSignals(Fee2ContainerRootEditor? editor, string? containerId)
     {
         if (editor is null) return 0;
-        var assigned = editor.Signals.Where(item => item.IsAssigned && item.VariableGuid is not null)
+        var assigned = editor.Signals.Where(item => item.HasContainerAssignment && item.VariableGuid is not null)
             .Select(item => item.VariableGuid!.Value).ToHashSet();
         var objects = containerId is null ? null : editor.Containers.FirstOrDefault(item => item.Id == containerId)?
             .AssociatedObjectItems.Select(item => item.ObjectGuid).ToHashSet();
@@ -122,7 +123,7 @@ public sealed partial class Fee2ContainerPageVM
         var rows = new List<Fee2ContainerLinkedSignalVM>();
         if (editor is not null)
         {
-            var assigned = editor.Signals.Where(item => item.IsAssigned && item.VariableGuid is not null)
+            var assigned = editor.Signals.Where(item => item.HasContainerAssignment && item.VariableGuid is not null)
                 .Select(item => item.VariableGuid!.Value).ToHashSet();
             var details = editor.ObjectDetails.ToDictionary(item => item.Guid);
             var variables = editor.LiveVariables.ToDictionary(item => item.VariableGuid);
@@ -133,7 +134,7 @@ public sealed partial class Fee2ContainerPageVM
             {
                 if (!variables.TryGetValue(group.Key, out var variable)) continue;
                 rows.Add(new Fee2ContainerLinkedSignalVM(group.Key, variable.Signal,
-                    string.IsNullOrWhiteSpace(variable.Path) ? variable.Address : variable.Path, variable.DataType,
+                    string.IsNullOrWhiteSpace(variable.Address) ? variable.Path : variable.Address, variable.DataType,
                     string.Join("; ", group.Select(item => $"{details.GetValueOrDefault(item.TargetObjectGuid)?.Name ?? item.TargetObjectGuid.ToString("D")}/{item.TargetSlot}").Distinct()), variable.InterfaceName));
             }
         }

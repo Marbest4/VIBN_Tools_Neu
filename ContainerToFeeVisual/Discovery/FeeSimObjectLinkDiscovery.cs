@@ -62,7 +62,7 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
                     {
                         if (!Guid.TryParse(linkedGuid, out var parsedGuid) || parsedGuid == Guid.Empty)
                             continue;
-                        foreach (var linkedSlot in linkedSlots ?? [])
+                        foreach (var linkedSlot in (linkedSlots ?? []).DefaultIfEmpty(""))
                         {
                             resolvedLinks.Add(new VisualFeeObjectLink(
                                 item.Guid.ToString("D"),
@@ -103,6 +103,8 @@ internal sealed class FeeSimObjectLinkDiscovery(IVisualPlanLogger logger)
     private static IEnumerable<string> GetRelevantSlotNames(FeeAbstractObject item)
     {
         IEnumerable<string> existingSlotNames = item.Slots?.Keys ?? Enumerable.Empty<string>();
+        if (VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.IsSimpleLogicType(item.FeeType))
+            return FeeSignalOwnershipGraph.HelperSlotNames(item.FeeType, existingSlotNames);
         var result = new HashSet<string>(existingSlotNames, StringComparer.OrdinalIgnoreCase);
         var type = new string((item.FeeType ?? string.Empty).Where(char.IsLetterOrDigit).ToArray());
         foreach (var slot in type.ToUpperInvariant() switch
