@@ -103,7 +103,7 @@ else
 if (_hmi_hmiActive &amp;&amp; !_hmi_init)
 {
     _hmi_unlock = PLC_OUT_Unlock;
-    _hmi_eStopPressed = false;
+    //_hmi_eStopPressed = false;
     _hmi_tongueInserted = true;
     
     _state = 0;
@@ -327,7 +327,7 @@ Feedback_FaultSim_Active = _faultSim_Unlocked || _faultSim_Opened || _faultSim_C
 	<HmiDefinition>
 		<XtraSerializer version="24.1.6.0">
 			<Items>
-				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
+				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
 					<Children>
 						<Item1 Size="665,792.5" Padding="5,5,5,5" ForegroundId="Accent3" Header="Heading" HeaderPadding="5,5,5,5" ItemKind="DiagramContainerEx" ContainerBackground="#FFFFFFFF" ContainerForeground="#FF41719C">
 							<Children>
@@ -350,7 +350,7 @@ Feedback_FaultSim_Active = _faultSim_Unlocked || _faultSim_Opened || _faultSim_C
 																<PropertyName>Foreground</PropertyName>
 																<Values>
 																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = false</Expression>
+																		<Expression>_hmi_eStopPressed == false</Expression>
 																		<Value>
 																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 																				<SolidColorBrush>#FF0A9900</SolidColorBrush>
@@ -358,7 +358,7 @@ Feedback_FaultSim_Active = _faultSim_Unlocked || _faultSim_Opened || _faultSim_C
 																		</Value>
 																	</WidgetAnimationValue>
 																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = true</Expression>
+																		<Expression>_hmi_eStopPressed == true</Expression>
 																		<Value>
 																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 																				<SolidColorBrush>#FFFF0000</SolidColorBrush>
@@ -371,14 +371,188 @@ Feedback_FaultSim_Active = _faultSim_Unlocked || _faultSim_Opened || _faultSim_C
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item2>
-												<Item3 Position="15,105" Size="150,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="" WidgetName="TextButtonWidget_226" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
+												<Item3 Position="212.5,45" Size="50,50" StrokeThickness="1" ForegroundId="Black" BorderBrush="#FF000000" ItemKind="BoolDisplayWidget" UseInverted="false" WidgetName="BoolDisplayWidget_348_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+													<HmiBehavior>
+														<WidgetEvents />
+														<WidgetAnimations>
+															<WidgetAnimation>
+																<PropertyName>Foreground</PropertyName>
+																<Values>
+																	<WidgetAnimationValue>
+																		<Expression>_hmi_start == false</Expression>
+																		<Value>
+																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+																				<SolidColorBrush>#FFFFFFFF</SolidColorBrush>
+																			</ContentControl>
+																		</Value>
+																	</WidgetAnimationValue>
+																	<WidgetAnimationValue>
+																		<Expression>_hmi_start == true</Expression>
+																		<Value>
+																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+																				<SolidColorBrush>#FF000000</SolidColorBrush>
+																			</ContentControl>
+																		</Value>
+																	</WidgetAnimationValue>
+																</Values>
+															</WidgetAnimation>
+														</WidgetAnimations>
+														<WidgetSlots>
+															<WidgetSlot>
+																<SlotName>ValueSlot</SlotName>
+																<LogicSlotName>_hmi_startLed</LogicSlotName>
+															</WidgetSlot>
+														</WidgetSlots>
+													</HmiBehavior>
+												</Item3>
+												<Item4 Position="175,105" Size="125,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Start" WidgetName="TextButtonWidget_226_2" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents>
 															<WidgetEvent>
 																<EventName>Pressed</EventName>
 																<Actions>
 																	<WidgetEventAction>
-																		<Expression>_hmi_eStopPressed = !_hmi_eStopPressed;</Expression>
+																		<Expression>_hmi_start = true;</Expression>
+																	</WidgetEventAction>
+																</Actions>
+															</WidgetEvent>
+															<WidgetEvent>
+																<EventName>Released</EventName>
+																<Actions>
+																	<WidgetEventAction>
+																		<Expression>_hmi_start = false;</Expression>
+																	</WidgetEventAction>
+																</Actions>
+															</WidgetEvent>
+														</WidgetEvents>
+														<WidgetAnimations />
+														<WidgetSlots />
+													</HmiBehavior>
+												</Item4>
+												<Item5 Position="342.5,45" Size="50,50" StrokeThickness="1" BorderBrush="#FF000000" ItemKind="BoolDisplayWidget" UseInverted="false" WidgetName="BoolDisplayWidget_348_2_1" WidgetBackground="#FFCEDFED" WidgetForeground="#FF2F6BA1">
+													<HmiBehavior>
+														<WidgetEvents />
+														<WidgetAnimations>
+															<WidgetAnimation>
+																<PropertyName>Foreground</PropertyName>
+																<Values>
+																	<WidgetAnimationValue>
+																		<Expression>_hmi_requestEntry == false</Expression>
+																		<Value>
+																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+																				<SolidColorBrush>#FF84A9C9</SolidColorBrush>
+																			</ContentControl>
+																		</Value>
+																	</WidgetAnimationValue>
+																	<WidgetAnimationValue>
+																		<Expression>_hmi_requestEntry == true</Expression>
+																		<Value>
+																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+																				<SolidColorBrush>#FF2F6BA1</SolidColorBrush>
+																			</ContentControl>
+																		</Value>
+																	</WidgetAnimationValue>
+																</Values>
+															</WidgetAnimation>
+														</WidgetAnimations>
+														<WidgetSlots>
+															<WidgetSlot>
+																<SlotName>ValueSlot</SlotName>
+																<LogicSlotName>_hmi_requestEntryLed</LogicSlotName>
+															</WidgetSlot>
+														</WidgetSlots>
+													</HmiBehavior>
+												</Item5>
+												<Item6 Position="305,105" Size="125,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Request Entry" WidgetName="TextButtonWidget_226_2_1" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
+													<HmiBehavior>
+														<WidgetEvents>
+															<WidgetEvent>
+																<EventName>Pressed</EventName>
+																<Actions>
+																	<WidgetEventAction>
+																		<Expression>_hmi_requestEntry = true;</Expression>
+																	</WidgetEventAction>
+																</Actions>
+															</WidgetEvent>
+															<WidgetEvent>
+																<EventName>Released</EventName>
+																<Actions>
+																	<WidgetEventAction>
+																		<Expression>_hmi_requestEntry = false;</Expression>
+																	</WidgetEventAction>
+																</Actions>
+															</WidgetEvent>
+														</WidgetEvents>
+														<WidgetAnimations />
+														<WidgetSlots />
+													</HmiBehavior>
+												</Item6>
+												<Item7 Position="472.5,45" Size="50,50" StrokeThickness="1" BorderBrush="#FF000000" ItemKind="BoolDisplayWidget" UseInverted="false" WidgetName="BoolDisplayWidget_348_2_1_1" WidgetBackground="#FFFAF1DC" WidgetForeground="#FFE1BF70">
+													<HmiBehavior>
+														<WidgetEvents />
+														<WidgetAnimations>
+															<WidgetAnimation>
+																<PropertyName>Foreground</PropertyName>
+																<Values>
+																	<WidgetAnimationValue>
+																		<Expression>_hmi_quit == false</Expression>
+																		<Value>
+																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+																				<SolidColorBrush>#FFFAF1DC</SolidColorBrush>
+																			</ContentControl>
+																		</Value>
+																	</WidgetAnimationValue>
+																	<WidgetAnimationValue>
+																		<Expression>_hmi_quit == true</Expression>
+																		<Value>
+																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+																				<SolidColorBrush>#FFE1BF70</SolidColorBrush>
+																			</ContentControl>
+																		</Value>
+																	</WidgetAnimationValue>
+																</Values>
+															</WidgetAnimation>
+														</WidgetAnimations>
+														<WidgetSlots>
+															<WidgetSlot>
+																<SlotName>ValueSlot</SlotName>
+																<LogicSlotName>_hmi_quitLed</LogicSlotName>
+															</WidgetSlot>
+														</WidgetSlots>
+													</HmiBehavior>
+												</Item7>
+												<Item8 Position="435,105" Size="125,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Quit / Reset" WidgetName="TextButtonWidget_226_2_1_1" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
+													<HmiBehavior>
+														<WidgetEvents>
+															<WidgetEvent>
+																<EventName>Pressed</EventName>
+																<Actions>
+																	<WidgetEventAction>
+																		<Expression>_hmi_quit = true;</Expression>
+																	</WidgetEventAction>
+																</Actions>
+															</WidgetEvent>
+															<WidgetEvent>
+																<EventName>Released</EventName>
+																<Actions>
+																	<WidgetEventAction>
+																		<Expression>_hmi_quit = false;</Expression>
+																	</WidgetEventAction>
+																</Actions>
+															</WidgetEvent>
+														</WidgetEvents>
+														<WidgetAnimations />
+														<WidgetSlots />
+													</HmiBehavior>
+												</Item8>
+												<Item9 Position="15,105" Size="150,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" WidgetName="TextButtonWidget_622" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
+													<HmiBehavior>
+														<WidgetEvents>
+															<WidgetEvent>
+																<EventName>Pressed</EventName>
+																<Actions>
+																	<WidgetEventAction>
+																		<Expression>_hmi_eStopPressed = !_hmi_eStopPressed</Expression>
 																	</WidgetEventAction>
 																</Actions>
 															</WidgetEvent>
@@ -444,180 +618,6 @@ Feedback_FaultSim_Active = _faultSim_Unlocked || _faultSim_Opened || _faultSim_C
 																</Values>
 															</WidgetAnimation>
 														</WidgetAnimations>
-														<WidgetSlots />
-													</HmiBehavior>
-												</Item3>
-												<Item4 Position="212.5,45" Size="50,50" StrokeThickness="1" ForegroundId="Black" BorderBrush="#FF000000" ItemKind="BoolDisplayWidget" UseInverted="false" WidgetName="BoolDisplayWidget_348_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
-													<HmiBehavior>
-														<WidgetEvents />
-														<WidgetAnimations>
-															<WidgetAnimation>
-																<PropertyName>Foreground</PropertyName>
-																<Values>
-																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = false</Expression>
-																		<Value>
-																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-																				<SolidColorBrush>#FF0A9900</SolidColorBrush>
-																			</ContentControl>
-																		</Value>
-																	</WidgetAnimationValue>
-																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = true</Expression>
-																		<Value>
-																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-																				<SolidColorBrush>#FFFF0000</SolidColorBrush>
-																			</ContentControl>
-																		</Value>
-																	</WidgetAnimationValue>
-																</Values>
-															</WidgetAnimation>
-														</WidgetAnimations>
-														<WidgetSlots>
-															<WidgetSlot>
-																<SlotName>ValueSlot</SlotName>
-																<LogicSlotName>_hmi_startLed</LogicSlotName>
-															</WidgetSlot>
-														</WidgetSlots>
-													</HmiBehavior>
-												</Item4>
-												<Item5 Position="175,105" Size="125,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Start" WidgetName="TextButtonWidget_226_2" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
-													<HmiBehavior>
-														<WidgetEvents>
-															<WidgetEvent>
-																<EventName>Pressed</EventName>
-																<Actions>
-																	<WidgetEventAction>
-																		<Expression>_hmi_start = true;</Expression>
-																	</WidgetEventAction>
-																</Actions>
-															</WidgetEvent>
-															<WidgetEvent>
-																<EventName>Released</EventName>
-																<Actions>
-																	<WidgetEventAction>
-																		<Expression>_hmi_start = false;</Expression>
-																	</WidgetEventAction>
-																</Actions>
-															</WidgetEvent>
-														</WidgetEvents>
-														<WidgetAnimations />
-														<WidgetSlots />
-													</HmiBehavior>
-												</Item5>
-												<Item6 Position="342.5,45" Size="50,50" StrokeThickness="1" BorderBrush="#FF000000" ItemKind="BoolDisplayWidget" UseInverted="false" WidgetName="BoolDisplayWidget_348_2_1" WidgetBackground="#FFCEDFED" WidgetForeground="#FF2F6BA1">
-													<HmiBehavior>
-														<WidgetEvents />
-														<WidgetAnimations>
-															<WidgetAnimation>
-																<PropertyName>Foreground</PropertyName>
-																<Values>
-																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = false</Expression>
-																		<Value>
-																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-																				<SolidColorBrush>#FF0A9900</SolidColorBrush>
-																			</ContentControl>
-																		</Value>
-																	</WidgetAnimationValue>
-																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = true</Expression>
-																		<Value>
-																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-																				<SolidColorBrush>#FFFF0000</SolidColorBrush>
-																			</ContentControl>
-																		</Value>
-																	</WidgetAnimationValue>
-																</Values>
-															</WidgetAnimation>
-														</WidgetAnimations>
-														<WidgetSlots>
-															<WidgetSlot>
-																<SlotName>ValueSlot</SlotName>
-																<LogicSlotName>_hmi_requestEntryLed</LogicSlotName>
-															</WidgetSlot>
-														</WidgetSlots>
-													</HmiBehavior>
-												</Item6>
-												<Item7 Position="305,105" Size="125,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Request Entry" WidgetName="TextButtonWidget_226_2_1" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
-													<HmiBehavior>
-														<WidgetEvents>
-															<WidgetEvent>
-																<EventName>Pressed</EventName>
-																<Actions>
-																	<WidgetEventAction>
-																		<Expression>_hmi_requestEntry = true;</Expression>
-																	</WidgetEventAction>
-																</Actions>
-															</WidgetEvent>
-															<WidgetEvent>
-																<EventName>Released</EventName>
-																<Actions>
-																	<WidgetEventAction>
-																		<Expression>_hmi_requestEntry = false;</Expression>
-																	</WidgetEventAction>
-																</Actions>
-															</WidgetEvent>
-														</WidgetEvents>
-														<WidgetAnimations />
-														<WidgetSlots />
-													</HmiBehavior>
-												</Item7>
-												<Item8 Position="472.5,45" Size="50,50" StrokeThickness="1" BorderBrush="#FF000000" ItemKind="BoolDisplayWidget" UseInverted="false" WidgetName="BoolDisplayWidget_348_2_1_1" WidgetBackground="#FFFAF1DC" WidgetForeground="#FFE1BF70">
-													<HmiBehavior>
-														<WidgetEvents />
-														<WidgetAnimations>
-															<WidgetAnimation>
-																<PropertyName>Foreground</PropertyName>
-																<Values>
-																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = false</Expression>
-																		<Value>
-																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-																				<SolidColorBrush>#FF0A9900</SolidColorBrush>
-																			</ContentControl>
-																		</Value>
-																	</WidgetAnimationValue>
-																	<WidgetAnimationValue>
-																		<Expression>_hmi_eStopPressed = true</Expression>
-																		<Value>
-																			<ContentControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
-																				<SolidColorBrush>#FFFF0000</SolidColorBrush>
-																			</ContentControl>
-																		</Value>
-																	</WidgetAnimationValue>
-																</Values>
-															</WidgetAnimation>
-														</WidgetAnimations>
-														<WidgetSlots>
-															<WidgetSlot>
-																<SlotName>ValueSlot</SlotName>
-																<LogicSlotName>_hmi_quitLed</LogicSlotName>
-															</WidgetSlot>
-														</WidgetSlots>
-													</HmiBehavior>
-												</Item8>
-												<Item9 Position="435,105" Size="125,30" VerticalContentAlignment="Center" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Quit / Reset" WidgetName="TextButtonWidget_226_2_1_1" WidgetBackground="#FF696969" WidgetForeground="#FF000000">
-													<HmiBehavior>
-														<WidgetEvents>
-															<WidgetEvent>
-																<EventName>Pressed</EventName>
-																<Actions>
-																	<WidgetEventAction>
-																		<Expression>_hmi_quit = true;</Expression>
-																	</WidgetEventAction>
-																</Actions>
-															</WidgetEvent>
-															<WidgetEvent>
-																<EventName>Released</EventName>
-																<Actions>
-																	<WidgetEventAction>
-																		<Expression>_hmi_quit = false;</Expression>
-																	</WidgetEventAction>
-																</Actions>
-															</WidgetEvent>
-														</WidgetEvents>
-														<WidgetAnimations />
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item9>
@@ -1187,7 +1187,7 @@ else
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item7>
-												<Item8 Size="615,122" VerticalContentAlignment="Center" StrokeThickness="0" BackgroundId="White_1" ItemKind="LabelWidget" Text="Door control deactivated (external signal connected)" WidgetName="LabelWidget_421_1" WidgetBackground="#FFF2F2F2" WidgetForeground="#FF000000" IsHidden="false">
+												<Item8 Position="0,0.5" Size="615,122" VerticalContentAlignment="Center" StrokeThickness="0" BackgroundId="White_1" ItemKind="LabelWidget" Text="Door control deactivated (external signal connected)" WidgetName="LabelWidget_421_1" WidgetBackground="#FFF2F2F2" WidgetForeground="#FF000000" IsHidden="false">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations>
@@ -1465,12 +1465,12 @@ else
 			</Items>
 			<HmiControlState>
 				<ZoomFactor>0.8500000000000001</ZoomFactor>
-				<ScrollPoint _x="-371.76470588235287" _y="-69.41176470588235" />
+				<ScrollPoint _x="-369.4117647058823" _y="-84.70588235294116" />
 			</HmiControlState>
 		</XtraSerializer>
 	</HmiDefinition>
 	<HmiDefined>true</HmiDefined>
-	<Version Major="1" Minor="22" Patch="2" />
+	<Version Major="1" Minor="22" Patch="8" />
 	<HasDependencyPath>false</HasDependencyPath>
 	<HasCompileErrors>false</HasCompileErrors>
 	<InputSlots>

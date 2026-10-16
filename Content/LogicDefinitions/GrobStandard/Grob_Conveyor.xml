@@ -1,4 +1,4 @@
-<LogicDefinition V="002" xsi:type="CSharpLogicDefinition" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Guid="abc8152d-40e0-4e70-a679-56e24f881b0b" LogicName="Grob_Conveyor" LogicComment="" LogicProvider="fe4a121e-169b-4fb0-8004-e2e53c268b26" HasCompileErrors="false">
+<LogicDefinition V="003" xsi:type="CSharpLogicDefinition" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Guid="abc8152d-40e0-4e70-a679-56e24f881b0b" LogicName="Grob_Conveyor" LogicComment="" LogicProvider="fe4a121e-169b-4fb0-8004-e2e53c268b26" HasCompileErrors="false" fe.screen-sim-Version="5.0.15.52981">
 	<ScriptText>#load "reference"
 using FS.SDK.Components;
 using System;
@@ -23,6 +23,7 @@ using FS.SDK.Util;
 //    19.03.2026       1.4.0          Greif            Feedback HMI Aktiv integriert
 //    19.03.2026       1.5.15         Egg              Logik Integration Tool
 //    03.06.2026       1.6.0          Egg              Fault Sim integriert
+//    03.06.2026       1.7.0          Egg              Status Ausgänge für positive/negative Bewegung
 //
 //============================================================================================================
 //
@@ -195,6 +196,16 @@ if(!_conveyorTypeMovifit)
     
     #endregion
     
+    #region Drehrichtung Status
+    //============================================================================================================
+    // D R E H R I C H T U N G   S T A T U S 
+    //============================================================================================================
+    
+    SIM_MovingPositiveDirection = SIM_Velocity &gt; 0.0f;
+    SIM_MovingNegativeDirection = SIM_Velocity &lt; 0.0f;
+    
+    #endregion
+    
     #region Warnung Fehler
     //============================================================================================================
     // W A R N U N G   /   F E H L E R
@@ -302,9 +313,9 @@ Feedback_FaultSim_Active = _faultSim_ConveyorActive || _faultSim_ReadyForOperati
 
 </ScriptText>
 	<HmiDefinition>
-		<XtraSerializer version="24.1.6.0">
+		<XtraSerializer version="26.1.3.0">
 			<Items>
-				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
+				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
 					<Children>
 						<Item1 Size="640,857.5" Padding="5,5,5,5" ForegroundId="Accent3" Header="Heading" HeaderPadding="5,5,5,5" ItemKind="DiagramContainerEx" ContainerBackground="#FFFFFFFF" ContainerForeground="#FF41719C">
 							<Children>
@@ -326,7 +337,7 @@ Feedback_FaultSim_Active = _faultSim_ConveyorActive || _faultSim_ReadyForOperati
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item1>
-												<Item2 Position="260,40" Size="100,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" WidgetName="TextInputWidget_531" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item2 Position="260,40" Size="100,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="TextInputWidget_531" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations />
@@ -426,7 +437,7 @@ Feedback_FaultSim_Active = _faultSim_ConveyorActive || _faultSim_ReadyForOperati
 														</WidgetSlots>
 													</HmiBehavior>
 												</Item8>
-												<Item9 Position="260,80" Size="100,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" WidgetName="TextInputWidget_531_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item9 Position="260,80" Size="100,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="TextInputWidget_531_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations>
@@ -511,7 +522,7 @@ Feedback_FaultSim_Active = _faultSim_ConveyorActive || _faultSim_ReadyForOperati
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item1>
-												<Item2 Position="130,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="CounterClockwise" WidgetName="TextButtonWidget_671_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item2 Position="130,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="CounterClockwise" UseDefaultStyle="false" WidgetName="TextButtonWidget_671_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents>
 															<WidgetEvent>
@@ -589,7 +600,7 @@ _hmi_turnOff = false;</Expression>
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item2>
-												<Item3 Position="390,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Clockwise" WidgetName="TextButtonWidget_671_1_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item3 Position="390,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Clockwise" UseDefaultStyle="false" WidgetName="TextButtonWidget_671_1_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents>
 															<WidgetEvent>
@@ -667,7 +678,7 @@ _hmi_turnOff = false;</Expression>
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item3>
-												<Item4 Position="260,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Stopp" WidgetName="TextButtonWidget_671_2_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item4 Position="260,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Stopp" UseDefaultStyle="false" WidgetName="TextButtonWidget_671_2_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents>
 															<WidgetEvent>
@@ -770,7 +781,7 @@ _hmi_turnOff = true;</Expression>
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item5>
-												<Item6 Position="260,30" Size="100,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" WidgetName="TextInputWidget_531_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000" IsHidden="true">
+												<Item6 Position="260,30" Size="100,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="TextInputWidget_531_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000" IsHidden="true">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations>
@@ -1525,7 +1536,7 @@ _hmi_turnOff = true;</Expression>
 														</WidgetSlots>
 													</HmiBehavior>
 												</Item27>
-												<Item28 Position="155,90" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" WidgetName="ValueDisplayWidget_1951" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
+												<Item28 Position="155,90" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_1951" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations>
@@ -1551,7 +1562,7 @@ _hmi_turnOff = true;</Expression>
 														</WidgetSlots>
 													</HmiBehavior>
 												</Item28>
-												<Item29 Position="155,120" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" WidgetName="ValueDisplayWidget_1951_1" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
+												<Item29 Position="155,120" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_1951_1" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations>
@@ -1577,7 +1588,7 @@ _hmi_turnOff = true;</Expression>
 														</WidgetSlots>
 													</HmiBehavior>
 												</Item29>
-												<Item30 Position="415,90" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" WidgetName="ValueDisplayWidget_1951_2" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
+												<Item30 Position="415,90" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_1951_2" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations>
@@ -1660,7 +1671,7 @@ _hmi_turnOff = true;</Expression>
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item33>
-												<Item34 Position="415,30" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" WidgetName="ValueDisplayWidget_1951_1_1" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
+												<Item34 Position="415,30" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_1951_1_1" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations />
@@ -1672,7 +1683,7 @@ _hmi_turnOff = true;</Expression>
 														</WidgetSlots>
 													</HmiBehavior>
 												</Item34>
-												<Item35 Position="155,30" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" WidgetName="ValueDisplayWidget_1951_1_1_1" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
+												<Item35 Position="155,30" Size="75,30" TextAlignment="Right" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="0" BorderBrush="#FFFFFFFF" ItemKind="ValueDisplayWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_1951_1_1_1" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations />
@@ -1886,7 +1897,7 @@ _hmi_turnOff = true;</Expression>
 										</Item4>
 									</Children>
 								</Item2>
-								<Item3 Position="5,30" Size="510,30" TextAlignment="Left" VerticalContentAlignment="Center" FontWeight="Bold" FontSize="12" StrokeThickness="0" ForegroundId="Accent3" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" WidgetName="ValueDisplayWidget_82" WidgetBackground="#00FFFFFF" WidgetForeground="#FF41719C">
+								<Item3 Position="5,30" Size="510,30" TextAlignment="Left" VerticalContentAlignment="Center" FontWeight="Bold" FontSize="12" StrokeThickness="0" ForegroundId="Accent3" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_82" WidgetBackground="#00FFFFFF" WidgetForeground="#FF41719C">
 									<HmiBehavior>
 										<WidgetEvents />
 										<WidgetAnimations />
@@ -1939,12 +1950,18 @@ _hmi_turnOff = true;</Expression>
 			</Items>
 			<HmiControlState>
 				<ZoomFactor>1</ZoomFactor>
-				<ScrollPoint _x="-218" _y="-117" />
+				<ScrollPoint _x="-223" _y="-132" />
+				<FitToWindowSizeEnabled>false</FitToWindowSizeEnabled>
+				<HasRuntimeViewport>false</HasRuntimeViewport>
+				<RuntimeViewportX>0</RuntimeViewportX>
+				<RuntimeViewportY>0</RuntimeViewportY>
+				<RuntimeViewportWidth>0</RuntimeViewportWidth>
+				<RuntimeViewportHeight>0</RuntimeViewportHeight>
 			</HmiControlState>
 		</XtraSerializer>
 	</HmiDefinition>
 	<HmiDefined>true</HmiDefined>
-	<Version Major="1" Minor="6" Patch="0" />
+	<Version Major="1" Minor="7" Patch="0" />
 	<HasDependencyPath>false</HasDependencyPath>
 	<HasCompileErrors>false</HasCompileErrors>
 	<InputSlots>
@@ -2053,16 +2070,28 @@ _hmi_turnOff = true;</Expression>
 			<Order>16</Order>
 		</LogicSlot>
 		<LogicSlot>
-			<Name>Feedback_HMI_Active</Name>
+			<Name>SIM_MovingPositiveDirection</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
 			<Order>17</Order>
 		</LogicSlot>
 		<LogicSlot>
-			<Name>Feedback_FaultSim_Active</Name>
+			<Name>SIM_MovingNegativeDirection</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
 			<Order>18</Order>
+		</LogicSlot>
+		<LogicSlot>
+			<Name>Feedback_HMI_Active</Name>
+			<IOSlotType>Bool</IOSlotType>
+			<IOMode>Write</IOMode>
+			<Order>19</Order>
+		</LogicSlot>
+		<LogicSlot>
+			<Name>Feedback_FaultSim_Active</Name>
+			<IOSlotType>Bool</IOSlotType>
+			<IOMode>Write</IOMode>
+			<Order>20</Order>
 		</LogicSlot>
 	</OutputSlots>
 	<LocalSlots>
@@ -2070,367 +2099,367 @@ _hmi_turnOff = true;</Expression>
 			<Name>_velocityPercentage</Name>
 			<IOSlotType>Real</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>19</Order>
+			<Order>21</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_conveyorTypeMovifit</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>20</Order>
+			<Order>22</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_powerSupply</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>21</Order>
+			<Order>23</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_00</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>22</Order>
+			<Order>24</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_01</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>23</Order>
+			<Order>25</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_02</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>24</Order>
+			<Order>26</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_03</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>25</Order>
+			<Order>27</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_04</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>26</Order>
+			<Order>28</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_05</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>27</Order>
+			<Order>29</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_06</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>28</Order>
+			<Order>30</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_07</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>29</Order>
+			<Order>31</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_10</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>30</Order>
+			<Order>32</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_11_Release</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>31</Order>
+			<Order>33</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_12_DriveCommand</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>32</Order>
+			<Order>34</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_13</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>33</Order>
+			<Order>35</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_14</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>34</Order>
+			<Order>36</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_15</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>35</Order>
+			<Order>37</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_16</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>36</Order>
+			<Order>38</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlbit_17</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>37</Order>
+			<Order>39</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_00</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>38</Order>
+			<Order>40</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_01</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>39</Order>
+			<Order>41</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_02_ConveyorActive</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>40</Order>
+			<Order>42</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_03</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>41</Order>
+			<Order>43</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_04</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>42</Order>
+			<Order>44</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_05</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>43</Order>
+			<Order>45</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_06</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>44</Order>
+			<Order>46</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_07</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>45</Order>
+			<Order>47</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_10_EnableAmplifier</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>46</Order>
+			<Order>48</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_11_InverterReadyForOperation</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>47</Order>
+			<Order>49</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_12_PODataReady</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>48</Order>
+			<Order>50</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_13</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>49</Order>
+			<Order>51</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_14</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>50</Order>
+			<Order>52</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_15</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>51</Order>
+			<Order>53</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_16</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>52</Order>
+			<Order>54</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_statuslbit_17</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>53</Order>
+			<Order>55</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_controlWord</Name>
 			<IOSlotType>Word</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>54</Order>
+			<Order>56</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_clockwise</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>55</Order>
+			<Order>57</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_counterClockwise</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>56</Order>
+			<Order>58</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_speed</Name>
 			<IOSlotType>Int</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>57</Order>
+			<Order>59</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_slowSpeed</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>58</Order>
+			<Order>60</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_powerSupplyTurnedOn</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>59</Order>
+			<Order>61</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_turnOff</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>60</Order>
+			<Order>62</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_acknowledgeFault</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>61</Order>
+			<Order>63</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_velocity</Name>
 			<IOSlotType>Real</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>62</Order>
+			<Order>64</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_reverseDirection</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>63</Order>
+			<Order>65</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_name</Name>
 			<IOSlotType>String</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>64</Order>
+			<Order>66</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_hmiActive</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>65</Order>
+			<Order>67</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_init</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>66</Order>
+			<Order>68</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_controlWord</Name>
 			<IOSlotType>Word</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>67</Order>
+			<Order>69</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_clockwise</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>68</Order>
+			<Order>70</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_counterClockwise</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>69</Order>
+			<Order>71</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_speed</Name>
 			<IOSlotType>Int</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>70</Order>
+			<Order>72</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_slowSpeed</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>71</Order>
+			<Order>73</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_powerSupplyTurnedOn</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>72</Order>
+			<Order>74</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_turnOff</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>73</Order>
+			<Order>75</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_acknowledgeFault</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>74</Order>
+			<Order>76</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_velocity</Name>
 			<IOSlotType>Real</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>75</Order>
+			<Order>77</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_hmi_reverseDirection</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>76</Order>
+			<Order>78</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_faultSim_ConveyorActive</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>77</Order>
+			<Order>79</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_faultSim_ReadyForOperation</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>78</Order>
+			<Order>80</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_faultSim_ConveyorOk</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>79</Order>
+			<Order>81</Order>
 		</LogicSlot>
 	</LocalSlots>
 </LogicDefinition>
