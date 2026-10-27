@@ -6,6 +6,7 @@ internal static class RockwellSmokeTests
 {
     public static async Task VerifyAsync(string temporaryRoot)
     {
+        await RockwellSafetyExportTests.VerifyAsync(temporaryRoot);
         var source = Path.Combine(temporaryRoot, "Controller.L5X");
         await File.WriteAllTextAsync(source, """
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>

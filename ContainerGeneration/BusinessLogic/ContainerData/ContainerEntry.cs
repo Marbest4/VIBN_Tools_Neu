@@ -10,11 +10,28 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
     /// </summary>
     public class ContainerEntry : NotifyBase
     {
+        [XmlAttribute("feeGuid")]
+        public string FeeGuid { get; set; } = string.Empty;
+        [XmlAttribute("interfaceGuid")]
+        public string InterfaceGuid { get; set; } = string.Empty;
+        [XmlAttribute("interfaceName")]
+        public string InterfaceName { get; set; } = string.Empty;
+        [DefaultValue(""), XmlAttribute("feeType")] public string FeeType { get; set; } = string.Empty;
         private string _id = string.Empty;
         private string _address = string.Empty;
         private string _dataType = string.Empty;
         private string _note = string.Empty;
         private string _signalId = string.Empty;
+        private string _assignmentWarning = string.Empty;
+        private string _requirementsLocation = string.Empty;
+        [XmlIgnore]
+        [DisplayName("Req-XML-Fundstelle")]
+        [ReadOnly(true)]
+        public string RequirementsLocation
+        {
+            get => _requirementsLocation;
+            set => SetPropertyChange(ref _requirementsLocation, value ?? string.Empty);
+        }
 
         /// <summary>
         /// Stable identity of this signal inside a VIBN Tools workspace.
@@ -63,7 +80,11 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         public string Address
         {
             get => _address;
-            set => SetWorkspaceValue(ref _address, value);
+            set
+            {
+                SetWorkspaceValue(ref _address, value);
+                RefreshAssignmentWarning();
+            }
         }
 
         /// <summary>
@@ -98,6 +119,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
                         nameof(Signal),
                         previousValue,
                         value));
+                IsChangeAcknowledged = false;
                 _signal = value;
                 OnPropertyChanged();
 
@@ -132,8 +154,10 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
                         nameof(Slot),
                         _slot,
                         value));
+                IsChangeAcknowledged = false;
                 _slot = value;
                 OnPropertyChanged();
+                RefreshAssignmentWarning();
 
                 // Tell ContainerData that slot has been changed
                 SlotChanged?.Invoke(this, EventArgs.Empty);
@@ -155,6 +179,22 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         private string _reviewMessage = string.Empty;
         private bool _isManuallyEdited;
         private string _validationError = string.Empty;
+        private bool _isChangeAcknowledged;
+
+        [XmlIgnore]
+        public bool IsChangeAcknowledged
+        {
+            get => _isChangeAcknowledged;
+            set
+            {
+                if (SetPropertyChange(ref _isChangeAcknowledged, value))
+                    OnPropertyChanged(nameof(HasUnconfirmedChange));
+            }
+        }
+
+        [XmlIgnore]
+        public bool HasUnconfirmedChange => !IsChangeAcknowledged &&
+            ReviewState is not ContainerEntryReviewState.None and not ContainerEntryReviewState.Preserved;
 
         /// <summary>
         /// Runtime-only provenance used by the safe reimport workflow.
@@ -167,7 +207,11 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
             set
             {
                 if (SetPropertyChange(ref _reviewState, value))
+                {
+                    IsChangeAcknowledged = false;
                     OnPropertyChanged(nameof(ReviewStateText));
+                    OnPropertyChanged(nameof(HasUnconfirmedChange));
+                }
             }
         }
 
@@ -202,6 +246,23 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         [XmlIgnore]
         public bool HasValidationError => !string.IsNullOrWhiteSpace(ValidationError);
 
+        /// <summary>
+        /// Non-blocking plausibility warning for an output address assigned to a PLC input slot.
+        /// </summary>
+        [XmlIgnore]
+        public string AssignmentWarning
+        {
+            get => _assignmentWarning;
+            private set
+            {
+                if (SetPropertyChange(ref _assignmentWarning, value ?? string.Empty))
+                    OnPropertyChanged(nameof(HasAssignmentWarning));
+            }
+        }
+
+        [XmlIgnore]
+        public bool HasAssignmentWarning => !string.IsNullOrWhiteSpace(AssignmentWarning);
+
         [XmlIgnore]
         public string ReviewStateText => ReviewState switch
         {
@@ -221,20 +282,31 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
         /// <returns>A new <see cref="ContainerEntry"/> instance with the same property values.</returns>
         public ContainerEntry Clone()
         {
-            ContainerEntry clone = new ContainerEntry();
-            clone.SignalId = EnsureSignalId();
-            clone.ID = this.ID;
-            clone.Address = this.Address;
-            clone.DataType = this.DataType;
-            clone.Signal = this.Signal;
-            clone.Slot = this.Slot;
-            clone.Note = this.Note;
-            clone.ReviewState = this.ReviewState;
-            clone.ReviewMessage = this.ReviewMessage;
-            clone.IsManuallyEdited = this.IsManuallyEdited;
-            clone.ValidationError = this.ValidationError;
+            // A fresh copy has no observers. Copy the stored state directly
+            // instead of emitting edit notifications and recalculating warnings
+            // for every signal in a complete undo/reimport snapshot.
+            return new ContainerEntry
+            {
+                _signalId = EnsureSignalId(), FeeGuid = FeeGuid, InterfaceGuid = InterfaceGuid, InterfaceName = InterfaceName, FeeType = FeeType,
+                _id = _id, _address = _address, _dataType = _dataType,
+                _signal = _signal, _slot = _slot, _note = _note,
+                _reviewState = _reviewState, _reviewMessage = _reviewMessage,
+                _isManuallyEdited = _isManuallyEdited, _isChangeAcknowledged = _isChangeAcknowledged,
+                _validationError = _validationError, _assignmentWarning = _assignmentWarning, _requirementsLocation = _requirementsLocation
+            };
+        }
 
-            return clone;
+        private void RefreshAssignmentWarning()
+        {
+            var normalizedAddress = (Address ?? string.Empty).TrimStart().TrimStart('%');
+            var isOutputAddress = normalizedAddress.StartsWith("A", StringComparison.OrdinalIgnoreCase) ||
+                                  normalizedAddress.StartsWith("Q", StringComparison.OrdinalIgnoreCase);
+            var isInputSlot = (Slot ?? string.Empty).StartsWith("PLC_IN", StringComparison.OrdinalIgnoreCase);
+
+            AssignmentWarning = isOutputAddress && isInputSlot
+                ? $"Ausgangsadresse „{Address}“ ist einem Eingangsslot „{Slot}“ zugeordnet. " +
+                  "Bitte die Zuordnung fachlich prüfen."
+                : string.Empty;
         }
 
         /// <summary>
@@ -269,6 +341,7 @@ namespace VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData
             WorkspaceValueChanging?.Invoke(
                 this,
                 new WorkspaceValueChangingEventArgs(propertyName, field, value));
+            IsChangeAcknowledged = false;
             field = value;
             OnPropertyChanged(propertyName);
         }

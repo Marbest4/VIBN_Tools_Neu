@@ -12,7 +12,9 @@ public sealed record FeeSpecialDeviceSignalSnapshot(
     string Address,
     string Usage,
     string DataType,
-    string Comment);
+    string Comment,
+    string Path = "",
+    IReadOnlyList<string>? Slots = null);
 
 public sealed record FeeSpecialDeviceSnapshot(
     int SchemaVersion,

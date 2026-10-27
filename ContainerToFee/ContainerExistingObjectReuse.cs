@@ -6,6 +6,22 @@ namespace VIBN_Tools.ContainerToFee;
 /// <summary>Shared, explicit injection point for reusing an existing container logic.</summary>
 internal static class ContainerExistingObjectReuse
 {
+    public static FeeCabinetElement[] FindCabinetElements(ContainerBaseClass container, IEnumerable<FeeCabinetElement> source)
+    {
+        var elements = source.ToArray();
+        var expected = GetExpectedCabinetElementType(container);
+        var hasParent = Guid.TryParse(container.ParentCabinetGuid, out var parentGuid) && elements.Any(item => item.Parent?.Guid == parentGuid);
+        var compatible = elements.Where(item => SameDefinition(item.ElementType, expected) &&
+            (hasParent ? item.Parent?.Guid == parentGuid : string.IsNullOrWhiteSpace(container.ParentCabinetName) ||
+                string.Equals(item.Parent?.Name, container.ParentCabinetName, StringComparison.OrdinalIgnoreCase))).ToArray();
+        var exact = Guid.TryParse(container.SourcePrimaryObjectGuid, out var guid) ? compatible.Where(item => item.Guid == guid).ToArray() : [];
+        return exact.Length > 0 ? exact : compatible.Where(item => string.Equals(item.Name, container.ComponentName, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        static bool SameDefinition(string? actual, string? wanted) => !string.IsNullOrWhiteSpace(actual) && !string.IsNullOrWhiteSpace(wanted) &&
+            string.Equals(actual.Replace('/', '\\').Split('\\').Last().Replace(".xml", "", StringComparison.OrdinalIgnoreCase),
+                wanted.Replace('/', '\\').Split('\\').Last().Replace(".xml", "", StringComparison.OrdinalIgnoreCase), StringComparison.OrdinalIgnoreCase);
+    }
+
     public static bool TryAssignLogic(ContainerBaseClass container, FeeLogic logic)
     {
         var property = FindLogicProperty(container);

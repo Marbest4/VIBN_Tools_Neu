@@ -9,7 +9,8 @@ namespace VIBN_Tools.Rockwell;
 public sealed record AllenBradleyInterfaceRow(
     string Tag,
     string Comment,
-    string Usage);
+    string Usage,
+    string DataType = "BOOL");
 
 public sealed record AllenBradleyInterfaceExportResult(
     string FilePath,
@@ -37,14 +38,19 @@ public static partial class AllenBradleyInterfaceExcelExporter
     public static AllenBradleyInterfaceExportResult Export(
         string l5xPath,
         string targetPath,
-        IEnumerable<string>? memberNames = null)
+        IEnumerable<string>? memberNames = null,
+        bool includeSafetySignals = false)
     {
-        var rows = ReadRows(l5xPath, memberNames, out var warnings);
+        var rows = ReadRows(l5xPath, memberNames, out var warnings, includeSafetySignals);
         if (rows.Count == 0)
         {
-            throw new InvalidDataException(
-                "Die L5X-Datei enthält keine passenden Allen-Bradley-Schnittstellensignale " +
-                "für die Member D*, PtStatus* oder VS*.");
+            var message = "Die L5X-Datei enthält keine passenden Allen-Bradley-Schnittstellensignale " +
+                (includeSafetySignals
+                    ? "für die gewählten Member oder Safety-Ein-/Ausgänge."
+                    : "für die gewählten Member. Für Safety-Ein-/Ausgänge 'Safety-Signale einschließen' aktivieren.");
+            if (warnings.Count > 0)
+                message += Environment.NewLine + string.Join(Environment.NewLine, warnings.Take(5));
+            throw new InvalidDataException(message);
         }
 
         var fullTargetPath = NormalizeTargetPath(targetPath);
@@ -82,7 +88,8 @@ public static partial class AllenBradleyInterfaceExcelExporter
     public static IReadOnlyList<AllenBradleyInterfaceRow> ReadRows(
         string l5xPath,
         IEnumerable<string>? memberNames,
-        out IReadOnlyList<string> warnings)
+        out IReadOnlyList<string> warnings,
+        bool includeSafetySignals = false)
     {
         if (string.IsNullOrWhiteSpace(l5xPath))
             throw new ArgumentException("Eine Allen-Bradley-L5X-Datei muss ausgewählt werden.", nameof(l5xPath));
@@ -122,17 +129,22 @@ public static partial class AllenBradleyInterfaceExcelExporter
             .SelectMany(program => DirectChild(program, "Tags")?.Elements() ?? Enumerable.Empty<XElement>())
             .Where(element => string.Equals(element.Name.LocalName, "Tag", StringComparison.Ordinal))
             .ToArray() ?? [];
-        var controllerTags = DirectChild(controller, "Tags")?
+        var allControllerTags = DirectChild(controller, "Tags")?
             .Elements()
             .Where(element => string.Equals(element.Name.LocalName, "Tag", StringComparison.Ordinal))
+            .ToArray() ?? [];
+        var comments = BuildCommentLookup(allControllerTags.Concat(programTags));
+        var controllerTags = allControllerTags
             .Where(IsSourceTag)
             .OrderBy(tag => GroupOrder(Attribute(tag, "Name")))
             .ThenBy(tag => Attribute(tag, "Name"), StringComparer.OrdinalIgnoreCase)
-            .ToArray() ?? [];
+            .ToArray();
 
         var result = new List<AllenBradleyInterfaceRow>();
         foreach (var tag in controllerTags)
-            ReadTag(tag, requestedMembers, programTags, result, diagnostics);
+            Traverse(tag, [], requestedMembers, comments, result, diagnostics, includeSafetySignals);
+        if (includeSafetySignals)
+            ReadSafetyModuleRows(controller, requestedMembers, comments, result, diagnostics);
 
         var deduplicated = result
             .GroupBy(row => row.Tag, StringComparer.OrdinalIgnoreCase)
@@ -148,96 +160,124 @@ public static partial class AllenBradleyInterfaceExcelExporter
         return deduplicated;
     }
 
-    private static void ReadTag(
-        XElement root,
-        IReadOnlySet<string> requestedMembers,
-        IReadOnlyList<XElement> programTags,
-        ICollection<AllenBradleyInterfaceRow> result,
-        ICollection<string> warnings) =>
-        Traverse(root, [], requestedMembers, programTags, result, warnings);
-
     private static void Traverse(
         XElement element,
         IReadOnlyList<string> path,
         IReadOnlySet<string> requestedMembers,
-        IReadOnlyList<XElement> programTags,
+        IReadOnlyDictionary<string, string> comments,
         ICollection<AllenBradleyInterfaceRow> result,
-        ICollection<string> warnings)
+        ICollection<string> warnings,
+        bool includeSafetySignals,
+        bool isSafety = false,
+        string? usage = null)
     {
         var name = Attribute(element, "Name");
         var currentPath = string.IsNullOrWhiteSpace(name) ? path : [.. path, name];
+        var index = Attribute(element, "Index");
+        if (element.Name.LocalName == "Element" && index.Length > 0 && currentPath.Count > 0)
+            currentPath = [.. currentPath.Take(currentPath.Count - 1), currentPath[^1] + index];
+        isSafety |= IsSafetyElement(element);
+        var ioGroup = RemoveDigits(name);
+        var safetyIoGroup = ioGroup.ToUpperInvariant() switch
+        {
+            "SI" or "SAFEINPUT" or "SAFEINPUTS" or "SAFETYINPUT" or "SAFETYINPUTS" => "I",
+            "SO" or "SAFEOUTPUT" or "SAFEOUTPUTS" or "SAFETYOUTPUT" or "SAFETYOUTPUTS" => "O",
+            _ => string.Empty
+        };
+        if (safetyIoGroup.Length > 0)
+        {
+            isSafety = true;
+            ioGroup = safetyIoGroup;
+        }
+        if (isSafety && !includeSafetySignals)
+            return;
+
+        // Once the direction is known, carry it through nested structures.
+        // A Safety subtree may use Input(s)/Output(s) instead of I1/O1.
+        if (string.Equals(ioGroup, "I", StringComparison.OrdinalIgnoreCase) ||
+            (isSafety && (string.Equals(ioGroup, "Input", StringComparison.OrdinalIgnoreCase) ||
+                          string.Equals(ioGroup, "Inputs", StringComparison.OrdinalIgnoreCase))))
+            usage = "Write";
+        else if (string.Equals(ioGroup, "O", StringComparison.OrdinalIgnoreCase) ||
+                 (isSafety && (string.Equals(ioGroup, "Output", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(ioGroup, "Outputs", StringComparison.OrdinalIgnoreCase))))
+            usage = "Read";
+
         var children = element.Elements().ToArray();
         if (children.Length > 0)
         {
             foreach (var child in children)
-                Traverse(child, currentPath, requestedMembers, programTags, result, warnings);
+                Traverse(child, currentPath, requestedMembers, comments, result, warnings,
+                    includeSafetySignals, isSafety, usage);
             return;
         }
 
-        if (element.Parent is null || string.IsNullOrWhiteSpace(name))
+        if (element.Name.LocalName is not ("DataValueMember" or "DataValue" or "Element"))
             return;
-        var parentName = Attribute(element.Parent, "Name");
-        var ioGroup = RemoveDigits(parentName);
-        if (!string.Equals(ioGroup, "I", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(ioGroup, "O", StringComparison.OrdinalIgnoreCase))
-        {
+        var memberName = name.Length > 0 ? name : element.Ancestors()
+            .Select(parent => Attribute(parent, "Name")).FirstOrDefault(value => value.Length > 0) ?? string.Empty;
+        if (!isSafety && !MatchesMember(memberName, requestedMembers))
             return;
-        }
 
-        var normalizedMember = RemoveDigits(name);
-        if (string.Equals(normalizedMember, name, StringComparison.Ordinal) ||
-            !requestedMembers.Contains(normalizedMember))
+        var tagPath = string.Join('.', currentPath);
+        if (usage is null)
         {
+            if (isSafety)
+                warnings.Add($"Safety-Signal '{tagPath}' wurde übersprungen: keine eindeutige Ein-/Ausgangsstruktur (I/O, SI/SO, Inputs/Outputs) vorhanden.");
             return;
         }
 
         var dataType = Attribute(element, "DataType");
+        if (dataType.Length == 0 && element.Name.LocalName == "Element" && element.Parent is not null)
+            dataType = Attribute(element.Parent, "DataType");
         if (!SupportedLogixTypes.Contains(dataType))
         {
             warnings.Add($"Nicht unterstützter Logix-Datentyp '{dataType}' bei '{string.Join('.', currentPath)}' wurde übersprungen.");
             return;
         }
 
-        var tagPath = string.Join('.', currentPath);
         result.Add(new AllenBradleyInterfaceRow(
             tagPath,
-            ResolveComment(tagPath, programTags),
-            string.Equals(ioGroup, "I", StringComparison.OrdinalIgnoreCase) ? "Write" : "Read"));
+            comments.GetValueOrDefault(tagPath, string.Empty),
+            usage,
+            dataType.ToUpperInvariant()));
     }
 
-    private static string ResolveComment(string alias, IReadOnlyList<XElement> programTags)
+    private static bool IsSafetyElement(XElement element)
     {
-        var separator = alias.IndexOf('.');
-        if (separator <= 0)
-            return string.Empty;
-        var firstName = alias[..separator];
-        var operand = alias[separator..];
-        var comment = FindComment(programTags, firstName, operand);
-        if (!string.IsNullOrWhiteSpace(comment) || !operand.Contains("Safety", StringComparison.Ordinal))
-            return comment;
-
-        var safetyIndex = operand.IndexOf(".Safety", StringComparison.Ordinal);
-        var safetyOperand = safetyIndex >= 0
-            ? ".SAFETY" + operand[(safetyIndex + ".Safety".Length)..]
-            : operand.Replace("Safety", "SAFETY", StringComparison.Ordinal);
-        return FindComment(programTags, firstName, safetyOperand);
+        if (string.Equals(Attribute(element, "Class"), "Safety", StringComparison.OrdinalIgnoreCase))
+            return true;
+        var name = Attribute(element, "Name");
+        return string.Equals(name, "Safety", StringComparison.OrdinalIgnoreCase) ||
+               name.StartsWith("Safety_", StringComparison.OrdinalIgnoreCase) ||
+               (element.Name.LocalName == "Tag" && name.StartsWith("s_", StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string FindComment(
-        IEnumerable<XElement> programTags,
-        string firstName,
-        string operand)
+    private static bool MatchesMember(string name, IReadOnlySet<string> requestedMembers) =>
+        requestedMembers.Any(prefix => name.Length > prefix.Length &&
+            name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && char.IsAsciiDigit(name[prefix.Length]));
+
+    private static IReadOnlyDictionary<string, string> BuildCommentLookup(IEnumerable<XElement> commentTags)
     {
-        foreach (var programTag in programTags.Where(tag =>
-                     string.Equals(Attribute(tag, "AliasFor"), firstName, StringComparison.Ordinal)))
+        var comments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tag in commentTags)
         {
-            var match = programTag.DescendantsAndSelf().FirstOrDefault(element =>
-                string.Equals(Attribute(element, "Operand"), operand, StringComparison.Ordinal));
-            var value = match?.Value.Trim() ?? string.Empty;
-            if (!string.IsNullOrWhiteSpace(value) && !string.Equals(value, "SPARE", StringComparison.OrdinalIgnoreCase))
-                return value;
+            var target = Attribute(tag, "AliasFor");
+            if (string.IsNullOrWhiteSpace(target))
+                target = Attribute(tag, "Name");
+            if (string.IsNullOrWhiteSpace(target))
+                continue;
+            foreach (var element in tag.Descendants())
+            {
+                var operand = Attribute(element, "Operand");
+                if (operand.Length == 0)
+                    continue;
+                var value = element.Value.Trim();
+                if (value.Length > 0 && !string.Equals(value, "SPARE", StringComparison.OrdinalIgnoreCase))
+                    comments.TryAdd(target + operand, value);
+            }
         }
-        return string.Empty;
+        return comments;
     }
 
     private static void WriteHeader(IWorkbook workbook, ISheet sheet)
@@ -259,7 +299,8 @@ public static partial class AllenBradleyInterfaceExcelExporter
     {
         var values = new[]
         {
-            "WAHR", source.Tag, "BOOL", source.Comment, source.Usage, "Continous", "FALSCH", "0"
+            "WAHR", source.Tag, source.DataType, source.Comment, source.Usage, "Continous",
+            string.Equals(source.DataType, "BOOL", StringComparison.OrdinalIgnoreCase) ? "FALSCH" : "0", "0"
         };
         for (var index = 0; index < values.Length; index++)
             target.CreateCell(index).SetCellValue(values[index]);

@@ -28,6 +28,8 @@ public sealed class MainWindowVM : MvvmBase
 
     public FeeConnectionService Connection => Services.Connection;
 
+    public ApplicationStatusContext StatusContext => ApplicationStatusContext.Instance;
+
     public string BuildInformation => ApplicationBuildInformation.DisplayText;
 
     public ICommand ToggleNavigationCommand { get; }
@@ -48,6 +50,17 @@ public sealed class MainWindowVM : MvvmBase
     public string NavigationToggleText => IsNavigationExpanded
         ? "_Navigation einklappen"
         : "_Navigation ausklappen";
+
+    /// <summary>
+    /// Frees horizontal space on compact displays without overwriting the
+    /// user's saved navigation preference. The user can still expand the
+    /// navigation manually for the current window.
+    /// </summary>
+    public void EnsureNavigationFits(double viewportWidth)
+    {
+        if (viewportWidth < 1250 && IsNavigationExpanded)
+            IsNavigationExpanded = false;
+    }
 
     /// <summary>CAD Wizard, Container Generation and Container2Fee.</summary>
     public bool CanUseLevel7Features

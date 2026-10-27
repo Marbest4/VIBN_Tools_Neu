@@ -32,7 +32,7 @@ namespace VIBN_Tools.ContainerToFee.General
         {
             if (Signal_PlcOutSignal != null || Signal_PlcInSignal != null)
             {
-                SimpleLogic_MoveBit = new FeeSimpleMove();
+                SimpleLogic_MoveBit = new FeeSimpleMove { Name = ComponentName, Parent = parentObject };
                 await SimpleLogic_MoveBit.CreateAsync();
                 await SimpleLogic_MoveBit.SendAndWaitAsync();
                 await ContainerObjectProvenance.WriteNewObjectAsync(SimpleLogic_MoveBit, this);
@@ -41,6 +41,12 @@ namespace VIBN_Tools.ContainerToFee.General
 
         async Task ISimObjectOwner.AssignSignalsAsync(FeeInterface targetInterface)
         {
+            if (SimpleLogic_MoveBit is null || SimpleLogic_MoveBit.Guid == Guid.Empty)
+            {
+                NLog.LogManager.GetCurrentClassLogger().Warn(
+                    "SimpleMove {0}: technisches Hilfsobjekt fehlt; Signalzuordnung wird übersprungen.", ComponentName);
+                return;
+            }
             // Map signals to LogicObject if existing
             if (Signal_PlcOutSignal != null)
             {
@@ -91,7 +97,7 @@ namespace VIBN_Tools.ContainerToFee.General
         {
             if (Signal_PlcOutSignal != null || Signal_PlcInSignal != null)
             {
-                SimpleLogic_BoolNot = new FeeSimpleNot();
+                SimpleLogic_BoolNot = new FeeSimpleNot { Name = ComponentName, Parent = parentObject };
                 await SimpleLogic_BoolNot.CreateAsync();
                 await SimpleLogic_BoolNot.SendAndWaitAsync();
                 await ContainerObjectProvenance.WriteNewObjectAsync(SimpleLogic_BoolNot, this);
@@ -100,6 +106,12 @@ namespace VIBN_Tools.ContainerToFee.General
 
         async Task ISimObjectOwner.AssignSignalsAsync(FeeInterface targetInterface)
         {
+            if (SimpleLogic_BoolNot is null || SimpleLogic_BoolNot.Guid == Guid.Empty)
+            {
+                NLog.LogManager.GetCurrentClassLogger().Warn(
+                    "SimpleNot {0}: technisches Hilfsobjekt fehlt; Signalzuordnung wird übersprungen.", ComponentName);
+                return;
+            }
             // Map signals to LogicObject if existing
             if (Signal_PlcOutSignal != null)
             {

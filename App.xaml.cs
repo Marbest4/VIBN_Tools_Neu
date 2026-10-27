@@ -1,5 +1,7 @@
 ﻿using System.Windows;
 
+using System.Diagnostics;
+
 namespace VIBN_Tools
 {
     /// <summary>
@@ -7,9 +9,15 @@ namespace VIBN_Tools
     /// </summary>
     public partial class App : System.Windows.Application
     {
+        private static readonly Stopwatch StartupStopwatch = Stopwatch.StartNew();
+
+        internal static TimeSpan StartupElapsed => StartupStopwatch.Elapsed;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            Application.Behaviors.WindowWorkAreaBehavior.Register();
 
             DispatcherUnhandledException += OnDispatcherUnhandledException;
 
@@ -24,9 +32,17 @@ namespace VIBN_Tools
             if (Application.Behaviors.WpfVirtualizationExceptionPolicy.IsRecoverable(args.Exception))
             {
                 Application.ApplicationLogService.Instance.Warning(
-                    "FEE2Container",
-                    "Eine veraltete virtuelle Tabellenanforderung wurde nach einem Ansichtswechsel verworfen.",
+                    "WPF-Ansicht",
+                    "Eine ungültige Layoutgröße oder veraltete virtuelle Listenanforderung wurde abgefangen; die Anwendung bleibt geöffnet.",
                     args.Exception.Message);
+                args.Handled = true;
+                return;
+            }
+
+            if (ContainerGeneration.Models.ContainerGenerationExceptionPolicy.IsContainerGenerationUiFailure(args.Exception))
+            {
+                Application.ApplicationLogService.Instance.Error("ContainerGeneration",
+                    "Ein Fehler der ContainerGeneration-Oberfläche wurde abgefangen. Vorgang abgebrochen; Arbeitsstand prüfen.", args.Exception);
                 args.Handled = true;
                 return;
             }
@@ -41,9 +57,35 @@ namespace VIBN_Tools
         {
             try
             {
+                // A cooperative page cancellation cannot interrupt a native
+                // FEE SDK call. Closing the application therefore also tears
+                // down the shared SDK session, bounded so shutdown itself does
+                // not remain blocked indefinitely.
+                if (GlobalClasses.Services.ApiInstance is not null)
+                {
+                    var feeDisconnect = Task.Run(() => GlobalClasses.Services.ApiInstance.Disconnect());
+                    if (!feeDisconnect.Wait(TimeSpan.FromSeconds(2)))
+                    {
+                        Application.ApplicationLogService.Instance.Warning(
+                            "Anwendungsende",
+                            "Die FEE-Verbindung antwortete beim Beenden nicht innerhalb von zwei Sekunden; der Prozess beendet die verbleibende SDK-Arbeit.");
+                    }
+                }
+
+            }
+            catch (Exception exception)
+            {
+                Application.ApplicationLogService.Instance.Error(
+                    "Anwendungsende",
+                    "Die FEE-Verbindung konnte beim Beenden nicht sauber getrennt werden.",
+                    exception);
+            }
+
+            try
+            {
                 // WPF does not await async Exit handlers. Perform the bounded
                 // cleanup before the host exits so no tool-owned TIA bridge is
-                // left behind in the background.
+                // left behind in the background. This still runs if FEE cleanup failed.
                 Task.Run(Application.ViCoFeatureBootstrapper.ShutdownAsync)
                     .GetAwaiter()
                     .GetResult();

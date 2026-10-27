@@ -9,7 +9,8 @@ public static class VisualFeeContainerPresenceResolver
 {
     public static IReadOnlyDictionary<string, VisualFeeNodePresence> Resolve(
         VisualPlan plan,
-        IEnumerable<VisualFeeContainerObject> inventory)
+        IEnumerable<VisualFeeContainerObject> inventory,
+        Func<string, IReadOnlyList<VisualFeeContainerObject>>? findLogics = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(inventory);
@@ -21,9 +22,9 @@ public static class VisualFeeContainerPresenceResolver
             var container = FindContainer(plan, node);
             if (container is null)
                 continue;
-            var matches = objects.Where(item =>
+            var matches = findLogics?.Invoke(container.Id) ?? objects.Where(item =>
                     item.Kind == VisualFeeContainerObjectKind.Logic &&
-                    string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(item.Name.Trim(), container.Name.Trim(), StringComparison.OrdinalIgnoreCase) &&
                     ContainerMetadataCatalog.IsSameLogicDefinition(node.Name, item.Definition))
                 .ToArray();
             result[node.Id] = CreatePresence(
@@ -35,16 +36,33 @@ public static class VisualFeeContainerPresenceResolver
         foreach (var node in plan.Nodes.Where(node => node.Kind == VisualNodeKind.TechnicalHelper))
         {
             var container = FindContainer(plan, node);
-            if (container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor) ||
-                string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType))
+            if (container is null || !ContainerMetadataCatalog.TryGet(container.TypeName, out var descriptor))
             {
+                continue;
+            }
+
+            if (container.TypeName == "Cabinet")
+            {
+                var exact = objects.Where(item => item.Kind == VisualFeeContainerObjectKind.Cabinet &&
+                    string.Equals(item.GuidString, container.SourceObjectGuid, StringComparison.OrdinalIgnoreCase)).ToArray();
+                var candidates = exact.Length > 0 ? exact : objects.Where(item => item.Kind == VisualFeeContainerObjectKind.Cabinet &&
+                    string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
+                result[node.Id] = CreatePresence(node.Id, candidates, $"Cabinet '{container.Name}'");
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(descriptor.ExpectedCabinetElementType))
+            {
+                var helperMatches = objects.Where(item => item.Kind == VisualFeeContainerObjectKind.TechnicalHelper &&
+                    VisualFeeTechnicalHelperResolver.IsExpectedType(node.Name, item.Definition) &&
+                    VisualFeeTechnicalHelperResolver.MatchesIdentity(item, container)).ToArray();
+                result[node.Id] = CreatePresence(node.Id, helperMatches, $"Hilfsobjekt '{node.Name}' für '{container.Name}'");
                 continue;
             }
 
             var elementMatches = objects.Where(item =>
                     item.Kind == VisualFeeContainerObjectKind.CabinetElement &&
-                    string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
-                    SameDefinition(item.Definition, descriptor.ExpectedCabinetElementType))
+                    (string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) || string.Equals(item.GuidString, container.SourceObjectGuid, StringComparison.OrdinalIgnoreCase)) &&
+                    SameDefinition(item.Definition, descriptor.ExpectedCabinetElementType) && MatchesParent(item, container))
                 .ToArray();
 
             if (string.Equals(node.Name, "CabinetElement", StringComparison.OrdinalIgnoreCase))
@@ -56,11 +74,14 @@ public static class VisualFeeContainerPresenceResolver
                 continue;
             }
 
-            if (!string.Equals(node.Name, descriptor.CabinetName, StringComparison.OrdinalIgnoreCase))
-                continue;
+            // Parser carries the explicitly saved cabinet name on this helper node.
+            var cabinetName = node.Name;
             var cabinetMatches = objects.Where(item =>
                     item.Kind == VisualFeeContainerObjectKind.Cabinet &&
-                    string.Equals(item.Name, descriptor.CabinetName, StringComparison.OrdinalIgnoreCase))
+                    string.Equals(item.Name, cabinetName, StringComparison.OrdinalIgnoreCase) &&
+                    (container.ExpectedParentGuid.Length == 0 || !objects.Any(parent => parent.Kind == VisualFeeContainerObjectKind.Cabinet &&
+                        string.Equals(parent.GuidString, container.ExpectedParentGuid, StringComparison.OrdinalIgnoreCase)) ||
+                        string.Equals(item.GuidString, container.ExpectedParentGuid, StringComparison.OrdinalIgnoreCase)))
                 .ToArray();
             // A matching child proves that the required cabinet hierarchy is
             // present even if a particular SDK omits Cabinet from its type query.
@@ -68,10 +89,19 @@ public static class VisualFeeContainerPresenceResolver
             result[node.Id] = CreatePresence(
                 node.Id,
                 effectiveMatches,
-                $"Cabinet '{descriptor.CabinetName}'");
+                $"Cabinet '{cabinetName}'");
         }
 
         return result;
+
+        bool MatchesParent(VisualFeeContainerObject item, VisualNode container)
+        {
+            if (container.ExpectedParentGuid.Length > 0 && objects.Any(parent => parent.Kind == VisualFeeContainerObjectKind.Cabinet &&
+                string.Equals(parent.GuidString, container.ExpectedParentGuid, StringComparison.OrdinalIgnoreCase)))
+                return string.Equals(item.ParentGuidString, container.ExpectedParentGuid, StringComparison.OrdinalIgnoreCase);
+            return container.ExpectedParentName.Length == 0 || item.ParentName.Length == 0 ||
+                string.Equals(item.ParentName, container.ExpectedParentName, StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static VisualNode? FindContainer(VisualPlan plan, VisualNode node) =>

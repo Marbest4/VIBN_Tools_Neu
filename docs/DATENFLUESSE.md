@@ -18,7 +18,7 @@ flowchart LR
 
 `WorkstationBoardCache.json` bewahrt Karten- und Unteraufgaben-IDs der `KONFIGURATION`-Karte. `LegacyWorkstationCatalog` verbindet sie über die Lane mit dem Arbeitsplatz. Der Wert `USER:` hat Vorrang vor älteren Textkarten; damit nutzen ViCo und Project Settings dieselbe dynamische PC-Benutzer-Zuordnung.
 
-Die zuletzt erfolgreich dargestellte, nicht leere Übersicht wird davon getrennt atomar in `last-active-workstations.json` gespeichert. Liefert ein Abruf keine Arbeitsstation oder überschreitet die Ladezeit zehn Sekunden, zeigt die Rechnerübersicht diesen letzten aktiven Stand mit seinem exakten Aktualisierungszeitpunkt. Ein leerer oder defekter Abruf überschreibt den Snapshot nicht; ein beschädigter Snapshot wird ignoriert.
+Die zuletzt erfolgreich dargestellte, nicht leere Übersicht wird davon getrennt atomar in `last-active-workstations.json` gespeichert und bleibt beim Schließen der Anwendung erhalten. Beim nächsten Start wird dieser Stand vor dem Netzwerkabruf sofort eingeblendet und erst durch einen verwendbaren neueren Cache-/Online-Stand ersetzt. Der Zeitstempel stammt aus der bestätigten Online-Aktualisierung beziehungsweise dem tatsächlichen Änderungszeitpunkt der Kanbanize-Cachedateien; bloßes erneutes Lesen macht alte Daten daher nicht künstlich aktuell. Ist der angezeigte Stand älter als 30 Minuten, erscheint oberhalb der Tabelle ein orangefarbener Hinweis mit Datum und Uhrzeit. Liefert ein Abruf keine Arbeitsstation oder überschreitet die Ladezeit zehn Sekunden, bleibt der letzte aktive Stand sichtbar. Ein leerer oder defekter Abruf überschreibt den Snapshot nicht; ein beschädigter Snapshot wird ignoriert.
 
 Beim Speichern der Konfiguration läuft der Datenfluss nur in die Gegenrichtung der vorhandenen Unteraufgabe:
 

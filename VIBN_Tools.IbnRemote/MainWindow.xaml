@@ -36,7 +36,7 @@
                   CanUserDeleteRows="False"
                   EnableRowVirtualization="True"
                   EnableColumnVirtualization="True"
-                  RowHeight="32"
+                  MinRowHeight="32"
                   ColumnHeaderHeight="34"
                   FrozenColumnCount="1"
                   HorizontalScrollBarVisibility="Auto">
@@ -52,7 +52,13 @@
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
                 <DataGridTextColumn Header="In Arbeit (Projekt)" Binding="{Binding WorkingProjects}" Width="2*" MinWidth="230" />
-                <DataGridTextColumn Header="Ende In Arbeit" Binding="{Binding WorkingEnd}" Width="130" />
+                <DataGridTemplateColumn Header="Ende In Arbeit" SortMemberPath="WorkingEnd" Width="150">
+                    <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                        <Border Padding="3" Background="{Binding WorkingEndBackground}">
+                            <TextBlock Text="{Binding WorkingEnd}" ToolTip="{Binding WorkingEnd}" Foreground="Black" TextWrapping="Wrap"/>
+                        </Border>
+                    </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
                 <DataGridTextColumn Header="Standort" Binding="{Binding Location}" Width="140" />
                 <DataGridTextColumn Header="Sonstiges" Binding="{Binding Other}" Width="*" MinWidth="150" />
                 <DataGridTextColumn Header="Software" Binding="{Binding Software}" Width="*" MinWidth="170" />

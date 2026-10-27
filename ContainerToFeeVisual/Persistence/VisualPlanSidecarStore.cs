@@ -6,7 +6,7 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 /// <summary>Versioned, portable representation of user-edited visual-plan data.</summary>
 internal sealed class VisualPlanSidecarDocument
 {
-    public const int CurrentSchemaVersion = 9;
+    public const int CurrentSchemaVersion = 10;
 
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
 
@@ -27,6 +27,8 @@ internal sealed class VisualPlanSidecarDocument
     public List<VisualAddedSignal> AddedSignals { get; init; } = [];
 
     public List<VisualSlotOverride> SlotOverrides { get; init; } = [];
+
+    public List<VisualContainerTypeOverride> ContainerTypeOverrides { get; init; } = [];
 
     public List<string> RemovedSignalNodeIds { get; init; } = [];
 
@@ -76,6 +78,7 @@ internal sealed class VisualPlanSidecarStore(IVisualPlanLogger logger)
             SignalAssignments = [.. plan.SignalAssignments],
             AddedSignals = [.. plan.AddedSignals],
             SlotOverrides = [.. plan.SlotOverrides],
+            ContainerTypeOverrides = [.. plan.ContainerTypeOverrides],
             RemovedSignalNodeIds = [.. plan.RemovedSignalNodeIds],
             ExistingInterfaceSelection = plan.ExistingInterfaceSelection,
             ExistingInterfaceSelections = [.. plan.ExistingInterfaceSelections],

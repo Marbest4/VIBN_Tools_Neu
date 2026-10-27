@@ -18,10 +18,11 @@ internal sealed class FeeInterfaceDiscovery(IVisualPlanLogger logger)
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var cachedInterfaces = Services.FeeObjects.AllFeeObjects?.OfType<FeeInterface>().ToArray() ?? [];
-        var interfaces = cachedInterfaces.Length > 0
-            ? cachedInterfaces
-            : (await FeeInterface.GetAllInterfacesAsync()).ToArray();
+        // The scene-only discovery intentionally does not mutate the global
+        // ModelValidation snapshot. Always read the current interface batch
+        // here; otherwise a previously opened ModelValidation tab could make
+        // the visual refresh reuse stale variables after an FEE model change.
+        var interfaces = (await FeeInterface.GetAllInterfacesAsync()).ToArray();
         cancellationToken.ThrowIfCancellationRequested();
 
         var unique = interfaces

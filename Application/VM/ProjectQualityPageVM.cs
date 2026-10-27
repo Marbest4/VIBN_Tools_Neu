@@ -124,7 +124,8 @@ public sealed class ProjectQualityPageVM : MvvmBase
 
     public string Limitations =>
         "Offline verifiziert: Profil, XML, Signalidentitäten, Manifest und Testszenarien. " +
-        "TIA gilt erst nach erfolgreichem Compile als nachgewiesen. Emulate3D/EKS prüfen ohne Hersteller-SDK derzeit nur die lokale Bereitschaft. " +
+        "TIA-Compile und HMI/FEE-Laufzeit gelten nur nach einem separat erfolgreich ausgeführten Nachweis als bestätigt. " +
+        "Emulate3D/EKS prüfen ohne Hersteller-SDK derzeit nur die lokale Bereitschaft. " +
         "Generierte Testszenarien benötigen vor einer Live-Ausführung eine fachliche Freigabe.";
 
     public string TestInstructions =>
@@ -134,6 +135,15 @@ public sealed class ProjectQualityPageVM : MvvmBase
         "Nachweise wie TIA-Compile oder Container2FEE-Generierung in deren Reitern frisch ausführen. " +
         "5. 'Quality Gate ausführen' starten und Fehler/Warnungen im Prüfergebnis abarbeiten. " +
         "6. Erst nach fachlicher Freigabe der Testszenarien einen Live-Simulationstest ausführen.";
+
+    public string QualityGateQuickStart =>
+        "MINIMUM: Profilname (freier Text). Damit ist nur ein Profil-/Berichtslauf möglich.  " +
+        "EMPFOHLEN: Projektwurzel (Ordner), Requirements.xml (.xml) und ContainerFile (.xml). Erst damit werden " +
+        "XML-Lesbarkeit, erlaubte Container/Slots, Signalidentitäten, Namens-/Adressregeln und Testszenarien geprüft.  " +
+        "OPTIONAL: TIA-Version und ViCo-Bibliotheksordner, Rockwell-Standard sowie Emulate3D/EKS-Pfade nur für " +
+        "die aktivierten Teilprüfungen. Externe Tests werden hier nicht gestartet: TIA-Compile und HMI/FEE Closed " +
+        "Loop zuerst im TIA-Reiter, Container2FEE zuerst im entsprechenden Reiter ausführen. Deren aktuelle " +
+        "Nachweise erscheinen anschließend unter 'Adapter/Nachweise'.";
 
     public string TestMeaning =>
         "Bestanden bedeutet: konfigurierte Dateien sind erreichbar und syntaktisch prüfbar, Profilregeln " +

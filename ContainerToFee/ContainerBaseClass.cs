@@ -17,6 +17,10 @@ namespace VIBN_Tools.ContainerToFee
             new(StringComparer.OrdinalIgnoreCase);
 
         public string ComponentName { get; set; }
+        public string ParentCabinetName { get; private set; } = "";
+        public string ParentCabinetGuid { get; private set; } = "";
+        public string SourceCabinetGuid { get; private set; } = "";
+        public string SourcePrimaryObjectGuid { get; private set; } = "";
         public Dictionary<string, PropertyInfo> SlotAssignment { get; set; }
 
         /// <summary>Stable visual-plan identity written to newly created primary FEE objects.</summary>
@@ -33,6 +37,11 @@ namespace VIBN_Tools.ContainerToFee
         public void StoreContainerInformation(XElement containerElement, string componentName)
         {
             ComponentName = componentName;
+            ParentCabinetName = containerElement.Attribute("parentName")?.Value ?? "";
+            ParentCabinetGuid = containerElement.Attribute("parentGuid")?.Value ?? "";
+            SourcePrimaryObjectGuid = ContainerFileXml.Objects(containerElement).FirstOrDefault(item => item.Element("Role")?.Value == "Primary")?.Element("Guid")?.Value ?? "";
+            SourceCabinetGuid = ContainerFileXml.Objects(containerElement).FirstOrDefault(item => item.Element("FeeType")?.Value == "Cabinet" &&
+                item.Element("Role")?.Value == "Primary")?.Element("Guid")?.Value ?? "";
 
             _signalsBySlot.Clear();
             _additionalInputFanIns.Clear();

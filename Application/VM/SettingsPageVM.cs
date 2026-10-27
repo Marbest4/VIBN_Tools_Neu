@@ -34,6 +34,7 @@ namespace VIBN_Tools.Application.VM
         private readonly IApplicationLog _log;
         private readonly IUserCredentialConfigurationService _credentialConfiguration;
         private readonly IAutomationInstallationDiscovery _automationInstallationDiscovery;
+        private int _deferredInitializationStarted;
         private CancellationTokenSource? _serverFilterCancellation;
         private int _serverRefreshVersion;
 
@@ -523,8 +524,6 @@ namespace VIBN_Tools.Application.VM
             if (HasFeeVersionMismatch)
                 _log.Warning("Project Settings", FeeVersionStatus);
 
-            RefreshAutomationInstallationInventory();
-
             _workstations.PcNames.CollectionChanged += (_, _) => _ = RefreshOnlineServersAsync();
 
             _feeObjectService.FeeObjectsUpdated += OnFeeObjectsLoaded;
@@ -537,7 +536,30 @@ namespace VIBN_Tools.Application.VM
 
             LoadFeeData = false;
             RefreshCredentialStatus();
-            _ = RefreshOnlineServersAsync();
+        }
+
+        /// <summary>Runs non-critical discovery after the first window frame is visible.</summary>
+        public async Task InitializeDeferredAsync()
+        {
+            if (Interlocked.Exchange(ref _deferredInitializationStarted, 1) != 0)
+                return;
+
+            await RefreshAutomationInstallationInventoryAsync();
+            await RefreshOnlineServersAsync();
+        }
+
+        private async Task RefreshAutomationInstallationInventoryAsync()
+        {
+            try
+            {
+                var inventory = await Task.Run(_automationInstallationDiscovery.Discover);
+                ApplyAutomationInstallationInventory(inventory);
+            }
+            catch (Exception exception)
+            {
+                AutomationDiscoveryStatus = $"Installationssuche fehlgeschlagen: {exception.Message}";
+                _log.Error("Project Settings", AutomationDiscoveryStatus, exception);
+            }
         }
 
         private void RefreshAutomationInstallationInventory()
@@ -545,22 +567,27 @@ namespace VIBN_Tools.Application.VM
             try
             {
                 var inventory = _automationInstallationDiscovery.Discover();
-                InstalledAutomationComponents.Clear();
-                foreach (var component in inventory.Components)
-                    InstalledAutomationComponents.Add(component);
-                AutomationDiscoveryStatus = inventory.Components.Count == 0
-                    ? string.Join(" ", inventory.Diagnostics)
-                    : $"{inventory.Components.Count} lokale Komponente(n) erkannt." +
-                      (inventory.Diagnostics.Count == 0
-                          ? string.Empty
-                          : $" Hinweise: {string.Join(" ", inventory.Diagnostics)}");
-                _log.Information("Project Settings", AutomationDiscoveryStatus);
+                ApplyAutomationInstallationInventory(inventory);
             }
             catch (Exception exception)
             {
                 AutomationDiscoveryStatus = $"Installationssuche fehlgeschlagen: {exception.Message}";
                 _log.Error("Project Settings", AutomationDiscoveryStatus, exception);
             }
+        }
+
+        private void ApplyAutomationInstallationInventory(AutomationInstallationInventory inventory)
+        {
+            InstalledAutomationComponents.Clear();
+            foreach (var component in inventory.Components)
+                InstalledAutomationComponents.Add(component);
+            AutomationDiscoveryStatus = inventory.Components.Count == 0
+                ? string.Join(" ", inventory.Diagnostics)
+                : $"{inventory.Components.Count} lokale Komponente(n) erkannt." +
+                  (inventory.Diagnostics.Count == 0
+                      ? string.Empty
+                      : $" Hinweise: {string.Join(" ", inventory.Diagnostics)}");
+            _log.Information("Project Settings", AutomationDiscoveryStatus);
         }
 
 
@@ -594,6 +621,7 @@ namespace VIBN_Tools.Application.VM
             var stopwatch = Stopwatch.StartNew();
             ConnectionStatus = $"Verbindung zu {SelectedServer} wird aufgebaut …";
             ConnectedServer = "---";
+            _connectionService.ClearConnectionContext();
             _log.Information("Project Settings", ConnectionStatus);
             try
             {
@@ -607,7 +635,7 @@ namespace VIBN_Tools.Application.VM
 
                 if (_connectionService.IsConnected)
                 {
-                    Services.ApiInstance.Disconnect();
+                    _connectionService.DisconnectIntentionally();
                     if (!await _connectionService.WaitForDisconnectedAsync(TimeSpan.FromSeconds(3)))
                     {
                         stopwatch.Stop();
@@ -644,6 +672,20 @@ namespace VIBN_Tools.Application.VM
                 }
 
                 ConnectedServer = SelectedServer;
+                _connectionService.SetConnectionContext(SelectedServer);
+                try
+                {
+                    var workingProject = await ViCoFeatureBootstrapper
+                        .ResolveWorkingProjectForComputerAsync(SelectedServer);
+                    _connectionService.SetConnectedStation(workingProject);
+                }
+                catch (Exception stationException)
+                {
+                    _log.Warning(
+                        "Project Settings",
+                        "Das In-Arbeit-Projekt des verbundenen Rechners konnte nicht aus der Rechnerübersicht ermittelt werden.",
+                        stationException.Message);
+                }
                 ConnectionStatus = $"Mit {SelectedServer} verbunden ({stopwatch.Elapsed.TotalSeconds:F1} s).";
                 _log.Information("Project Settings", ConnectionStatus);
             }
@@ -662,9 +704,10 @@ namespace VIBN_Tools.Application.VM
 
         private Task Disconnect_FromFee(object parameter)
         {
-            Services.ApiInstance.Disconnect();
+            _connectionService.DisconnectIntentionally();
 
             ConnectedServer = "---";
+            _connectionService.ClearConnectionContext();
             ConnectionStatus = "Verbindung getrennt.";
             _log.Information("Project Settings", ConnectionStatus);
             return Task.CompletedTask;
@@ -944,7 +987,7 @@ namespace VIBN_Tools.Application.VM
 
             try
             {
-                Services.ApiInstance.Disconnect();
+                _connectionService.DisconnectIntentionally();
                 await _connectionService.WaitForDisconnectedAsync(TimeSpan.FromSeconds(2));
             }
             catch

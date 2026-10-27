@@ -36,6 +36,18 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 	};
 
 	public string ProjectSummary => Model.ProjectSummary;
+    private string _documentsSummary = "Projektpfad wird geprüft …";
+    private string _documentsDetails = "";
+    public string DocumentsSummary => _documentsSummary;
+    public string DocumentsDetails => _documentsDetails;
+
+    public void SetDocuments(string project, string summary, string folder = "", string detail = "")
+    {
+        _documentsSummary = summary;
+        _documentsDetails = string.Join(Environment.NewLine, new[] { project, folder, summary, detail }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        OnPropertyChanged(nameof(DocumentsSummary));
+        OnPropertyChanged(nameof(DocumentsDetails));
+    }
 	public IReadOnlyList<ViCoProjectCardItemVM> PlanningProjects => Model.PlanningProjectCards
 		.Select(card => new ViCoProjectCardItemVM(card))
 		.Concat(Model.PlanningProjectCards.Count == 0
@@ -54,6 +66,9 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 		string.Equals(PcName, "Angelegt (Tool)", StringComparison.OrdinalIgnoreCase);
 	public string PlanningProjectHeader => FormatProjectHeader(PlanningProjects.Count);
 	public string WorkingProjectHeader => FormatProjectHeader(WorkingProjects.Count);
+	public IReadOnlyList<ViCoProjectCardItemVM> PlanningStartProjects => PlanningProjects
+		.Where(project => project.CanOpenCard && !string.Equals(project.Start, "nicht angegeben", StringComparison.Ordinal))
+		.ToArray();
 	public string PlanningStartSummary => FormatDates(Model.PlanningProjectCards, card => card.StartDate);
 	public string PlanningEndSummary => FormatDates(Model.PlanningProjectCards, card => card.Deadline);
 	public string WorkingStartSummary => FormatDates(Model.WorkingProjectCards, card => card.StartDate);
@@ -233,52 +248,8 @@ public sealed class ViCoWorkstationRowVM : MvvmBase
 		_ => $"{count} Projekte"
 	};
 
-	public string WorkingEndBackground
-	{
-		get
-		{
-			if (string.IsNullOrWhiteSpace(WorkingEndSummary))
-				return "#FFFFFFFF";
+	public string WorkingEndBackground => WorkingEndColorPolicy.GetBackground(WorkingEndSummary);
 
-			var dates = WorkingEndSummary
-				.Split('|', StringSplitOptions.RemoveEmptyEntries)
-				.Select(x => x.Trim());
-
-			var today = DateTime.Today;
-			var red = false;
-			var yellow = false;
-
-			foreach (var dateString in dates)
-			{
-				if (!DateTime.TryParseExact(
-						dateString,
-						"dd.MM.yyyy",
-						CultureInfo.InvariantCulture,
-						DateTimeStyles.None,
-						out var endDate))
-					continue;
-
-				if (endDate.Date < today)
-				{
-					red = true;
-					break;
-				}
-
-				if (endDate.Date <= today.AddDays(7))
-				{
-					yellow = true;
-				}
-			}
-
-			if (red)
-				return "#FFFFC7CE";   // Rot
-
-			if (yellow)
-				return "#FFFFEB9C";   // Gelb
-
-			return "#FFFFFFFF";       // Weiß
-		}
-	}
 }
 
 public sealed record ViCoProjectCardItemVM(int CardId, string Title, string Status, string Start, string End)

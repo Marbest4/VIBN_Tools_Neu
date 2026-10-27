@@ -268,6 +268,74 @@
                 </Grid>
             </GroupBox>
 
+            <GroupBox Header="HMI/FEE Closed Loop" Margin="0,10,0,0">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="190" />
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Padding="8" Margin="0,0,0,8" Background="#FFFFF4CE" CornerRadius="3">
+                        <TextBlock Text="{Binding HmiClosedLoopPrerequisites}" TextWrapping="Wrap"
+                                   ToolTip="{Binding HmiClosedLoopPrerequisites}" ToolTipService.ShowDuration="60000" />
+                    </Border>
+                    <Grid Grid.Row="1" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="130"/><ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="Named Pipe" />
+                        <TextBox Grid.Column="1" Margin="4" Text="{Binding HmiPipeName, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Pipe des projektspezifischen WinCC-Runtime-Adapters; Standard: VIBN_Tools.WinCC.Runtime" />
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="HMI-Runtime-Tag" />
+                        <TextBox Grid.Column="3" Margin="4" Text="{Binding HmiTag, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Schreib- und lesbares Runtime-Tag der zu betätigenden HMI-Funktion, kein Bildobjektname." />
+                    </Grid>
+                    <Grid Grid.Row="2" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="130"/><ColumnDefinition Width="130"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="PLC-Ausgang in FEE" />
+                        <ComboBox Grid.Column="1" Margin="4" ItemsSource="{Binding HmiFeeSignals}"
+                                  SelectedItem="{Binding SelectedHmiOutputSignal}" DisplayMemberPath="DisplayName" />
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="Erwarteter Wert" />
+                        <TextBox Grid.Column="3" Margin="4" Text="{Binding ExpectedHmiOutputValue}"
+                                 ToolTip="Leer = Wertänderung genügt; sonst exakten Wert angeben, z. B. true oder 1." />
+                    </Grid>
+                    <Grid Grid.Row="3" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="150"/><ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="130"/><ColumnDefinition Width="130"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="PLC-Eingang in FEE" />
+                        <ComboBox Grid.Column="1" Margin="4" ItemsSource="{Binding HmiFeeSignals}"
+                                  SelectedItem="{Binding SelectedHmiFeedbackSignal}" DisplayMemberPath="DisplayName" />
+                        <TextBlock Grid.Column="2" VerticalAlignment="Center" Text="Erwarteter Wert" />
+                        <TextBox Grid.Column="3" Margin="4" Text="{Binding ExpectedHmiFeedbackValue}"
+                                 ToolTip="Leer = Wertänderung genügt; sonst exakten Wert angeben." />
+                        <WrapPanel Grid.Column="4" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <Button MinWidth="125" Content="FEE-Signale laden" Command="{Binding LoadHmiFeeSignalsCommand}" />
+                            <Button MinWidth="120" Margin="6,0,0,0" Content="Adapter prüfen" Command="{Binding ProbeHmiAdapterCommand}" />
+                            <Button MinWidth="105" Margin="6,0,0,0" Content="Test starten" Command="{Binding RunHmiClosedLoopCommand}" />
+                            <Button MinWidth="90" Margin="6,0,0,0" Content="Abbrechen" Command="{Binding CancelHmiClosedLoopCommand}" />
+                        </WrapPanel>
+                    </Grid>
+                    <DataGrid Grid.Row="4" ItemsSource="{Binding HmiTestObservations}" AutoGenerateColumns="False"
+                              IsReadOnly="True" CanUserAddRows="False" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Zeit (UTC)" Binding="{Binding TimestampUtc, StringFormat={}{0:HH:mm:ss.fff}}" Width="115" />
+                            <DataGridTextColumn Header="Prüfschritt" Binding="{Binding Step}" Width="190" />
+                            <DataGridTextColumn Header="Wert / Meldung" Binding="{Binding Value}" Width="*" />
+                            <DataGridCheckBoxColumn Header="OK" Binding="{Binding Successful}" Width="55" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </GroupBox>
+
             <GroupBox Header="Programmbausteine und Datentypen" Margin="0,10,0,0">
                 <Grid Height="230" Margin="8">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>

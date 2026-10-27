@@ -290,7 +290,7 @@
                         <ux:ComboBox Watermark="Select Path" Margin="5" ItemsSource="{Binding SelectedRobot.Paths}" DisplayMemberPath="PathName" SelectedItem="{Binding SelectedPath}"/>
                     </UniformGrid>
 
-                    <DataGrid Grid.Row="2" Margin="5,5,5,5" ItemsSource="{Binding SelectedPath.Positions}" MinHeight="300" AutoGenerateColumns="True" SelectedItem="{Binding SelectedPosition}" CanUserSortColumns="False" MinColumnWidth="90" GridLinesVisibility="All" BorderBrush="Black" BorderThickness="1" HeadersVisibility="Column" Grid.ColumnSpan="3">
+                    <DataGrid Grid.Row="2" Margin="5,5,5,5" ItemsSource="{Binding SelectedPath.Positions}" MinHeight="300" AutoGenerateColumns="True" SelectedItem="{Binding SelectedPosition}" CanUserSortColumns="False" MinColumnWidth="100" GridLinesVisibility="All" BorderBrush="Black" BorderThickness="1" HeadersVisibility="Column" Grid.ColumnSpan="3">
                         <DataGrid.ColumnHeaderStyle>
                             <Style TargetType="DataGridColumnHeader">
                                 <Setter Property="Background" Value="#005aaa"/>

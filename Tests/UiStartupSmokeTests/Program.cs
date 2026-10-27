@@ -27,12 +27,18 @@ using VIBN_Tools.Tia.Contracts;
 
 namespace VIBN_Tools.UiStartup.SmokeTests;
 
-internal static class Program
+internal static partial class Program
 {
     [STAThread]
     private static int Main()
     {
-        _ = new System.Windows.Application();
+        _ = new System.Windows.Application
+        {
+            // The test deliberately constructs and closes MainWindow before it
+            // exercises the remaining pages. Closing that fixture must not put
+            // WPF's singleton Application into its irreversible shutdown state.
+            ShutdownMode = ShutdownMode.OnExplicitShutdown
+        };
         Services.Initialize();
         var bindingTrace = PresentationTraceSources.DataBindingSource;
         var bindingErrors = new BindingErrorTraceListener();
@@ -46,6 +52,7 @@ internal static class Program
 
             var workspacePage = new ViCoWorkspacePage();
             ExerciseDeferredTemplates(workspacePage);
+            VerifyMainWindowUsesLazyTabContent();
             var feeVersionInfo = new FeeVersionInfoProvider().Read();
             if (string.Equals(feeVersionInfo.UsedSdkVersion, "Nicht erkannt", StringComparison.Ordinal))
                 throw new InvalidOperationException("The FEE SDK used by the running build must be visible in Project Settings.");
@@ -87,6 +94,12 @@ internal static class Program
                 ProjectCards: new[]
                 {
                     new ViCoProjectCardInfo(
+                        900,
+                        "GM1234/05-130 Planung",
+                        "Planung",
+                        new DateTimeOffset(2026, 7, 1, 0, 0, 0, TimeSpan.Zero),
+                        new DateTimeOffset(2026, 7, 31, 0, 0, 0, TimeSpan.Zero)),
+                    new ViCoProjectCardInfo(
                         901,
                         "GM1234/05-130 Demo",
                         "In Arbeit",
@@ -96,9 +109,17 @@ internal static class Program
             var workstationRow = new ViCoWorkstationRowVM(workstation);
             if (workstationRow.WorkingStartSummary != "01.08.2026" ||
                 workstationRow.WorkingEndSummary != "30.09.2026" ||
-                workstationRow.WorkingStartSummary.Contains("Karte", StringComparison.OrdinalIgnoreCase))
+                workstationRow.WorkingStartSummary.Contains("Karte", StringComparison.OrdinalIgnoreCase) ||
+                workstationRow.PlanningStartProjects.Single().CardId != 900)
             {
                 throw new InvalidOperationException("ViCo project date columns must show only the resolved dates.");
+            }
+            if (ViCoFeatureBootstrapper.ResolveWorkingProjectForComputer("localhost", [workstation]) != "localhost" ||
+                ViCoFeatureBootstrapper.ResolveWorkingProjectForComputer("GM12345.example.local", [workstation]) !=
+                    "GM1234/05-130 Demo")
+            {
+                throw new InvalidOperationException(
+                    "The FEE header station did not resolve the connected workstation's In Arbeit project.");
             }
             if (ExportFileNamePolicy.Create("A/B", "fallback") == "A/B" ||
                 ExportFileNamePolicy.Create("", "fallback") != "fallback")
@@ -131,6 +152,7 @@ internal static class Program
             if (containerGenerationViewModel.CanCompareContainerFile)
                 throw new InvalidOperationException("ContainerFile comparison must require an active workspace.");
             VerifyContainerReviewFilterScope(containerGenerationViewModel);
+            VerifyContainerGenerationWorkflowRegressions();
 
             var rockwellPage = new RockwellPage();
             if (rockwellPage.DataContext is not RockwellPageVM rockwellViewModel)
@@ -149,6 +171,17 @@ internal static class Program
                 throw new InvalidOperationException("The no-standard Rockwell option does not disclose its no-mutation behavior.");
             rockwellViewModel.SelectedStandard = rockwellViewModel.Standards.Single(item => item.Id == "GCCS");
             ExerciseDeferredTemplates(rockwellPage);
+
+            var miniToolsPage = new MiniToolsPage();
+            if (miniToolsPage.DataContext is not MiniToolsPageVM miniToolsViewModel ||
+                miniToolsViewModel.BandHeights.Count != 3 ||
+                miniToolsViewModel.SelectedBandHeight.Value !=
+                VIBN_Tools.MiniTools.MiniToolsBandHeight.BandHeight1)
+            {
+                throw new InvalidOperationException(
+                    "The Mini-Tools page does not expose all three selectable band heights.");
+            }
+            ExerciseDeferredTemplates(miniToolsPage);
 
             var specialDevicePage = new SpecialDevicePage();
             var specialDeviceViewModel = (SpecialDevicePageVM)specialDevicePage.DataContext;
@@ -199,8 +232,21 @@ internal static class Program
 
             var visualPlanService = VerifyContainerToFeeVisualPlan();
             var visualContainerViewModel = new ContainerToFeeVisualPageVM(visualPlanService);
+            if (string.IsNullOrWhiteSpace(visualContainerViewModel.DocumentationPath) ||
+                !File.Exists(visualContainerViewModel.DocumentationPath) ||
+                !File.Exists(Path.Combine(
+                    Path.GetDirectoryName(visualContainerViewModel.DocumentationPath)!,
+                    "screenshots",
+                    "container2fee-visual.png")))
+            {
+                throw new InvalidOperationException(
+                    "The local Container2FEE Visual guide or its referenced screenshot is not deployable.");
+            }
             if (visualContainerViewModel.TreeStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
-                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Unassigned) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Verified) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.LinkMissing) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Error) ||
+                visualContainerViewModel.FeeObjectStatusFilters.All(item => item.Key != VisualStatusFilterKey.Planned) ||
                 visualContainerViewModel.FeeSignalStatusFilters.All(item => item.Key != VisualStatusFilterKey.Error))
             {
                 throw new InvalidOperationException("The visual Container2FEE status filters are incomplete.");
@@ -219,6 +265,8 @@ internal static class Program
                 throw new InvalidOperationException("The refreshed visual interface selector contains transient duplicates.");
             }
             VerifyVisualSimObjectColorAggregation();
+            VerifyFeeWorkflowRegressions();
+            VerifyCurrentFeeStateRegressions();
             visualContainerViewModel.SelectedTreeNode = visualContainerViewModel.TreeRoots
                 .SelectMany(root => root.SelfAndDescendants())
                 .First(node => node.Kind == VisualNodeKind.Container);
@@ -246,6 +294,14 @@ internal static class Program
                 DataContext = visualContainerViewModel
             };
             var fee2ContainerPage = new Fee2ContainerPage();
+            if (visualContainerPage.Content is not ScrollViewer visualPageScroll ||
+                visualPageScroll.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled ||
+                fee2ContainerPage.Content is not ScrollViewer fee2PageScroll ||
+                fee2PageScroll.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled)
+            {
+                throw new InvalidOperationException(
+                    "FEE pages must keep vertical sizing finite so their inner trees and tables scroll independently.");
+            }
             var fee2ContainerViewModel = (Fee2ContainerPageVM)fee2ContainerPage.DataContext;
             if (fee2ContainerViewModel.CanExport ||
                 string.IsNullOrWhiteSpace(fee2ContainerViewModel.ExportUnavailableReason))
@@ -264,6 +320,12 @@ internal static class Program
             }
             var aiTrainingPage = new AITrainingTestPage();
             var aiTrainingViewModel = (AITrainingTestPageVM)aiTrainingPage.DataContext;
+            if (!aiTrainingViewModel.AiWorkflowGuide.Contains("60 %", StringComparison.Ordinal) ||
+                !aiTrainingViewModel.AiWorkflowGuide.Contains("kein ML-Modell", StringComparison.OrdinalIgnoreCase) ||
+                !aiTrainingViewModel.AiDataLocations.Contains("training_pool", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The AI page does not explain its separate data and suggestion workflows.");
+            }
             aiTrainingViewModel.RuleSuggestions.Add(new RuleSuggestion(
                 "test-rule",
                 "Testregel für WPF-Bindings",
@@ -361,6 +423,12 @@ internal static class Program
             {
                 throw new InvalidOperationException("The TIA axis workflow or exchange help is incomplete.");
             }
+            if (!tiaPortalViewModel.HmiClosedLoopPrerequisites.Contains("WinCC Runtime", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.HmiClosedLoopPrerequisites.Contains("finally", StringComparison.OrdinalIgnoreCase) ||
+                !tiaPortalViewModel.HmiClosedLoopPrerequisites.Contains("FEE", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The TIA HMI closed-loop workflow does not disclose its runtime prerequisites and restoration boundary.");
+            }
             tiaPortalViewModel.ToggleLibraryOperationInfoCommand.Execute(null);
             if (!tiaPortalViewModel.IsLibraryOperationInfoVisible)
                 throw new InvalidOperationException("The TIA ViCo library explanation cannot be expanded.");
@@ -369,6 +437,7 @@ internal static class Program
             if (projectQualityPage.DataContext is not ProjectQualityPageVM projectQualityViewModel ||
                 !projectQualityViewModel.Limitations.Contains("fachliche Freigabe", StringComparison.OrdinalIgnoreCase) ||
                 !projectQualityViewModel.TestInstructions.Contains("Requirements.xml", StringComparison.OrdinalIgnoreCase) ||
+                !projectQualityViewModel.QualityGateQuickStart.Contains("ContainerFile", StringComparison.OrdinalIgnoreCase) ||
                 !projectQualityViewModel.TestMeaning.Contains("Laufzeit", StringComparison.OrdinalIgnoreCase) ||
                 !projectQualityViewModel.InputRequirements.Any(item =>
                     item.Input == "ContainerFile" && item.AcceptedFormat == ".xml") ||
@@ -628,7 +697,8 @@ internal static class Program
             ],
             [generationInterface, existingInterface]);
         if (!plan.IsValid || plan.ExistingBindings.Count != 1 ||
-            plan.MissingSignals.Count != 1 || plan.MissingAliases.Count != 1)
+            plan.MissingSignals.Count != 1 || plan.MissingAliases.Count != 1 ||
+            plan.Issues.All(issue => issue.Code != "SIGNAL_SOURCE_SHARED_ACROSS_CONTAINERS"))
             throw new InvalidOperationException("Resolve-or-create signal planning is not deterministic.");
 
         plan.ApplyExistingBindings();
@@ -638,14 +708,18 @@ internal static class Program
             throw new InvalidOperationException("Resolved signal identity or provenance was not retained.");
         }
 
-        var conflict = SignalResolutionPlanner.Build(
+        var sameNameDifferentSource = SignalResolutionPlanner.Build(
             [new SignalResolutionRequest(
                 "container-3",
                 "Sensor 3",
                 new FeeInterfaceSignal { Tag = "Ready", Address = "%I9.9" })],
             [existingInterface]);
-        if (conflict.IsValid || conflict.Issues.Single().Code != "EXISTING_SIGNAL_IDENTITY_CONFLICT")
-            throw new InvalidOperationException("Conflicting tag/address identity must block before FEE writes.");
+        if (!sameNameDifferentSource.IsValid || sameNameDifferentSource.MissingSignals.Count != 1 ||
+            sameNameDifferentSource.Issues.Count != 0)
+        {
+            throw new InvalidOperationException(
+                "Equal signal names with different physical sources must remain separate variables.");
+        }
 
         var explicitlyMapped = new FeeInterfaceSignal { Tag = "Ready", Address = "%I9.9" };
         var manualPlan = SignalResolutionPlanner.Build(
@@ -944,6 +1018,10 @@ internal static class Program
                 "11111111-1111-1111-1111-111111111111",
                 "Axes",
                 false,
+                "",
+                false,
+                "",
+                "",
             ]);
             SetPrivateField(service, "_feeObjects", new[] { visualJoint });
             SetPrivateField(service, "_hasDiscoveredFeeObjects", true);
@@ -979,6 +1057,41 @@ internal static class Program
                         "SIM_TargetPosition")
                 });
             SetPrivateField(service, "_hasDiscoveredFeeSimObjectLinks", true);
+            var targetForCompleteness = service.CurrentPlan!.Assignments.Single().TargetId;
+            if (service.GetSimObjectConnectionState(targetForCompleteness, visualJoint.Id).IsVerified)
+                throw new InvalidOperationException("A single MotionJoint link must not certify missing velocity/feedback endpoints.");
+            SetPrivateField(service, "_feeSimObjectLinks", new[]
+            {
+                new VisualFeeObjectLink(jointGuid.ToString("D"), "InTarget", logicGuid.ToString("D"), "SIM_TargetPosition"),
+                new VisualFeeObjectLink(jointGuid.ToString("D"), "InVelocity", logicGuid.ToString("D"), "SIM_Velocity"),
+                new VisualFeeObjectLink(jointGuid.ToString("D"), "OutValue", logicGuid.ToString("D"), "SIM_ActualPosition"),
+            });
+
+            var duplicateLogic = new VisualFeeContainerObject(Guid.NewGuid().ToString("D"),
+                "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder");
+            SetPrivateField(service, "_feeContainerObjects", new[]
+            {
+                new VisualFeeContainerObject(logicGuid.ToString("D"), "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder"),
+                duplicateLogic,
+            });
+            var assignedTargetId = service.CurrentPlan!.Assignments.Single().TargetId;
+            if (!service.GetSimObjectConnectionState(assignedTargetId, visualJoint.Id).IsVerified)
+                throw new InvalidOperationException("A unique live link was rejected because another logic has the same name.");
+            SetPrivateField(service, "_feeContainerObjects", new[]
+            {
+                new VisualFeeContainerObject(logicGuid.ToString("D"), "Axis_1", VisualFeeContainerObjectKind.Logic, "Grob_Cylinder"),
+            });
+
+            var interfaceGuid = Guid.NewGuid().ToString("D");
+            var feeInterface = new VisualFeeInterface(interfaceGuid, "Existing", "Test", 2);
+            var matchingSignals = new[]
+            {
+                new VisualFeeSignal(Guid.NewGuid().ToString("D"), interfaceGuid, "Existing", "Move", "%Q0.0", string.Empty, "Bool", "Write"),
+                new VisualFeeSignal(Guid.NewGuid().ToString("D"), interfaceGuid, "Existing", "Move", "%Q0.0", string.Empty, "Bool", "Write"),
+            };
+            SetPrivateField(service, "_feeInterfaces", new[] { feeInterface });
+            SetPrivateField(service, "_feeSignals", matchingSignals);
+            service.SetExistingInterfaces([feeInterface]);
 
             var viewModel = new ContainerToFeeVisualPageVM(service);
             var nodes = viewModel.TreeRoots.SelectMany(root => root.SelfAndDescendants()).ToArray();
@@ -986,9 +1099,83 @@ internal static class Program
             var target = nodes.Single(node => node.Kind == VisualNodeKind.SimObjectTarget);
             var group = nodes.Single(node => node.Kind == VisualNodeKind.Group && node.Name == "SimObjects");
             var container = nodes.Single(node => node.Kind == VisualNodeKind.Container);
+            var availableObject = viewModel.AvailableFeeObjects.Single();
+            if (availableObject.ConnectionDetails.Count != 3 ||
+                !availableObject.ConnectionDetails.Any(detail => detail.Contains("InTarget", StringComparison.Ordinal) &&
+                    detail.Contains("SIM_TargetPosition", StringComparison.Ordinal) && detail.Contains("Logik 'Axis_1'", StringComparison.Ordinal)) ||
+                availableObject.ConnectionDetails.Any(detail => detail.Contains(logicGuid.ToString("D"), StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("FEE-SimObject details must show resolved names and every expected endpoint.");
+            viewModel.SelectedFeeObject = availableObject;
+            if (!ReferenceEquals(viewModel.SelectedTreeNode, simObject) ||
+                !string.Equals(viewModel.SelectedTarget?.Id, target.Id, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Selecting a FEE-SimObject did not synchronize the related tree node and target. " +
+                    $"Tree={viewModel.SelectedTreeNode?.Kind}/{viewModel.SelectedTreeNode?.Id}; " +
+                    $"Target={viewModel.SelectedTarget?.Id}; expected={simObject.Id}/{target.Id}.");
+            }
+            viewModel.SelectedTreeNode = target;
+            if (!ReferenceEquals(viewModel.SelectedFeeObject, availableObject) ||
+                !string.Equals(viewModel.SelectedTarget?.Id, target.Id, StringComparison.Ordinal) ||
+                !availableObject.IsSynchronizationMatch ||
+                !target.IsSynchronizationMatch ||
+                !simObject.IsSynchronizationMatch)
+            {
+                throw new InvalidOperationException(
+                    "Selecting a visual tree target did not synchronize the related lists.");
+            }
+            viewModel.SelectedTreeNode = container;
+            if (viewModel.SignalSlots.Count != 6 ||
+                viewModel.SignalSlots.SingleOrDefault(slot =>
+                    slot.Slot == "PLC_OUT_ToHomePos") is not { Assignments.Count: 0 })
+            {
+                throw new InvalidOperationException(
+                    "The selected Cylinder did not expose all declared signal slots including empty slots.");
+            }
+            if (!availableObject.IsSynchronizationMatch ||
+                nodes.Where(item => item.ContainerId == container.Id).Any(item => !item.IsSynchronizationMatch) ||
+                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 2)
+            {
+                throw new InvalidOperationException(
+                    "Selecting a parent container did not mark all descendants and all matching FEE list entries.");
+            }
+            var activeSignal = viewModel.AvailableFeeSignals.Last();
+            viewModel.SelectedFeeSignal = activeSignal;
+            if (!ReferenceEquals(viewModel.SelectedFeeSignal, activeSignal) ||
+                !ReferenceEquals(viewModel.SelectedTreeNode, nodes.Single(item => item.Kind == VisualNodeKind.Signal)) ||
+                viewModel.AvailableFeeSignals.Count(item => item.IsSynchronizationMatch) != 1 || availableObject.IsSynchronizationMatch)
+            {
+                throw new InvalidOperationException(
+                    "The active FEE signal list selection was not preserved while duplicate matches synchronized to the tree.");
+            }
+            var objectIssue = new VisualIssue(
+                VisualIssueSeverity.Error,
+                "TEST_OBJECT_SELECTION",
+                "Synthetic object diagnostic",
+                availableObject.Id);
+            viewModel.Issues.Add(objectIssue);
+            viewModel.SelectedIssue = objectIssue;
+            if (!ReferenceEquals(viewModel.SelectedIssue, objectIssue) ||
+                !ReferenceEquals(viewModel.SelectedTreeNode, simObject) ||
+                !availableObject.IsSynchronizationMatch ||
+                viewModel.AvailableFeeSignals.Any(item => item.IsSynchronizationMatch))
+            {
+                throw new InvalidOperationException(
+                    "Selecting an object diagnostic did not retain object-only selection.");
+            }
+            viewModel.SelectedFeeSignal = activeSignal;
+            if (!ReferenceEquals(viewModel.SelectedFeeSignal, activeSignal) ||
+                !ReferenceEquals(viewModel.SelectedIssue, objectIssue) ||
+                !ReferenceEquals(viewModel.SelectedTreeNode, nodes.Single(item => item.Kind == VisualNodeKind.Signal)))
+            {
+                throw new InvalidOperationException(
+                    "The signal selection did not retain its related validation issue and select the matching tree signal.");
+            }
             if (simObject.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
                 target.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
-                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified)
+                group.EffectiveState.Kind != ContainerToFeeVisualNodeStateKind.Verified ||
+                simObject.WillGenerateObject ||
+                !container.DisplayTypeLabel.Contains("Cylinder", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(
                     "A confirmed SimObject link did not propagate green from object to target and group.");
@@ -1251,6 +1438,12 @@ internal static class Program
             viewModel.ToggleNavigationCommand.Execute(null);
             if (!viewModel.IsNavigationExpanded || !new JsonNavigationPreferenceStore(path).LoadExpanded())
                 throw new InvalidOperationException("The navigation toggle did not persist its updated state.");
+            viewModel.EnsureNavigationFits(1024);
+            if (viewModel.IsNavigationExpanded || !new JsonNavigationPreferenceStore(path).LoadExpanded())
+            {
+                throw new InvalidOperationException(
+                    "Compact viewport handling either left the navigation expanded or overwrote the saved preference.");
+            }
         }
         finally
         {
@@ -1272,6 +1465,40 @@ internal static class Program
         {
             throw new InvalidOperationException(
                 "A successfully created configuration subtask would be posted again on Enter.");
+        }
+    }
+
+    private static void VerifyMainWindowUsesLazyTabContent()
+    {
+        var window = new MainWindow();
+        try
+        {
+            var hosts = FindLogicalChildren<LazyPageHost>(window).ToArray();
+            if (hosts.Length < 15)
+            {
+                throw new InvalidOperationException(
+                    $"Expected lazy hosts for the non-startup tabs, found only {hosts.Length}.");
+            }
+            if (hosts.Any(host => host.Content is not null))
+            {
+                throw new InvalidOperationException(
+                    "A non-visible main tab was created eagerly during MainWindow construction.");
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    private static IEnumerable<T> FindLogicalChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+        {
+            if (child is T match)
+                yield return match;
+            foreach (var descendant in FindLogicalChildren<T>(child))
+                yield return descendant;
         }
     }
 

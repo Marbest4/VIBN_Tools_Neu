@@ -1,0 +1,151 @@
+<UserControl x:Class="VIBN_Tools.Application.View.MiniToolsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:VIBN_Tools.Application.VM"
+             mc:Ignorable="d"
+             d:DesignHeight="720" d:DesignWidth="1100">
+    <UserControl.DataContext>
+        <vm:MiniToolsPageVM />
+    </UserControl.DataContext>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Auto">
+        <Grid Margin="20" MinWidth="760">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="240" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <StackPanel>
+                <TextBlock FontSize="24" FontWeight="SemiBold" Text="Mini-Tools" />
+                <TextBlock Margin="0,7,0,0" TextWrapping="Wrap"
+                           Text="Positioniert alle aktuell in FEE ausgewählten Objekte. Länge, Breite und Höhe ändern ausschließlich die LocalScale von ausgewählten Surface-Objekten." />
+            </StackPanel>
+
+            <Border Grid.Row="1" Margin="0,16,0,10" Padding="12"
+                    Background="#FFF3F5F7" CornerRadius="4">
+                <TextBlock TextWrapping="Wrap">
+                    <Run FontWeight="SemiBold" Text="Ablauf: " />
+                    <Run Text="1. Objekte direkt in FEE auswählen. 2. X, Y und drei Bandhöhen eintragen. 3. Die zu verwendende Bandhöhe wählen. 4. Positionieren. Die Werte werden unmittelbar ins geladene FEE-Projekt geschrieben; das Speichern des Projekts bleibt ein eigener FEE-Schritt." />
+                </TextBlock>
+            </Border>
+
+            <Grid Grid.Row="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <GroupBox Header="Position in FEE-Einheiten">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="110" />
+                            <ColumnDefinition Width="18" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="110" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="X" />
+                        <TextBox Grid.Column="1" Margin="7,2" Padding="5,3"
+                                 Text="{Binding XText, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="Y" />
+                        <TextBox Grid.Column="4" Margin="7,2" Padding="5,3"
+                                 Text="{Binding YText, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Z – Bandhöhe 1" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="7,2" Padding="5,3"
+                                 Text="{Binding BandHeight1Text, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Z – Bandhöhe 2" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="7,2" Padding="5,3"
+                                 Text="{Binding BandHeight2Text, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Z – Bandhöhe 3" />
+                        <TextBox Grid.Row="3" Grid.Column="1" Margin="7,2" Padding="5,3"
+                                 Text="{Binding BandHeight3Text, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="1" Grid.Column="3" VerticalAlignment="Center"
+                                   Text="Verwenden" />
+                        <ComboBox Grid.Row="1" Grid.Column="4" Margin="7,2"
+                                  ItemsSource="{Binding BandHeights}"
+                                  SelectedItem="{Binding SelectedBandHeight}"
+                                  DisplayMemberPath="DisplayName"
+                                  ToolTip="Wählt, welcher der drei Z-Werte für diesen Lauf verwendet wird." />
+                    </Grid>
+                </GroupBox>
+
+                <GroupBox Grid.Column="2" Header="Surface-Skalierung">
+                    <Grid Margin="10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="110" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="Länge (Scale X)" />
+                        <TextBox Grid.Column="1" Margin="7,2" Padding="5,3"
+                                 Text="{Binding LengthText, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Breite (Scale Y)" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="7,2" Padding="5,3"
+                                 Text="{Binding WidthText, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Höhe (Scale Z)" />
+                        <TextBox Grid.Row="2" Grid.Column="1" Margin="7,2" Padding="5,3"
+                                 Text="{Binding HeightText, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,0"
+                                   Foreground="#FF455A64" TextWrapping="Wrap"
+                                   Text="Andere Objekttypen werden nur positioniert; ihre Skalierung bleibt unverändert." />
+                    </Grid>
+                </GroupBox>
+            </Grid>
+
+            <WrapPanel Grid.Row="3" Margin="0,12,0,10">
+                <Button MinWidth="240" MinHeight="38"
+                        Content="FEE-Auswahl positionieren"
+                        Command="{Binding PositionSelectionCommand}"
+                        IsEnabled="{Binding CanPosition}"
+                        ToolTip="Liest die aktuelle FEE-Auswahl, setzt Position bei jedem ausgewählten Objekt und LocalScale ausschließlich bei Surface-Objekten."
+                        ToolTipService.ShowOnDisabled="True" />
+                <TextBlock Margin="14,0,0,0" VerticalAlignment="Center"
+                           Foreground="#FF455A64"
+                           Text="{Binding Connection.UnavailableReason}" />
+            </WrapPanel>
+
+            <GroupBox Grid.Row="4" Header="Ergebnis des letzten Laufs">
+                <DataGrid ItemsSource="{Binding Results}"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          EnableRowVirtualization="True" CanUserResizeColumns="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="FEE-Objekt" Binding="{Binding ObjectName}" Width="2*" />
+                        <DataGridCheckBoxColumn Header="Surface" Binding="{Binding IsSurface}" Width="80" />
+                        <DataGridCheckBoxColumn Header="Position" Binding="{Binding PositionChanged}" Width="90" />
+                        <DataGridCheckBoxColumn Header="Surface-Scale" Binding="{Binding ScaleChanged}" Width="110" />
+                        <DataGridTextColumn Header="Ergebnis" Binding="{Binding Message}" Width="3*" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </GroupBox>
+
+            <StackPanel Grid.Row="5" Margin="0,12,0,0">
+                <ProgressBar Height="7" Minimum="0"
+                             Maximum="{Binding ProgressMaximum, Mode=OneWay}"
+                             Value="{Binding ProgressValue, Mode=OneWay}" />
+                <Border Margin="0,7,0,0" Padding="8,5"
+                        Background="#FFF3F5F7" CornerRadius="3">
+                    <TextBlock Text="{Binding StatusText}" TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

@@ -45,7 +45,7 @@
 
 | Datei/Typ | Aufgabe |
 | --- | --- |
-| `LegacyWorkstationCatalog.cs` | liest kompatible Cachedateien und die strukturierte `KONFIGURATION`-Karte; Kanbanize-Benutzer hat Vorrang |
+| `LegacyWorkstationCatalog.cs` | liest kompatible Cachedateien und die strukturierte `KONFIGURATION`-Karte; liefert zusätzlich deren tatsächlichen letzten Änderungszeitpunkt; Kanbanize-Benutzer hat Vorrang |
 | `KanbanizeRefreshService.cs` | lädt Arbeitsplätze/Robotik aus Kanbanize und ersetzt Caches atomar |
 | `WorkstationBoardCache.cs` | typisierte Cacheform mit Karten- und Unteraufgaben-IDs |
 | `KanbanizeWorkstationConfigurationService.cs` | aktualisiert/ergänzt Standard-Unteraufgaben und legt eine fehlende KONFIGURATION-Karte nur auf expliziten Befehl an |
@@ -55,7 +55,7 @@
 | `LegacyRoleMigrationReader.cs` | einmaliger Nur-Lese-Import älterer Zuordnungen |
 | `BoundedFileCopyService.cs` | begrenzte parallele Dateiübertragung |
 | `JsonViCoAutoRefreshSettingsStore.cs` | atomare lokale Persistenz des AutoUpdate-Intervalls |
-| `JsonViCoLastActiveSnapshotStore.cs` | atomare Fallback-Persistenz der letzten nicht leeren Rechnerübersicht; leere/defekte Abrufe ersetzen sie nicht |
+| `JsonViCoLastActiveSnapshotStore.cs` | atomare, neustartfeste Persistenz der letzten nicht leeren Rechnerübersicht samt Quellzeitpunkt; leere/defekte Abrufe ersetzen sie nicht |
 | `WindowsPathLauncher.cs` | öffnet Projektpfade sowie die bewusst angeforderte CMD- bzw. Dauer-Ping-Konsole mit validiertem Rechnernamen |
 | `UserEnvironmentCredentialConfigurationService.cs` | ersetzt PowerShell durch per-user Speichern/Löschen und aktualisiert den laufenden Prozess |
 
@@ -63,7 +63,7 @@
 
 | Klasse | Aufgabe |
 | --- | --- |
-| `ViCoSearchPageVM` | punktgenaue Suche, manueller/periodischer Refresh samt Countdown und Last-active-Fallback, Pfadauflösung, Online-/Session-Abfragen, CMD/Ping, RDP sowie KONFIGURATION speichern/anlegen |
+| `ViCoSearchPageVM` | punktgenaue Suche, sofortige Startansicht aus dem Last-active-Snapshot, 30-Minuten-Alterswarnung, manueller/periodischer Refresh samt Countdown, Pfadauflösung, Online-/Session-Abfragen, CMD/Ping, RDP sowie KONFIGURATION speichern/anlegen |
 | `ViCoWorkstationRowVM` | Präsentation einer Tabellenzeile: Farben, Erreichbarkeit, RDP-Sitzung und Konfigurationsspalten |
 | `ViCoConfigurationFieldVM` | Änderungsnachverfolgung einer vorhandenen Konfigurations-Unteraufgabe |
 | `ViCoPageVM` | Projekte und Favoriten |

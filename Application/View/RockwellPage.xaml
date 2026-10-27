@@ -25,6 +25,10 @@
         </StackPanel>
         <GroupBox Grid.Row="1" Margin="0,16,0,8" Header="1. Allen-Bradley Interface-Excel erzeugen">
             <Grid Margin="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -40,7 +44,11 @@
                         Content="Allen-Bradley Excel Interface"
                         Command="{Binding ExportInterfaceCommand}"
                         IsEnabled="{Binding CanExportInterface}"
-                        ToolTip="Liest D*, PtStatus* und VS* rekursiv aus BK-, SBK-, PM- und übrigen Controller-Tags, löst Kommentare aus Program-Tags auf und erzeugt das Arbeitsblatt InterfaceSimExport als XLSX." />
+                        ToolTip="Liest D*, PtStatus* und VS* aus den Ein-/Ausgangsstrukturen der Controller-Tags. Die Checkbox ergänzt benannte Safety-Signale sowie Safety-Modul-I/Os. Kommentare werden auch aus den zugehörigen Alias-Tags übernommen. Erzeugt InterfaceSimExport als XLSX." />
+                <CheckBox Grid.Row="1" Grid.ColumnSpan="3" Margin="0,10,0,0"
+                          Content="Safety-Signale einschließen"
+                          IsChecked="{Binding IncludeSafetySignals, Mode=TwoWay}"
+                          ToolTip="Aktiviert: Safety-Ein-/Ausgänge zusätzlich in die Excel-Schnittstelle übernehmen. Deaktiviert: nur Standard-Signale exportieren. Die L5X-Datei bleibt unverändert." />
             </Grid>
         </GroupBox>
         <Grid Grid.Row="2" Margin="0,0,0,8">

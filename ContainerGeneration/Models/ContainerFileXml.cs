@@ -1,0 +1,112 @@
+using System.IO;
+using System.Xml;
+using System.Xml.Linq;
+using VIBN_Tools.ContainerGeneration.BusinessLogic.ContainerData;
+
+namespace VIBN_Tools.ContainerGeneration.Models;
+
+/// <summary>Shared, backwards compatible ContainerFile extension for FEE identities.</summary>
+public static class ContainerFileXml
+{
+    public static XDocument Load(string path)
+    {
+        using var reader = XmlReader.Create(path, ReaderSettings());
+        return XDocument.Load(reader);
+    }
+
+    public static XElement ParseContainer(string xml)
+    {
+        using var text = new StringReader(xml);
+        using var reader = XmlReader.Create(text, ReaderSettings());
+        var element = XElement.Load(reader);
+        if (element.Name != "Container" || string.IsNullOrWhiteSpace(element.Element("Component")?.Value) ||
+            string.IsNullOrWhiteSpace(element.Element("Type")?.Value) || element.Element("DataList") is null)
+            throw new InvalidDataException("Erwartet wird ein Container mit Component, Type und DataList.");
+        return element;
+    }
+
+    private static XmlReaderSettings ReaderSettings() => new()
+    {
+        DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null,
+        MaxCharactersInDocument = 50 * 1024 * 1024, IgnoreComments = true
+    };
+
+    public static IEnumerable<XElement> Objects(XElement container) =>
+        container.Element("SimObjects")?.Elements("SimObject") ?? [];
+
+    public static bool HasMatchingObjectName(string? objectName, string? containerName) =>
+        !string.IsNullOrWhiteSpace(objectName) && !string.IsNullOrWhiteSpace(containerName) &&
+        string.Equals(objectName.Trim(), containerName.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> TechnicalHelperTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Cabinet", "BoolNot", "MoveBit", "BoolAnd", "BoolAnd3Inputs", "BoolAlwaysTrue", "BoolAnd10Inputs",
+        "ConvertBoolToByte", "ConvertByteToBool", "BoolCopy5Outputs", "BoolOr", "BoolPositiveEdge", "CounterSLO"
+    };
+
+    public static bool IsTechnicalHelperType(string? feeType) =>
+        TechnicalHelperTypes.Contains((feeType ?? "").Split('.').Last()) || IsSimpleLogicType(feeType);
+
+    public static bool IsSimpleLogicType(string? feeType)
+    {
+        var type = (feeType ?? "").Split('.').Last();
+        return type.StartsWith("Bool", StringComparison.OrdinalIgnoreCase) || type.StartsWith("Move", StringComparison.OrdinalIgnoreCase) ||
+            type.StartsWith("Convert", StringComparison.OrdinalIgnoreCase) || type.Equals("CounterSLO", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsTechnicalHelperAssociation(string? feeType, string? role) =>
+        string.Equals(role, "TechnicalHelper", StringComparison.OrdinalIgnoreCase) && IsTechnicalHelperType(feeType);
+
+    public static bool IsStructuralObjectAssociation(string? feeType, string? role) =>
+        IsTechnicalHelperAssociation(feeType, role) ||
+        string.Equals(role, "Primary", StringComparison.OrdinalIgnoreCase) &&
+        (new[] { "Cabinet", "CabinetElement", "LogicObject" }.Contains((feeType ?? "").Split('.').Last(), StringComparer.OrdinalIgnoreCase) ||
+            IsTechnicalHelperType(feeType) && !string.Equals(feeType, "Cabinet", StringComparison.OrdinalIgnoreCase));
+
+    public static bool CanRetainObjectAssociation(XElement item, string liveName, string containerName) =>
+        item.Attribute("assignment")?.Value == "Manual" || HasMatchingObjectName(liveName, containerName) ||
+        item.Attribute("assignment")?.Value == "Linked" &&
+        IsStructuralObjectAssociation(item.Element("FeeType")?.Value, item.Element("Role")?.Value);
+
+    /// <summary>
+    /// ContainerGeneration can write empty IDs. Reverse editing needs one unique
+    /// key per container so its objects and signals cannot leak into other rows.
+    /// Existing unique IDs stay unchanged; repeated IDs are replaced for every
+    /// occurrence rather than silently favoring the first container.
+    /// </summary>
+    public static void EnsureUniqueContainerIds(XDocument document)
+    {
+        var containers = document.Descendants("Container").ToArray();
+        var counts = containers.Select(item => item.Attribute("id")?.Value ?? "")
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .GroupBy(id => id, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var reserved = counts.Keys.ToHashSet(StringComparer.Ordinal);
+        for (var index = 0; index < containers.Length; index++)
+        {
+            var id = containers[index].Attribute("id")?.Value ?? "";
+            if (!string.IsNullOrWhiteSpace(id) && counts[id] == 1) continue;
+            var prefix = $"fee-container:{index + 1}";
+            var replacement = prefix;
+            for (var suffix = 2; !reserved.Add(replacement); suffix++) replacement = $"{prefix}:{suffix}";
+            containers[index].SetAttributeValue("id", replacement);
+        }
+    }
+
+    public static XElement Object(string guid, string name, string feeType, string role = "SimObject",
+        string target = "", string clrType = "", IEnumerable<ContainerFeeSlot>? slots = null,
+        string assignmentKind = "Automatic", string logicDefinitionName = "") =>
+        new("SimObject", new XAttribute("assignment", assignmentKind), new XElement("Guid", guid), new XElement("Name", name),
+            new XElement("FeeType", feeType), new XElement("Role", role),
+            new XElement("Target", target), new XElement("ClrType", clrType),
+            new XElement("Slots", (slots ?? []).Select(slot => new XElement("Slot",
+                new XAttribute("name", slot.Name), new XAttribute("assignedGuid", slot.AssignedGuid)))),
+            new XElement("LogicDefinitionName", logicDefinitionName));
+
+    public static XDocument Document(IEnumerable<XElement> containers, XElement? inventory = null) =>
+        new(new XDeclaration("1.0", "utf-8", null), new XElement("CAAMergeResult",
+            new XAttribute("version", "1.0.0.0"), new XAttribute("createdAt", DateTime.UtcNow.ToString("O")),
+            new XAttribute("autoCreateFile", ""), new XAttribute("zuli", ""),
+            new XElement("ContainerList", containers.Select(item => new XElement(item))),
+            inventory is null ? null : new XElement(inventory)));
+}

@@ -34,7 +34,8 @@ public sealed record WorkspaceValidationSummary(
         HasBlockingIssues ||
         ContainersToReview > 0 ||
         UncheckedContainers > 0 ||
-        UnassignedSignals > 0;
+        UnassignedSignals > 0 ||
+        Details.Count > 0;
 
     public string ToStatusText() =>
         $"Prüfung: {TotalContainers} Container, {AssignedSignals} zugeordnet, " +
@@ -158,6 +159,9 @@ public static class WorkspaceValidationAnalyzer
             AddEntryError(entry, "Slot fehlt.");
             details.Add($"Signal „{DisplaySignal(entry)}“: Slot fehlt.");
         }
+
+        foreach (var entry in assigned.Where(entry => entry.HasAssignmentWarning))
+            details.Add($"Signal „{DisplaySignal(entry)}“: {entry.AssignmentWarning}");
 
         if (requirements?.IsInitialized == true)
         {

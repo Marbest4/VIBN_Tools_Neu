@@ -117,10 +117,10 @@ namespace VIBN_Tools.ContainerToFee
                 // Get or create a cabinet only when the element itself is
                 // missing. A reused element must retain its existing parent.
                 var cabinet = await _cabinetContainerManager.GetOrCreateCabinetAsync(
-                    cabinetElement.CabinetName,
+                    string.IsNullOrWhiteSpace(container.ParentCabinetName) ? cabinetElement.CabinetName : container.ParentCabinetName,
                     parentObject,
-                    cancellationToken);
-                cabinetElement.ElementPosition = _cabinetContainerManager.GetNextPosition(cabinetElement.CabinetName);
+                    cancellationToken, Guid.TryParse(container.ParentCabinetGuid, out var cabinetGuid) ? cabinetGuid : null);
+                cabinetElement.ElementPosition = _cabinetContainerManager.GetNextPosition(cabinet.GuidString);
                 await cabinetElement.CreateSimObjectsAsync(cabinet);
                 cancellationToken.ThrowIfCancellationRequested();
                 var createdElement = ContainerExistingObjectReuse.GetAssignedCabinetElement(container);

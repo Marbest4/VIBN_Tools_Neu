@@ -165,16 +165,25 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
             var displayName = string.IsNullOrWhiteSpace(componentName)
                 ? $"Unbenannter Container ({xmlType})"
                 : componentName;
+            var parentId = rootId;
+            var parentKey = element.Attribute("parentContainerId")?.Value;
+            var parents = containerElements.Where(item => !string.IsNullOrWhiteSpace(parentKey) && item.Attribute("id")?.Value == parentKey && ChildValue(item, "Type") == "Cabinet").ToArray();
+            if (parents.Length == 1)
+                parentId = CreateContainerId(parents[0].Attribute("id")?.Value ?? "", ChildValue(parents[0], "Component"), "Cabinet", 1);
             var containerNode = new VisualNode(
                 containerId,
-                rootId,
+                parentId,
                 containerId,
                 VisualNodeKind.Container,
                 displayName,
                 xmlType,
                 null,
                 false,
-                descriptor?.SupportsCreation == true);
+                descriptor?.SupportsCreation == true)
+            {
+                ExpectedParentGuid = element.Attribute("parentGuid")?.Value ?? "", ExpectedParentName = element.Attribute("parentName")?.Value ?? "",
+                SourceObjectGuid = VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects(element).FirstOrDefault(item => item.Element("Role")?.Value == "Primary")?.Element("Guid")?.Value ?? ""
+            };
             AddNode(nodes, edges, containerNode);
 
             if (string.IsNullOrWhiteSpace(componentName))
@@ -292,8 +301,10 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     false));
             }
 
-            foreach (var (helperName, helperIndex) in descriptor.TechnicalHelpers.Select((name, index) => (name, index)))
+            foreach (var (defaultHelperName, helperIndex) in descriptor.TechnicalHelpers.Select((name, index) => (name, index)))
             {
+                var helperName = xmlType == "Cabinet" ? displayName : defaultHelperName == descriptor.CabinetName &&
+                    element.Attribute("parentName") is { } savedParent && !string.IsNullOrWhiteSpace(savedParent.Value) ? savedParent.Value : defaultHelperName;
                 AddNode(nodes, edges, new VisualNode(
                     $"{containerId}:helper:{helperIndex}",
                     logicNodeId ?? containerId,
@@ -350,7 +361,7 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
                     descriptor);
             }
 
-            if (entries.Count == 0)
+            if (entries.Count == 0 && xmlType != "Cabinet")
             {
                 issues.Add(new VisualIssue(
                     VisualIssueSeverity.Warning,
@@ -360,6 +371,42 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
             }
         }
 
+        var objectAssignments = new List<VisualAssignment>();
+        var signalAssignments = new List<VisualSignalAssignment>();
+        var planContainers = nodes.Where(node => node.Kind == VisualNodeKind.Container).ToArray();
+        for (var index = 0; index < containerElements.Count; index++)
+        {
+            var container = planContainers[index];
+            var containerTargets = targets.Where(target => target.ContainerId == container.Id).ToArray();
+            foreach (var item in VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.Objects(containerElements[index]))
+            {
+                if (!Guid.TryParse(item.Element("Guid")?.Value, out var guid)) continue;
+                var role = item.Element("Role")?.Value;
+                if (role == "TechnicalHelper" || role == "Primary" && VIBN_Tools.ContainerGeneration.Models.ContainerFileXml.IsStructuralObjectAssociation(item.Element("FeeType")?.Value, role)) continue;
+                var targetName = item.Element("Target")?.Value;
+                var feeType = item.Element("FeeType")?.Value ?? "";
+                var model = VIBN_Tools.GlobalClasses.FeeObjects.FeeObjectFactory.Create(feeType, "", guid.ToString("D"));
+                var candidates = containerTargets.Where(target =>
+                    (string.IsNullOrWhiteSpace(targetName) || target.DisplayName == targetName) &&
+                    IsAssignableType(model.GetType(), target.AllowedTypeName)).ToArray();
+                if (candidates.Length != 1)
+                {
+                    issues.Add(new VisualIssue(VisualIssueSeverity.Warning, "XML_OBJECT_TARGET_UNRESOLVED",
+                        $"FEE-Objekt '{item.Element("Name")?.Value}' ({feeType}) benötigt eine eindeutige Zielzuordnung.", container.Id));
+                    continue;
+                }
+                objectAssignments.Add(new VisualAssignment(candidates[0].Id,
+                    FeeSimObjectDiscovery.CreateFeeObjectId(guid.ToString("D")), item.Element("Name")?.Value ?? "",
+                    model.GetType().FullName ?? model.GetType().Name));
+            }
+            var signalNodes = nodes.Where(node => node.ContainerId == container.Id &&
+                node.Kind is VisualNodeKind.Signal or VisualNodeKind.UnknownSignal).ToArray();
+            var entries = containerElements[index].Descendants("Entry").ToArray();
+            for (var entryIndex = 0; entryIndex < Math.Min(entries.Length, signalNodes.Length); entryIndex++)
+                if (Guid.TryParse(entries[entryIndex].Attribute("feeGuid")?.Value, out var guid))
+                    signalAssignments.Add(new VisualSignalAssignment(signalNodes[entryIndex].Id, guid.ToString("D"),
+                        signalNodes[entryIndex].Name, ""));
+        }
         WireChildren(nodes);
         return new VisualPlan(
             fullPath,
@@ -369,16 +416,23 @@ internal sealed class ContainerXmlVisualPlanParser(IVisualPlanLogger logger)
             new ReadOnlyCollection<VisualNode>(nodes.Where(node => node.ParentId is null).ToList()),
             new ReadOnlyCollection<VisualEdge>(edges),
             new ReadOnlyCollection<VisualSimObjectTarget>(targets),
-            assignments: null,
+            assignments: objectAssignments,
             creationRequests: null,
             generationSelections: null,
             signalCreationSelections: null,
-            signalAssignments: null,
+            signalAssignments: signalAssignments,
             addedSignals: null,
             slotOverrides: null,
             removedSignalNodeIds: null,
             existingInterfaceSelection: null,
             new ReadOnlyCollection<VisualIssue>(issues));
+    }
+
+    private static bool IsAssignableType(Type runtimeType, string expected)
+    {
+        for (Type? type = runtimeType; type is not null; type = type.BaseType)
+            if (type.FullName == expected || type.Name == expected) return true;
+        return false;
     }
 
     private static void AddSignalNode(

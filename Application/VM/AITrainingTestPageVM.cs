@@ -387,6 +387,29 @@ namespace VIBN_Tools.Application.VM
             RefreshPerformance();
         }
 
+        public string AiWorkflowGuide =>
+            "Drei getrennte Datenflüsse: (1) Für 'Train (XML)' und 'Check (XML)' wird jeweils manuell eine aus " +
+            "ContainerGeneration exportierte Container-XML mit Container/Type/Entry/Signal/Slot ausgewählt – keine " +
+            "Requirements.xml und keine Interface-Excel. Train kopiert sie in den Trainingspool und verwendet sie zusammen " +
+            "mit automatisch gefundenen ActionLogs und Corrections.csv für das ML-Modell zur Slotvorhersage. Check kopiert " +
+            "nichts, sondern bewertet nur die gewählte Container-XML. " +
+            "(2) Regelvorschläge trainieren kein ML-Modell: Sie zählen wiederholte manuelle Slotkorrekturen mit Typ, " +
+            "Signal, altem und neuem Slot aus den JSONL-Aktionslogs. Erst Annehmen, XML-Vorschau und eine weitere " +
+            "Bestätigung dürfen eine dann manuell ausgewählte Requirements-/AutoCreate-XML mit Sicherung ändern. " +
+            "Produktiv werden nur exakte Regeln vorgeschlagen. Allgemeinere Muster sind technisch möglich, werden aber " +
+            "ohne mehrere widerspruchsfreie, fachlich freigegebene Fälle nicht automatisch als XML-Regel erzeugt. " +
+            "(3) Container-Vorschläge zählen bestätigte Add-/Move-/ContainerAndSlot-Aktionen. Ein Muster erscheint erst " +
+            "mit mindestens zwei unterschiedlichen Containerfällen; Slots müssen in mindestens 60 % der Fälle vorkommen. " +
+            "'Container-Muster aktualisieren' liest lediglich die aktuell vorhandenen ActionLogs und die gespeicherten " +
+            "Annahme-/Ablehnungsstatus erneut; es trainiert kein Modell, schreibt keine XML und erzeugt keine FEE-Objekte.";
+
+        public string AiDataLocations =>
+            $"Basis: {ModelPaths.BaseDir}{Environment.NewLine}" +
+            $"Trainings-XML: {ModelPaths.TrainingPoolDir}{Environment.NewLine}" +
+            $"Aktionslogs: {ModelPaths.ActionsDir}{Environment.NewLine}" +
+            $"Korrekturen: {ModelPaths.CorrectionsFile}{Environment.NewLine}" +
+            $"Aktives Modell: {ModelPaths.CurrentModel}";
+
         private void RefreshContainerSuggestions()
         {
             var analysis = _containerSuggestionService.Analyze(

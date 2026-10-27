@@ -71,17 +71,17 @@ namespace VIBN_Tools.Application.VM
 
             // Interface Merge
             AllSignals = new ObservableCollection<FeeInterfaceSignal>();
+            SignalsView = CollectionViewSource.GetDefaultView(AllSignals);
+            SignalsView.Filter = FilterSignals;
 
             // Load Signals if already data existing
-            if (Services.FeeObjects.AllFeeObjects?.Any() == true)
+            if (Services.FeeObjects?.AllFeeObjects?.Any() == true)
             {
                 GetAllSignals(this, new FeeObjectsUpdatedEventargs());
             }
 
-            Services.FeeObjects.FeeObjectsUpdated += GetAllSignals;
-
-            SignalsView = CollectionViewSource.GetDefaultView(AllSignals);
-            SignalsView.Filter = FilterSignals;
+            if (Services.FeeObjects is not null)
+                Services.FeeObjects.FeeObjectsUpdated += GetAllSignals;
 
             _filterDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMicroseconds(300), };
             _filterDebounceTimer.Tick += (s, e) =>
@@ -469,16 +469,27 @@ namespace VIBN_Tools.Application.VM
 
         private void GetAllSignals(object sender, FeeObjectsUpdatedEventargs e)
         {
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is not null && !dispatcher.CheckAccess())
+            {
+                dispatcher.BeginInvoke(() => GetAllSignals(sender, e));
+                return;
+            }
+
             AllSignals.Clear();
 
-            var signalsList = Services.FeeObjects.AllFeeObjects.OfType<FeeInterface>().SelectMany(x => x.Signals).ToList();
+            var signalsList = Services.FeeObjects?.AllFeeObjects?
+                .OfType<FeeInterface>()
+                .SelectMany(feeInterface => feeInterface.Signals ?? [])
+                .Where(signal => signal is not null)
+                .ToList() ?? [];
 
             foreach (var item in signalsList)
             {
                 AllSignals.Add(item);
             }
 
-            SignalsView.Refresh();
+            SignalsView?.Refresh();
         }
 
 

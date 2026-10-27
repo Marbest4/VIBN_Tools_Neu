@@ -1,4 +1,4 @@
-<LogicDefinition V="002" xsi:type="CSharpLogicDefinition" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Guid="dd3be183-7fb7-43b6-aa4a-3cba0557d5aa" LogicName="Grob_PneumaticSupply" LogicComment="" LogicProvider="fe4a121e-169b-4fb0-8004-e2e53c268b26" HasCompileErrors="false">
+<LogicDefinition V="003" xsi:type="CSharpLogicDefinition" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Guid="dd3be183-7fb7-43b6-aa4a-3cba0557d5aa" LogicName="Grob_PneumaticSupply" LogicComment="" LogicProvider="fe4a121e-169b-4fb0-8004-e2e53c268b26" HasCompileErrors="false" fe.screen-sim-Version="5.0.15.52981">
 	<ScriptText>#load "reference"
 using FS.SDK.Components;
 
@@ -128,8 +128,8 @@ else
 
 
 // drucklos
-PLC_IN_NotSwitchedOn_Ch1 = !PLC_IN_PneumaticOk_Ch1 || _faultSim_PneumaticNotSwitchedOn;
-PLC_IN_NotSwitchedOn_Ch2 = !PLC_IN_PneumaticOk_Ch2 || _faultSim_PneumaticNotSwitchedOn;
+PLC_IN_NotSwitchedOn_Ch1 = !_switchOn_Ch1 || _faultSim_PneumaticNotSwitchedOn;
+PLC_IN_NotSwitchedOn_Ch2 = !_switchOn_Ch2 || _faultSim_PneumaticNotSwitchedOn;
 
 
 
@@ -153,9 +153,9 @@ Feedback_FaultSim_Active = _faultSim_PneumaticOk || _faultSim_PneumaticNotSwitch
 
 </ScriptText>
 	<HmiDefinition>
-		<XtraSerializer version="24.1.6.0">
+		<XtraSerializer version="26.1.3.0">
 			<Items>
-				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
+				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
 					<Children>
 						<Item1 Size="650,417.5" Padding="5,5,5,5" ForegroundId="Accent3" Header="Heading" HeaderPadding="5,5,5,5" ItemKind="DiagramContainerEx" ContainerBackground="#FFFFFFFF" ContainerForeground="#FF41719C">
 							<Children>
@@ -532,7 +532,7 @@ Feedback_FaultSim_Active = _faultSim_PneumaticOk || _faultSim_PneumaticNotSwitch
 										</Item2>
 									</Children>
 								</Item2>
-								<Item3 Position="5,30" Size="510,30" TextAlignment="Left" VerticalContentAlignment="Center" FontWeight="Bold" FontSize="12" StrokeThickness="0" ForegroundId="Accent3" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" WidgetName="ValueDisplayWidget_82" WidgetBackground="#00FFFFFF" WidgetForeground="#FF41719C">
+								<Item3 Position="5,30" Size="510,30" TextAlignment="Left" VerticalContentAlignment="Center" FontWeight="Bold" FontSize="12" StrokeThickness="0" ForegroundId="Accent3" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_82" WidgetBackground="#00FFFFFF" WidgetForeground="#FF41719C">
 									<HmiBehavior>
 										<WidgetEvents />
 										<WidgetAnimations />
@@ -583,12 +583,18 @@ Feedback_FaultSim_Active = _faultSim_PneumaticOk || _faultSim_PneumaticNotSwitch
 			</Items>
 			<HmiControlState>
 				<ZoomFactor>1</ZoomFactor>
-				<ScrollPoint _x="-296" _y="-261" />
+				<ScrollPoint _x="-301" _y="-276" />
+				<FitToWindowSizeEnabled>false</FitToWindowSizeEnabled>
+				<HasRuntimeViewport>false</HasRuntimeViewport>
+				<RuntimeViewportX>0</RuntimeViewportX>
+				<RuntimeViewportY>0</RuntimeViewportY>
+				<RuntimeViewportWidth>0</RuntimeViewportWidth>
+				<RuntimeViewportHeight>0</RuntimeViewportHeight>
 			</HmiControlState>
 		</XtraSerializer>
 	</HmiDefinition>
 	<HmiDefined>true</HmiDefined>
-	<Version Major="1" Minor="8" Patch="0" />
+	<Version Major="1" Minor="8" Patch="1" />
 	<HasDependencyPath>false</HasDependencyPath>
 	<HasCompileErrors>false</HasCompileErrors>
 	<InputSlots>

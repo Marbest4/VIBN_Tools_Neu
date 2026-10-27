@@ -720,6 +720,7 @@ public sealed class SpecialDevicePageVM : MvvmBase, IAsyncDisposable
         IsBusyCreateDevices = true;
         var created = new List<SpecialDevice>();
         var alreadyPresent = new List<SpecialDevice>();
+        var updated = new List<SpecialDevice>();
         var failures = new List<string>();
         try
         {
@@ -735,12 +736,24 @@ public sealed class SpecialDevicePageVM : MvvmBase, IAsyncDisposable
                     $"Gerät {index + 1} von {pendingDevices.Length}: {device.DevicePrefix} wird geprüft …";
                 try
                 {
-                    if (await device.ExistsInFeeAsync())
+                    var existing = await device.SynchronizeExistingAsync();
+                    if (existing.State == ExistingSpecialDeviceState.Unchanged)
                     {
                         alreadyPresent.Add(device);
                         _log.Information(
                             "SpecialDevices2FEE",
-                            $"{device.DevicePrefix}: gleichnamiger Geräte-BasicFrame ist bereits vorhanden; Warteschlangeneintrag wird entfernt.");
+                            $"{device.DevicePrefix}: {existing.Message} Warteschlangeneintrag wird entfernt.");
+                    }
+                    else if (existing.State == ExistingSpecialDeviceState.AddressesUpdated)
+                    {
+                        updated.Add(device);
+                        _log.Information("SpecialDevices2FEE", $"{device.DevicePrefix}: {existing.Message}");
+                        if (!string.IsNullOrWhiteSpace(device.LastCreationWarning))
+                            _log.Warning("SpecialDevices2FEE", $"{device.DevicePrefix}: {device.LastCreationWarning}");
+                    }
+                    else if (existing.State == ExistingSpecialDeviceState.RequiresReview)
+                    {
+                        failures.Add($"{device.DevicePrefix}: {existing.Message}");
                     }
                     else if (await device.CreateAsync())
                     {
@@ -768,13 +781,15 @@ public sealed class SpecialDevicePageVM : MvvmBase, IAsyncDisposable
                     break;
             }
 
-            foreach (var device in created.Concat(alreadyPresent))
+            foreach (var device in created.Concat(alreadyPresent).Concat(updated))
                 SpecialDevices.Remove(device);
             var provenanceWarnings = created.Count(device => !string.IsNullOrWhiteSpace(device.LastCreationWarning));
             StatusText = failures.Count == 0
-                ? $"{created.Count} Special Device(s) wurden erstellt; {alreadyPresent.Count} bereits vorhandene aus der Warteschlange entfernt." +
+                ? $"{created.Count} Special Device(s) wurden erstellt; {alreadyPresent.Count} bereits vorhandene und " +
+                  $"{updated.Count} adressaktualisierte aus der Warteschlange entfernt." +
                   (provenanceWarnings > 0 ? $" {provenanceWarnings} Provenienzhinweis(e) stehen im Protokoll." : string.Empty)
-                : $"{created.Count} Gerät(e) erstellt, {alreadyPresent.Count} bereits vorhanden; {failures.Count} Gerät(e) bleiben zur Prüfung in der Warteschlange.";
+                : $"{created.Count} Gerät(e) erstellt, {alreadyPresent.Count} bereits vorhanden, {updated.Count} aktualisiert; " +
+                  $"{failures.Count} Gerät(e) bleiben zur Prüfung in der Warteschlange.";
             DeviceGenerationProgressText = failures.Count == 0
                 ? "FEE-Erzeugung abgeschlossen."
                 : "FEE-Erzeugung mit Fehler beendet; Details stehen im Status und Protokoll.";

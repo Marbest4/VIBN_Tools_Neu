@@ -24,6 +24,9 @@ namespace VIBN_Tools.Application.VM
         public double NameColumnWidth { get; set; }
         public double IssueColumnWidth { get; set; }
 
+        private int _updateProgress;
+        public int UpdateProgress { get => _updateProgress; private set { _updateProgress = value; OnPropertyChanged(); } }
+
         private string _updateStatusText = "FEE-Objekte noch nicht aktualisiert.";
         public string UpdateStatusText
         {
@@ -73,6 +76,23 @@ namespace VIBN_Tools.Application.VM
         }
 
 
+        public IReadOnlyList<string> ColorFilterOptions { get; } = ["Alle", "Keine Fehler", "Meldung", "Fehler"];
+        private int _selectedColorFilterIndex;
+        public int SelectedColorFilterIndex
+        {
+            get => _selectedColorFilterIndex;
+            set
+            {
+                _selectedColorFilterIndex = Math.Clamp(value, 0, 3);
+                OnPropertyChanged();
+                ApplyFilters();
+            }
+        }
+        private void ApplyFilters()
+        {
+            foreach (var group in ValidationGroups)
+                group.ApplyFilter(FilterText, (ValidationColorFilter)SelectedColorFilterIndex);
+        }
         private string _filterText;
         public string FilterText
         {
@@ -165,8 +185,7 @@ namespace VIBN_Tools.Application.VM
             {
                 _debounceTimer.Stop();
 
-                foreach(var group in ValidationGroups)
-                    group.ApplyFilter(FilterText);
+                ApplyFilters();
             };
         }
 
@@ -182,14 +201,22 @@ namespace VIBN_Tools.Application.VM
                 return;
 
             IsBusyUpdatingFeeData = true;
+            UpdateProgress = 0;
+            using var progress = FeeReadProgressScope.Begin(new Progress<FeeReadProgress>(update =>
+            { if (IsBusyUpdatingFeeData) { UpdateStatusText = update.Text; UpdateProgress = update.Percent; } }));
             UpdateStatusText = "FEE-Objekte und Validierungsdaten werden aktualisiert …";
             try
             {
+                var connectionRevision = Services.Connection.BeginModelValidationUpdate();
+                ValidationGroups.Clear();
+                SelectedTab = null;
                 await Services.FeeObjects.UpdateFeeDataAsync();
+                if (!Services.Connection.CompleteModelValidationUpdate(connectionRevision))
+                    UpdateStatusText = "Die FEE-Verbindung hat sich während Update Objects geändert. Bitte erneut ausführen.";
             }
             catch (Exception exception)
             {
-                UpdateStatusText = "Update Objects ist fehlgeschlagen. Details stehen im Protokoll.";
+                UpdateStatusText = $"Update Objects ist fehlgeschlagen: {exception.GetBaseException().Message}. Details stehen im Protokoll.";
                 ApplicationLogService.Instance.Error("Model Validation", UpdateStatusText, exception);
             }
             finally
@@ -208,10 +235,17 @@ namespace VIBN_Tools.Application.VM
 
         private void OnFeeObjectsUpdated(object sender, FeeObjectsUpdatedEventargs e)
         {
-            var allFeeObjects = Services.FeeObjects.AllFeeObjects;
+            var allFeeObjects = Services.FeeObjects.AllFeeObjects?
+                .Where(item => !FeeSceneObjectReadPolicy.IsIgnoredObject(item))
+                .ToArray();
 
-            if (allFeeObjects == null || allFeeObjects.Count == 0)
+            if (allFeeObjects == null || allFeeObjects.Length == 0)
+            {
+                ValidationGroups.Clear();
+                SelectedTab = null;
+                UpdateStatusText = "Das aktuelle FEE-Projekt enthält keine auswertbaren Objekte.";
                 return;
+            }
 
             // Store old tab 
             var oldTabName = SelectedTabName;
@@ -257,19 +291,19 @@ namespace VIBN_Tools.Application.VM
                         GroupName = def.GroupName,
                     };
 
-                    group.ApplyFilter(FilterText);
+                    group.ApplyFilter(FilterText, (ValidationColorFilter)SelectedColorFilterIndex);
 
                     ValidationGroups.Add(group);
                 }
             }
 
             // Add marks group
-            var groupMarks = new ValidationGroupViewModel(new ObservableCollection<FeeAbstractObject>(allFeeObjects.Where(x => x is FeePickAndPlace || x is FeeDecoration || x is FeeSensor || (x is FeeDetectionFlag flag && flag.IsWorkpiece))))
+            var groupMarks = new ValidationGroupViewModel(new ObservableCollection<FeeAbstractObject>(allFeeObjects.Where(x => x is FeePickAndPlace || x is FeeSensor || (x is FeeDetectionFlag flag && flag.IsWorkpiece))))
             {
                 GroupName = "Marks",
                 IsMarksGroup = true,
             };
-            groupMarks.ApplyFilter(FilterText);
+            groupMarks.ApplyFilter(FilterText, (ValidationColorFilter)SelectedColorFilterIndex);
             ValidationGroups.Add(groupMarks);
 
 
@@ -281,7 +315,8 @@ namespace VIBN_Tools.Application.VM
             CalculateColumnWidths();
 
             IsBusyUpdatingFeeData = false;
-            UpdateStatusText = $"{allFeeObjects.Count} FEE-Objekte in {e.ElapsedTime.TotalSeconds:F1} s aktualisiert.";
+            UpdateStatusText = $"{allFeeObjects.Length} FEE-Objekte in {e.ElapsedTime.TotalSeconds:F1} s aktualisiert " +
+                               $"(FEE lesen {e.SnapshotReadTime.TotalSeconds:F1} s, prüfen {e.ValidationTime.TotalSeconds:F1} s).";
             ApplicationLogService.Instance.Information("Model Validation", UpdateStatusText);
         }
 
@@ -296,6 +331,7 @@ namespace VIBN_Tools.Application.VM
                     issue.IsAcknowledged = true;
                     feeObj.NotifyIssueStateChanged();
                 }
+                ApplyFilters();
             }
         }
 

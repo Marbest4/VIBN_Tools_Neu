@@ -1,4 +1,4 @@
-<LogicDefinition V="002" xsi:type="CSharpLogicDefinition" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Guid="abced01b-0d20-4d2c-b5df-ff86f6532b58" LogicName="Grob_Stop" LogicComment="" LogicProvider="fe4a121e-169b-4fb0-8004-e2e53c268b26" HasCompileErrors="false">
+<LogicDefinition V="003" xsi:type="CSharpLogicDefinition" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Guid="abced01b-0d20-4d2c-b5df-ff86f6532b58" LogicName="Grob_Stop" LogicComment="" LogicProvider="fe4a121e-169b-4fb0-8004-e2e53c268b26" HasCompileErrors="false" fe.screen-sim-Version="5.0.15.52981">
 	<ScriptText>#load "reference"
 using FS.SDK.Components;
 
@@ -17,6 +17,7 @@ using FS.SDK.Components;
 //    23.02.2026       1.9.18         Greif            collisionDelayTimer überarbeitet
 //    19.03.2026       1.10.0         Greif            Feedback HMI Aktiv integriert
 //    19.03.2026       1.12.2         Egg              Integration Tool und Fault Sim
+//    19.03.2026       1.13.2         Egg              Ansteuerung aussetzen, z.B. über Bandlaufrichtung
 //
 //============================================================================================================
 //
@@ -101,12 +102,23 @@ else
     _enableSpringReset = true;
 }
 
+// Use Active by Movement
+if( (slotComponent.VariableAssignments.Where(x =&gt; x.SlotName == "SIM_ActivateByMovement" &amp;&amp; x.AssignedGuid != Guid.Empty).ToList().Count &gt; 0))
+{
+    _useActivateByMovement = true;
+}
+else
+{
+    _useActivateByMovement = false;
+}
+
 #endregion
 
 #region Ausgänge setzen
 //============================================================================================================
 // A U S G Ä N G E    S E T Z E N 
 //============================================================================================================
+
 
 // Spring Reset
 if(_enableSpringReset)
@@ -115,7 +127,7 @@ if(_enableSpringReset)
     {
         PLC_IN_Opened = !_faultSim_Opened;
         PLC_IN_Closed = false;
-        SIM_Collision = false;
+        _collision = false;
         _timerCollisionDelay = 0;
         
     }
@@ -128,7 +140,7 @@ if(_enableSpringReset)
         _timerCollisionDelay += SceneObject.DeltaTime;        
         if(_timerCollisionDelay &gt; _collisionDelay_sec)
         {
-            SIM_Collision = !_faultSim_Closed;
+            _collision = !_faultSim_Closed;
             //collisionDelayTimer = 0;
         }  
     }
@@ -141,18 +153,18 @@ else if(!_enableSpringReset)
     {
         PLC_IN_Opened = !_faultSim_Opened;
         PLC_IN_Closed = false;
-        SIM_Collision = false;
+        _collision = false;
         
     }
     else if (_close)
     {
         PLC_IN_Opened = false;
         PLC_IN_Closed = !_faultSim_Closed;
-        SIM_Collision = !_faultSim_Closed;               
+        _collision = !_faultSim_Closed;               
     }
 }
 
-SIM_CollisionStatus = SIM_Collision;
+
 
 #endregion
 
@@ -161,15 +173,23 @@ SIM_CollisionStatus = SIM_Collision;
 // F E E D B A C K    
 //============================================================================================================
 
+if(!SIM_ActivateByMovement &amp;&amp; _useActivateByMovement)
+{
+    _collision = false;
+}
+
+SIM_Collision = _collision;
+SIM_CollisionStatus = SIM_Collision;
+
 Feedback_HMI_Active = _hmi_hmiActive;
 Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 
 
 #endregion</ScriptText>
 	<HmiDefinition>
-		<XtraSerializer version="24.1.6.0">
+		<XtraSerializer version="26.1.3.0">
 			<Items>
-				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
+				<Item1 ItemKind="DiagramRoot" CanvasSizeMode="Fill" ShowPageBreaks="false" SelectedStencils="feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi, feeHmi">
 					<Children>
 						<Item1 Size="655,462.5" Padding="5,5,5,5" ForegroundId="Accent3" Header="Heading" HeaderPadding="5,5,5,5" ItemKind="DiagramContainerEx" ContainerBackground="#FFFFFFFF" ContainerForeground="#FF41719C">
 							<Children>
@@ -184,7 +204,7 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 									<Children>
 										<Item1 Position="0,175" Size="635,80" Padding="5,5,5,5" ForegroundId="Accent3" Header="Heading" HeaderPadding="5,5,5,5" ItemKind="DiagramContainerEx" ContainerBackground="#FFFFFFFF" ContainerForeground="#FF41719C">
 											<Children>
-												<Item1 Position="265,30" Size="75,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" MaskType="Numeric" WidgetName="ValueDisplayWidget_1951" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
+												<Item1 Position="265,30" Size="75,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_1951" WidgetBackground="#00FFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations>
@@ -256,7 +276,7 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item6>
-												<Item7 Position="415,30" Size="75,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" WidgetName="TextInputWidget_531" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item7 Position="415,30" Size="75,30" VerticalContentAlignment="Center" FontSize="10" StrokeThickness="1" ForegroundId="Black" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextInputWidget" MaskType="Numeric" UseDefaultStyle="false" WidgetName="TextInputWidget_531" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents />
 														<WidgetAnimations />
@@ -305,7 +325,7 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item1>
-												<Item2 Position="265,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Close" WidgetName="TextButtonWidget_671_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item2 Position="265,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Close" UseDefaultStyle="false" WidgetName="TextButtonWidget_671_2" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents>
 															<WidgetEvent>
@@ -367,7 +387,7 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 														<WidgetSlots />
 													</HmiBehavior>
 												</Item2>
-												<Item3 Position="415,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Open" WidgetName="TextButtonWidget_671_1_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
+												<Item3 Position="415,30" Size="100,30" VerticalContentAlignment="Center" BackgroundId="White" BorderBrush="#FF000000" ItemKind="TextButtonWidget" Text="Open" UseDefaultStyle="false" WidgetName="TextButtonWidget_671_1_1" WidgetBackground="#FFFFFFFF" WidgetForeground="#FF000000">
 													<HmiBehavior>
 														<WidgetEvents>
 															<WidgetEvent>
@@ -707,7 +727,7 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 										</Item3>
 									</Children>
 								</Item2>
-								<Item3 Position="5,30" Size="510,30" TextAlignment="Left" VerticalContentAlignment="Center" FontWeight="Bold" FontSize="12" StrokeThickness="0" ForegroundId="Accent3" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" WidgetName="ValueDisplayWidget_82" WidgetBackground="#00FFFFFF" WidgetForeground="#FF41719C">
+								<Item3 Position="5,30" Size="510,30" TextAlignment="Left" VerticalContentAlignment="Center" FontWeight="Bold" FontSize="12" StrokeThickness="0" ForegroundId="Accent3" BorderBrush="#FF000000" ItemKind="ValueDisplayWidget" UseDefaultStyle="false" WidgetName="ValueDisplayWidget_82" WidgetBackground="#00FFFFFF" WidgetForeground="#FF41719C">
 									<HmiBehavior>
 										<WidgetEvents />
 										<WidgetAnimations />
@@ -758,12 +778,18 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 			</Items>
 			<HmiControlState>
 				<ZoomFactor>1</ZoomFactor>
-				<ScrollPoint _x="-65" _y="-206" />
+				<ScrollPoint _x="-170" _y="-221" />
+				<FitToWindowSizeEnabled>false</FitToWindowSizeEnabled>
+				<HasRuntimeViewport>false</HasRuntimeViewport>
+				<RuntimeViewportX>0</RuntimeViewportX>
+				<RuntimeViewportY>0</RuntimeViewportY>
+				<RuntimeViewportWidth>0</RuntimeViewportWidth>
+				<RuntimeViewportHeight>0</RuntimeViewportHeight>
 			</HmiControlState>
 		</XtraSerializer>
 	</HmiDefinition>
 	<HmiDefined>true</HmiDefined>
-	<Version Major="1" Minor="12" Patch="2" />
+	<Version Major="1" Minor="13" Patch="2" />
 	<HasDependencyPath>false</HasDependencyPath>
 	<HasCompileErrors>false</HasCompileErrors>
 	<InputSlots>
@@ -780,10 +806,16 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 			<Order>1</Order>
 		</LogicSlot>
 		<LogicSlot>
+			<Name>SIM_ActivateByMovement</Name>
+			<IOSlotType>Bool</IOSlotType>
+			<IOMode>Read</IOMode>
+			<Order>2</Order>
+		</LogicSlot>
+		<LogicSlot>
 			<Name>PAR_CollisionDelay_sec</Name>
 			<IOSlotType>Real</IOSlotType>
 			<IOMode>Read</IOMode>
-			<Order>2</Order>
+			<Order>3</Order>
 		</LogicSlot>
 	</InputSlots>
 	<OutputSlots>
@@ -791,37 +823,37 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 			<Name>PLC_IN_Opened</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
-			<Order>3</Order>
+			<Order>4</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>PLC_IN_Closed</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
-			<Order>4</Order>
+			<Order>5</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>SIM_Collision</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
-			<Order>5</Order>
+			<Order>6</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>SIM_CollisionStatus</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
-			<Order>6</Order>
+			<Order>7</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>Feedback_HMI_Active</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
-			<Order>7</Order>
+			<Order>8</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>Feedback_FaultSim_Active</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>Write</IOMode>
-			<Order>8</Order>
+			<Order>9</Order>
 		</LogicSlot>
 	</OutputSlots>
 	<LocalSlots>
@@ -829,85 +861,97 @@ Feedback_FaultSim_Active = _faultSim_Opened || _faultSim_Closed;
 			<Name>_enableSpringReset</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>9</Order>
+			<Order>10</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_timerCollisionDelay</Name>
 			<IOSlotType>Real</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>10</Order>
+			<Order>11</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_open</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>11</Order>
+			<Order>12</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_close</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>12</Order>
+			<Order>13</Order>
+		</LogicSlot>
+		<LogicSlot>
+			<Name>_collision</Name>
+			<IOSlotType>Bool</IOSlotType>
+			<IOMode>None</IOMode>
+			<Order>14</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_collisionDelay_sec</Name>
 			<IOSlotType>Real</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>13</Order>
-		</LogicSlot>
-		<LogicSlot>
-			<Name>_hmi_name</Name>
-			<IOSlotType>String</IOSlotType>
-			<IOMode>None</IOMode>
-			<Order>14</Order>
-		</LogicSlot>
-		<LogicSlot>
-			<Name>_hmi_hmiActive</Name>
-			<IOSlotType>Bool</IOSlotType>
-			<IOMode>None</IOMode>
 			<Order>15</Order>
 		</LogicSlot>
 		<LogicSlot>
-			<Name>_hmi_open</Name>
+			<Name>_useActivateByMovement</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
 			<Order>16</Order>
 		</LogicSlot>
 		<LogicSlot>
-			<Name>_hmi_close</Name>
-			<IOSlotType>Bool</IOSlotType>
+			<Name>_hmi_name</Name>
+			<IOSlotType>String</IOSlotType>
 			<IOMode>None</IOMode>
 			<Order>17</Order>
 		</LogicSlot>
 		<LogicSlot>
-			<Name>_hmi_collisionDelay_sec</Name>
-			<IOSlotType>Real</IOSlotType>
+			<Name>_hmi_hmiActive</Name>
+			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
 			<Order>18</Order>
 		</LogicSlot>
 		<LogicSlot>
-			<Name>_hmi_timerCollisionDelay</Name>
-			<IOSlotType>Real</IOSlotType>
+			<Name>_hmi_open</Name>
+			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
 			<Order>19</Order>
 		</LogicSlot>
 		<LogicSlot>
-			<Name>_hmi_init</Name>
+			<Name>_hmi_close</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
 			<Order>20</Order>
 		</LogicSlot>
 		<LogicSlot>
+			<Name>_hmi_collisionDelay_sec</Name>
+			<IOSlotType>Real</IOSlotType>
+			<IOMode>None</IOMode>
+			<Order>21</Order>
+		</LogicSlot>
+		<LogicSlot>
+			<Name>_hmi_timerCollisionDelay</Name>
+			<IOSlotType>Real</IOSlotType>
+			<IOMode>None</IOMode>
+			<Order>22</Order>
+		</LogicSlot>
+		<LogicSlot>
+			<Name>_hmi_init</Name>
+			<IOSlotType>Bool</IOSlotType>
+			<IOMode>None</IOMode>
+			<Order>23</Order>
+		</LogicSlot>
+		<LogicSlot>
 			<Name>_faultSim_Opened</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>21</Order>
+			<Order>24</Order>
 		</LogicSlot>
 		<LogicSlot>
 			<Name>_faultSim_Closed</Name>
 			<IOSlotType>Bool</IOSlotType>
 			<IOMode>None</IOMode>
-			<Order>22</Order>
+			<Order>25</Order>
 		</LogicSlot>
 	</LocalSlots>
 </LogicDefinition>

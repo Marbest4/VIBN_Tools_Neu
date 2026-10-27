@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../ContainerGeneration/Models/ContainerFileXml.cs" Link="ContainerFileXml.cs"/>
+    <Compile Include="../../ContainerGeneration/Models/ContainerFileComparison.cs" Link="ContainerFileComparison.cs"/>
+    <Compile Include="../../ContainerGeneration/BusinessLogic/ContainerData/ContainerFeeObject.cs" Link="ContainerFeeObject.cs"/>
+    <Compile Include="../../GlobalClasses/FeeObjects/FeeMutationScope.cs" Link="FeeMutationScope.cs"/>
+    <Content Include="../../ContainerGeneration/XmlSchemas/CAAResult.xsd" Link="CAAResult.xsd" CopyToOutputDirectory="PreserveNewest"/>
+  </ItemGroup>
+</Project>

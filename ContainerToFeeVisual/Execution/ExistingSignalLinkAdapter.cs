@@ -8,151 +8,176 @@ namespace VIBN_Tools.ContainerToFeeVisual;
 
 /// <summary>
 /// Links variables from explicitly selected existing interfaces to already
-/// existing container objects. It never creates FEE objects or variables.
+/// existing container objects. Missing technical routing helpers may be created;
+/// existing variables and primary objects are preserved.
 /// </summary>
 internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
 {
-    public async Task<VisualExecutionResult> ExecuteAsync(
+    internal IReadOnlyList<VisualFeeSignalLink> KnownLinks { get; private set; } = [];
+    internal IReadOnlyList<string> ReadSignalGuids { get; private set; } = [];
+    internal IReadOnlyList<(FeeAbstractObject Object, string ContainerId)> CreatedObjects { get; private set; } = [];
+    public Task<VisualExecutionResult> ExecuteAsync(
         VisualPlan plan,
         IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
         IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,
-        CancellationToken cancellationToken)
+        IReadOnlyList<FeeAbstractObject> sceneObjects,
+        IReadOnlyList<VisualFeeContainerObject> containerObjects,
+        FeeAbstractObject? helperParent,
+        bool helperParentIsAmbiguous,
+        CancellationToken cancellationToken,
+        IReadOnlyList<VisualFeeObjectLink>? liveLinks = null) => FeeMutationScope.RunAsync(
+        () => ExecuteCoreAsync(plan, runtimeObjects, runtimeInterfaces, sceneObjects, containerObjects,
+            helperParent, helperParentIsAmbiguous, cancellationToken, liveLinks), cancellationToken);
+
+    private async Task<VisualExecutionResult> ExecuteCoreAsync(
+        VisualPlan plan,
+        IReadOnlyDictionary<string, FeeAbstractObject> runtimeObjects,
+        IReadOnlyDictionary<string, FeeInterface> runtimeInterfaces,
+        IReadOnlyList<FeeAbstractObject> sceneObjects,
+        IReadOnlyList<VisualFeeContainerObject> containerObjects,
+        FeeAbstractObject? helperParent,
+        bool helperParentIsAmbiguous,
+        CancellationToken cancellationToken,
+        IReadOnlyList<VisualFeeObjectLink>? liveLinks)
     {
-        var selectedInterfaceGuids = plan.ExistingInterfaceSelections
-            .Select(item => item.InterfaceGuid)
+        KnownLinks = [];
+        ReadSignalGuids = [];
+        CreatedObjects = [];
+        var selectedIds = RuntimeVisualPlanBinder.SelectedContainerIds(plan);
+        if (selectedIds.Count == 0)
+            return new VisualExecutionResult(true, "Keine Container ausgewählt; keine Signalverknüpfungen geändert.", []);
+        var selectedInterfaceGuids = plan.ExistingInterfaceSelections.Select(item => item.InterfaceGuid)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var selectedInterfaces = runtimeInterfaces.Values
-            .Where(item => selectedInterfaceGuids.Contains(item.Guid.ToString("D")))
-            .ToArray();
+            .Where(item => selectedInterfaceGuids.Contains(item.GuidString)).ToArray();
         if (selectedInterfaces.Length == 0)
             return Failure("Bitte mindestens ein vorhandenes Interface auswählen und FEE aktualisieren.", "SIGNAL_LINK_INTERFACE_REQUIRED");
-
         cancellationToken.ThrowIfCancellationRequested();
-        var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects);
-        if (!binding.Success)
-            return new VisualExecutionResult(false, binding.Issue!.Message, [binding.Issue]);
-
-        var selectedBindings = binding.Containers
-            .Where(item => plan.IsGenerationSelected(item.PlanNode.Id))
-            .ToArray();
-        var requests = selectedBindings
-            .SelectMany(item => item.RuntimeContainer.EnumerateAssignedSignals().Select(signal =>
-                new SignalResolutionRequest(item.PlanNode.Id, item.PlanNode.Name, signal)))
-            .Concat(binding.UnknownSignals.Select(signal =>
-                new SignalResolutionRequest("unknown-signals", "Unbekannte Signale", signal)))
-            .ToArray();
+        var binding = RuntimeVisualPlanBinder.Bind(plan, runtimeObjects, includedContainerIds: selectedIds, bindSimObjects: false);
+        if (!binding.Success) return new VisualExecutionResult(false, binding.Issue!.Message, [binding.Issue]);
+        var usedNodes = new HashSet<string>(StringComparer.Ordinal);
+        var requests = binding.Containers.SelectMany(item => item.RuntimeContainer.EnumerateAssignedSignals().Select(signal =>
+            LegacyContainerToFeeExecutionAdapter.CreateSignalResolutionRequest(plan, item.PlanNode, signal, usedNodes))).ToArray();
         var signalPlan = SignalResolutionPlanner.Build(requests, selectedInterfaces, plan.SignalAssignments);
         if (!signalPlan.IsValid)
             return new VisualExecutionResult(false, "Signale konnten nicht eindeutig aufgelöst werden.", signalPlan.Issues);
         if (signalPlan.MissingSignals.Count > 0)
-        {
-            var missingIssues = signalPlan.MissingSignals.Select(missing => new VisualIssue(
-                VisualIssueSeverity.Error,
-                "EXISTING_SIGNAL_MISSING",
-                $"Signal '{missing.Signal.Tag}' ist in den ausgewählten Interfaces nicht vorhanden. Es wurde nichts erzeugt.",
-                missing.ContainerId)).ToArray();
-            return new VisualExecutionResult(false, "Nicht alle Signale sind in den ausgewählten Interfaces vorhanden.", missingIssues);
-        }
-
+            return new VisualExecutionResult(false, "Nicht alle ausgewählten Signale sind in den Interfaces vorhanden.",
+                signalPlan.MissingSignals.Select(missing => new VisualIssue(VisualIssueSeverity.Error, "EXISTING_SIGNAL_MISSING",
+                    $"Signal '{missing.Signal.Tag}' ist in den ausgewählten Interfaces nicht vorhanden. Es wurde nichts erzeugt.",
+                    missing.NodeId ?? missing.ContainerId)).ToArray());
         signalPlan.ApplyExistingBindings();
-        var logicLookup = await ReadExistingLogicsAsync(cancellationToken);
-        var cabinetLookup = await ReadExistingCabinetElementsAsync(cancellationToken);
+        var liveSignals = signalPlan.ExistingBindings.Select(item => new VisualFeeSignal(item.ExistingSignal.GuidString,
+            item.ExistingInterface.GuidString, item.ExistingInterface.Name ?? "", item.ExistingSignal.Tag ?? "",
+            item.ExistingSignal.Address ?? "", item.ExistingSignal.Path ?? "", item.ExistingSignal.IOTypeString ?? "", item.ExistingSignal.UsageString ?? ""));
+        var variableGuids = runtimeInterfaces.Values.SelectMany(item => item.Signals ?? []).Select(item => item.Guid).ToHashSet();
+        var discovery = await new FeeSignalLinkDiscovery(logger).DiscoverAsync(liveSignals, cancellationToken, sceneObjects,
+            liveLinks, variableGuids);
+        if (discovery.FailedSignalCount > 0)
+            return new VisualExecutionResult(true, "Signalrouten konnten nicht vollständig gelesen werden; Reparatur mit Warnung übersprungen.",
+                [new VisualIssue(VisualIssueSeverity.Warning, "SIGNAL_LINK_READ_INCOMPLETE",
+                    "FEE aktualisieren und erneut versuchen. Es wurden keine bestehenden Routen verändert oder Hilfsobjekte erzeugt.")]);
+        var linker = new ExistingSignalEndpointLinker(discovery.Links, sceneObjects, containerObjects, variableGuids, logger);
+        ReadSignalGuids = signalPlan.ExistingBindings.Select(item => item.ExistingSignal.GuidString).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var logicResolver = new ExistingContainerLogicResolver(sceneObjects);
+        var requestsByContainer = requests.ToLookup(request => request.ContainerId, StringComparer.Ordinal);
         var issues = new List<VisualIssue>();
-        var linkedContainers = 0;
-        foreach (var item in selectedBindings)
+        foreach (var bound in binding.Containers)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var container = item.RuntimeContainer;
-            if (container is ILogicOwner or ILogicSimObjectOwner)
-            {
-                var expectedLogic = plan.Nodes.FirstOrDefault(node =>
-                    node.ContainerId == item.PlanNode.Id && node.Kind == VisualNodeKind.Logic)?.Name;
-                var candidates = logicLookup.Where(logic =>
-                        string.Equals(logic.Name, container.ComponentName, StringComparison.OrdinalIgnoreCase) &&
-                        (string.IsNullOrWhiteSpace(expectedLogic) ||
-                         string.Equals(logic.LogicDefinitionName, expectedLogic, StringComparison.OrdinalIgnoreCase)))
-                    .ToArray();
-                if (candidates.Length != 1)
-                {
-                    issues.Add(new VisualIssue(
-                        VisualIssueSeverity.Error,
-                        candidates.Length == 0 ? "EXISTING_LOGIC_MISSING" : "EXISTING_LOGIC_AMBIGUOUS",
-                        candidates.Length == 0
-                            ? $"Vorhandene Logik '{container.ComponentName}' ({expectedLogic}) wurde nicht gefunden."
-                            : $"Logik '{container.ComponentName}' ({expectedLogic}) ist {candidates.Length}-mal vorhanden.",
-                        item.PlanNode.Id));
-                    continue;
-                }
-
-                if (!ContainerExistingObjectReuse.TryAssignLogic(container, candidates[0]))
-                {
-                    issues.Add(new VisualIssue(
-                        VisualIssueSeverity.Error,
-                        "EXISTING_LOGIC_BIND_FAILED",
-                        $"Vorhandene Logik '{container.ComponentName}' konnte dem Container nicht zugeordnet werden.",
-                        item.PlanNode.Id));
-                    continue;
-                }
-            }
-            else if (container is ICabinetElementOwner)
-            {
-                var expectedType = ContainerExistingObjectReuse.GetExpectedCabinetElementType(container);
-                var candidates = cabinetLookup.Where(element =>
-                        string.Equals(element.Name, container.ComponentName, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(element.ElementType, expectedType, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                if (candidates.Length != 1 ||
-                    !ContainerExistingObjectReuse.TryAssignCabinetElement(container, candidates[0]))
-                {
-                    issues.Add(new VisualIssue(
-                        VisualIssueSeverity.Error,
-                        candidates.Length == 0 ? "EXISTING_CABINET_ELEMENT_MISSING" : "EXISTING_CABINET_ELEMENT_AMBIGUOUS",
-                        candidates.Length == 0
-                            ? $"Vorhandenes CabinetElement '{container.ComponentName}' ({expectedType}) wurde nicht gefunden."
-                            : $"CabinetElement '{container.ComponentName}' ({expectedType}) ist nicht eindeutig.",
-                        item.PlanNode.Id));
-                    continue;
-                }
-            }
-
+            var containerRequests = requestsByContainer[bound.PlanNode.Id].ToArray();
+            if (containerRequests.Length == 0) continue;
             try
             {
-                switch (container)
+                IReadOnlyList<FeeAbstractObject> targets;
+                var container = bound.RuntimeContainer;
+                if (container is ContainerToFee.General.SimpleNot_Container or ContainerToFee.General.SimpleMove_Container)
                 {
-                    case ILogicSimObjectOwner full:
-                        await full.AssignSignalsAsync(selectedInterfaces[0]);
-                        break;
-                    case ILogicOwner logic:
-                        await logic.AssignSignalsAsync(selectedInterfaces[0]);
-                        break;
-                    case ISimObjectOwner simObject:
-                        await simObject.AssignSignalsAsync(selectedInterfaces[0]);
-                        break;
-                    default:
-                        // Known signal-only containers (SensorX) require no
-                        // object-side slot assignment.
-                        break;
+                    var helper = await linker.ResolvePrimaryHelperAsync(bound, containerRequests, helperParent,
+                        helperParentIsAmbiguous, issues, cancellationToken);
+                    if (helper is null) continue;
+                    targets = [helper];
                 }
-                linkedContainers++;
+                else if (container is ILogicOwner or ILogicSimObjectOwner)
+                {
+                    var assigned = plan.Assignments.Where(assignment => plan.FindTarget(assignment.TargetId)?.ContainerId == bound.PlanNode.Id)
+                        .Select(assignment => runtimeObjects.GetValueOrDefault(assignment.FeeObjectId))
+                        .Where(item => item is not null).Cast<FeeAbstractObject>();
+                    var matches = logicResolver.Find(bound.PlanNode, assigned, liveLinks,
+                        ExistingContainerLogicResolver.ExplicitAssignment(plan, bound.PlanNode.Id, runtimeObjects));
+                    if (matches.Count != 1)
+                    {
+                        issues.Add(new VisualIssue(VisualIssueSeverity.Error, "EXISTING_LOGIC_NOT_UNIQUE",
+                            $"Logik '{container.ComponentName}' fehlt oder ist nicht eindeutig; keine Signalrouten geändert.", bound.PlanNode.Id));
+                        continue;
+                    }
+                    targets = matches;
+                }
+                else if (container is ICabinetElementOwner)
+                {
+                    var matches = ContainerExistingObjectReuse.FindCabinetElements(container, sceneObjects.OfType<FeeCabinetElement>());
+                    if (matches.Length != 1)
+                    {
+                        issues.Add(new VisualIssue(VisualIssueSeverity.Error, "EXISTING_CABINET_ELEMENT_NOT_UNIQUE",
+                            $"CabinetElement '{container.ComponentName}' fehlt oder ist nicht eindeutig; keine Signalrouten geändert.", bound.PlanNode.Id));
+                        continue;
+                    }
+                    targets = matches;
+                }
+                else if (container is ISimObjectFindOrSelect selectable)
+                {
+                    var issue = BindSignalOwner(plan, bound.PlanNode, selectable, runtimeObjects);
+                    if (issue is not null) { issues.Add(issue); continue; }
+                    targets = selectable.GetSimObjectTargets().SelectMany(target => target.GetObjects()).DistinctBy(item => item.Guid).ToArray();
+                }
+                else continue; // SensorX has no object-side endpoint.
+                await linker.LinkAsync(bound, containerRequests, targets, issues, cancellationToken);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
+            catch (OperationCanceledException) { throw; }
+            catch (Exception exception)
             {
-                logger.Error($"Signale für '{container.ComponentName}' konnten nicht verknüpft werden.", exception);
-                issues.Add(new VisualIssue(
-                    VisualIssueSeverity.Error,
-                    "EXISTING_SIGNAL_LINK_FAILED",
-                    $"{container.ComponentName}: {exception.Message}",
-                    item.PlanNode.Id));
+                var helperFailure = bound.RuntimeContainer is ContainerToFee.General.SimpleNot_Container or ContainerToFee.General.SimpleMove_Container ||
+                    exception is NullReferenceException;
+                var severity = helperFailure ? VisualIssueSeverity.Warning : VisualIssueSeverity.Error;
+                var message = $"{bound.PlanNode.Name}: Signalreparatur übersprungen: {exception.Message}";
+                issues.Add(new VisualIssue(severity, helperFailure ? "TECHNICAL_HELPER_SKIPPED" : "EXISTING_SIGNAL_LINK_FAILED", message, bound.PlanNode.Id,
+                    containerRequests.Select(request => request.NodeId ?? request.ContainerId)
+                        .Concat(containerRequests.Select(request => request.Signal.GuidString)).Distinct(StringComparer.Ordinal).ToArray()));
+                if (helperFailure) logger.Warning(message); else logger.Error(message, exception);
             }
         }
+        KnownLinks = linker.KnownLinks;
+        CreatedObjects = linker.CreatedObjects.ToArray();
+        return new VisualExecutionResult(issues.All(issue => issue.Severity != VisualIssueSeverity.Error),
+            $"{linker.LinkedCount} fehlende Signalverknüpfung(en) ergänzt; {linker.SkippedCount} vorhandene Verknüpfung(en) übersprungen. " +
+            "Nur erforderliche technische Hilfsobjekte werden erzeugt; vorhandene Variablen bleiben erhalten.", issues);
+    }
 
-        var success = issues.All(issue => issue.Severity != VisualIssueSeverity.Error);
-        return new VisualExecutionResult(
-            success,
-            success
-                ? $"Vorhandene Signale wurden für {linkedContainers} Container verknüpft; es wurden keine FEE-Objekte erzeugt."
-                : "Einige vorhandene Signale konnten nicht verknüpft werden. Details stehen in der Validierung.",
-            issues);
+    private static VisualIssue? BindSignalOwner(VisualPlan plan, VisualNode container,
+        ISimObjectFindOrSelect owner, IReadOnlyDictionary<string, FeeAbstractObject> objects)
+    {
+        var targets = plan.Targets.Where(item => item.ContainerId == container.Id).ToArray();
+        var runtimeTargets = owner.GetSimObjectTargets().ToArray();
+        if (targets.Length != runtimeTargets.Length)
+            return new VisualIssue(VisualIssueSeverity.Error, "SIGNAL_OWNER_TARGET_MISMATCH", "Signalziel passt nicht zum Containertyp.", container.Id);
+        for (var index = 0; index < targets.Length; index++)
+        {
+            var explicitAssignments = plan.Assignments.Where(item => item.TargetId == targets[index].Id).ToArray();
+            var scopedAssignments = explicitAssignments.Where(item => objects.ContainsKey(item.FeeObjectId)).ToArray();
+            if (explicitAssignments.Length > 0 && scopedAssignments.Length == 0)
+                return new VisualIssue(VisualIssueSeverity.Warning, "SIGNAL_OWNER_OUTSIDE_SELECTED_ROOTS",
+                    $"Signalziel '{container.Name}' liegt nicht in den ausgewählten FEE-Roots; übersprungen.", container.Id);
+            var candidates = explicitAssignments.Length > 0
+                ? scopedAssignments.Select(item => objects[item.FeeObjectId]).DistinctBy(item => item.Guid).ToArray()
+                : objects.Values.Where(item => string.Equals(item.Name, container.Name, StringComparison.OrdinalIgnoreCase) &&
+                    runtimeTargets[index].AllowedType.IsInstanceOfType(item)).ToArray();
+            if (candidates.Length == 0 ||
+                !targets[index].AllowMultiSelect && candidates.Length > 1 || candidates.Any(item => !runtimeTargets[index].AllowedType.IsInstanceOfType(item)))
+                return new VisualIssue(VisualIssueSeverity.Error, "EXISTING_SIGNAL_OWNER_NOT_UNIQUE",
+                    $"Vorhandenes Signalziel '{container.Name}' ({runtimeTargets[index].AllowedType.Name}) fehlt oder ist nicht eindeutig. Einen konkreten Treffer zuordnen.", container.Id);
+            runtimeTargets[index].AssignObjects(candidates.ToList());
+        }
+        return null;
     }
 
     internal static async Task<IReadOnlyList<FeeLogic>> ReadExistingLogicsAsync(CancellationToken cancellationToken)
@@ -215,11 +240,27 @@ internal sealed class ExistingSignalLinkAdapter(IVisualPlanLogger logger)
             return [];
         var names = (await Services.ApiInstance.Object.GetPropertiesAsync(guidStrings, "Name")).ToArray();
         var definitions = (await Services.ApiInstance.Object.GetPropertiesAsync(guidStrings, "Definition")).ToArray();
+        if (names.Length != guidStrings.Length || definitions.Length != guidStrings.Length)
+            throw new InvalidOperationException("FEE lieferte unvollständige CabinetElement-Metadaten.");
+        var parents = new Dictionary<string, FeeCabinet>(StringComparer.OrdinalIgnoreCase);
+        var cabinets = (await Services.ApiInstance.Object.GetSceneObjectGuidsOfTypeAsync("Cabinet") ?? []).ToArray();
+        foreach (var batch in cabinets.Chunk(128))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            foreach (var xml in await Services.ApiInstance.Object.GetSceneObjectsAsXmlAsync(batch) ?? [])
+            {
+                var element = System.Xml.Linq.XElement.Parse(xml);
+                var parent = new FeeCabinet { GuidString = element.Attribute("Guid")?.Value ?? "", Name = element.Attribute("Name")?.Value ?? "" };
+                foreach (var child in element.Element("Children")?.Elements() ?? [])
+                    if (child.Attribute("Guid") is { } id) parents[id.Value] = parent;
+            }
+        }
         return guidStrings.Select((guid, index) => new FeeCabinetElement
         {
             Guid = Guid.Parse(guid),
             Name = Services.ApiInstance.XmlHelper.ConvertToString(names[index]),
             ElementType = Services.ApiInstance.XmlHelper.ConvertToString(definitions[index]),
+            Parent = parents.GetValueOrDefault(guid),
         }).ToArray();
     }
 

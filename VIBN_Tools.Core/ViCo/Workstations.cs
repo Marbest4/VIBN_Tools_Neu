@@ -187,7 +187,8 @@ public sealed record ViCoWorkstation(
 
 public sealed record ViCoWorkstationSnapshot(
     IReadOnlyList<ViCoWorkstation> Workstations,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    DateTimeOffset? SourceUpdatedAt = null);
 
 /// <summary>
 /// Last non-empty workstation projection that was successfully displayed. It
@@ -197,6 +198,19 @@ public sealed record ViCoWorkstationSnapshot(
 public sealed record ViCoLastActiveSnapshot(
     DateTimeOffset UpdatedAt,
     IReadOnlyList<ViCoWorkstation> Workstations);
+
+/// <summary>
+/// Shared freshness rule for the durable workstation projection. Keeping the
+/// threshold outside the WPF view model makes the boundary deterministic and
+/// reusable by the full tool and reduced clients.
+/// </summary>
+public static class ViCoLastActiveSnapshotPolicy
+{
+    public static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(30);
+
+    public static bool IsStale(DateTimeOffset updatedAt, DateTimeOffset now) =>
+        now - updatedAt > StaleAfter;
+}
 
 public interface IViCoLastActiveSnapshotStore
 {

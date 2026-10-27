@@ -17,7 +17,6 @@ namespace VIBN_Tools.ContainerToFee
 
         private static readonly Dictionary<Type, IContainerFactory> _factories;
         private static readonly CabinetContainerManager _cabinetContainerManager;
-        private static readonly SemaphoreSlim GenerationGate = new(1, 1);
 
         static ContainerToFeeService()
         {
@@ -38,6 +37,7 @@ namespace VIBN_Tools.ContainerToFee
                 {typeof(GrobStop_Container), new LogicSimObjectContainerFactory() },
 
                 {typeof(Button_Container), new SimObjectContainerFactory() },
+                {typeof(Cabinet_Container), new SimObjectContainerFactory() },
                 {typeof(Stacklight_Container), new SimObjectContainerFactory() },
                 {typeof(SimpleMove_Container), new SimObjectContainerFactory() },
                 {typeof(SimpleNot_Container), new SimObjectContainerFactory() },
@@ -60,8 +60,7 @@ namespace VIBN_Tools.ContainerToFee
             CancellationToken cancellationToken = default)
         {
             var allContainers = containers.ToList();
-            await GenerationGate.WaitAsync(cancellationToken);
-            try
+            await FeeMutationScope.RunAsync(async () =>
             {
                 var completed = 0;
                 // FEE scene mutations share one SDK connection and are not
@@ -80,11 +79,8 @@ namespace VIBN_Tools.ContainerToFee
                     completed++;
                     progress?.Invoke(completed, allContainers.Count, name);
                 }
-            }
-            finally
-            {
-                GenerationGate.Release();
-            }
+                return true;
+            }, cancellationToken);
         }
 
 
@@ -145,6 +141,7 @@ namespace VIBN_Tools.ContainerToFee
             {
                 "BeltControl" => new GrobBeltControl_Container(),
                 "Button" => new Button_Container(),
+                "Cabinet" => new Cabinet_Container(),
                 "Clamping" => new GrobClamping_Container(),
                 "Conveyor" => new GrobConveyor_Container(),
                 "Cylinder" or "FeedSafetyDoor" => new GrobCylinder_Container(),
@@ -161,8 +158,8 @@ namespace VIBN_Tools.ContainerToFee
 
                 "CabinetLamp" => new CabinetLamp_Container(),
                 "EStop" => new CabinetEStop_Container(),
-                "Fuse" => new CabinetFuse_Container(),
-                "Switch" => new CabinetSwitch_Container(),
+                "Fuse" or "CabinetFuse" => new CabinetFuse_Container(),
+                "Switch" or "CabinetSwitch" => new CabinetSwitch_Container(),
                 _ => null
             };
 

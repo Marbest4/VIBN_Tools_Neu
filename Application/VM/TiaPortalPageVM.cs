@@ -22,22 +22,29 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
     private readonly ITiaLibraryService _libraryService;
     private readonly IFolderSelectionService _folderSelection;
     private readonly IApplicationLog _log;
+    private readonly IFeeSignalCatalog _feeSignalCatalog;
+    private readonly IFeeSignalMonitor _feeSignalMonitor;
     private bool _isBusy;
     private string? _selectedVersion;
     private TiaPlcInfo? _selectedPlc;
     private string _statusText;
+    private CancellationTokenSource? _hmiTestCancellation;
 
     public TiaPortalPageVM(
         ITiaBridgeClient client,
         ITiaLibraryService libraryService,
         IFolderSelectionService folderSelection,
         IReadOnlyList<string> installedVersions,
-        IApplicationLog? log = null)
+        IApplicationLog? log = null,
+        IFeeSignalCatalog? feeSignalCatalog = null,
+        IFeeSignalMonitor? feeSignalMonitor = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _libraryService = libraryService ?? throw new ArgumentNullException(nameof(libraryService));
         _folderSelection = folderSelection ?? throw new ArgumentNullException(nameof(folderSelection));
         _log = log ?? NullApplicationLog.Instance;
+        _feeSignalCatalog = feeSignalCatalog ?? new UnavailableFeeSignalRuntime();
+        _feeSignalMonitor = feeSignalMonitor ?? new UnavailableFeeSignalRuntime();
 
         foreach (var version in installedVersions)
             InstalledVersions.Add(version);
@@ -71,6 +78,10 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         ToggleAxisExchangeInfoCommand = GetCommandBinding(() =>
             IsAxisExchangeInfoVisible = !IsAxisExchangeInfoVisible);
         CompileQualityGateCommand = GetCommandBindingAsync(CompileQualityGateAsync);
+        LoadHmiFeeSignalsCommand = GetCommandBindingAsync(LoadHmiFeeSignalsAsync);
+        ProbeHmiAdapterCommand = GetCommandBindingAsync(ProbeHmiAdapterAsync);
+        RunHmiClosedLoopCommand = GetCommandBindingAsync(RunHmiClosedLoopAsync);
+        CancelHmiClosedLoopCommand = GetCommandBinding(CancelHmiClosedLoop);
     }
 
     public ObservableCollection<string> InstalledVersions { get; } = new();
@@ -84,6 +95,10 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
     public ObservableCollection<TiaAxisSelectionRowVM> ConfiguredAxes { get; } = new();
 
     public ObservableCollection<TiaCompileMessageRowVM> CompileMessages { get; } = new();
+
+    public ObservableCollection<TiaHmiFeeSignalVM> HmiFeeSignals { get; } = new();
+
+    public ObservableCollection<HmiClosedLoopObservation> HmiTestObservations { get; } = new();
 
     public ObservableCollection<TiaAxisSelectionRowVM> Axes => FoundAxes;
 
@@ -133,14 +148,56 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
 
     public ICommand CompileQualityGateCommand { get; }
 
+    public ICommand LoadHmiFeeSignalsCommand { get; }
+
+    public ICommand ProbeHmiAdapterCommand { get; }
+
+    public ICommand RunHmiClosedLoopCommand { get; }
+
+    public ICommand CancelHmiClosedLoopCommand { get; }
+
     public string CompileQualityGateInfo =>
         "Der Button kompiliert ausschließlich die ausgewählte PLC über TIA Openness und liest Fehler, Warnungen " +
         "und Meldungspfade aus. Ergebnisse stehen direkt in der Tabelle, im Anwendungslog und als Nachweis unter " +
         "Project Quality > Adapter/Nachweise. Das Projekt wird nicht gespeichert. Safety- oder Know-how-geschützte " +
         "Inhalte können weiterhin eine Anmeldung direkt in TIA erfordern. Auch mit vorhandenen Lizenzen wird derzeit " +
-        "kein HMI-Funktionstest automatisch gestartet. Ein Ablauf wie 'HMI-Taste -> PLC-Ausgang -> " +
-        "Simulationsrückmeldung' benötigt eine verbundene WinCC Runtime, PLCSIM Advanced oder eine Test-PLC, eine " +
-        "projektspezifische Tag-/Bildzuordnung, einen Simulationsadapter und eine sichere Rücksetzung der Schreibwerte.";
+        "kein HMI-Funktionstest automatisch gestartet. Der separate Bereich 'HMI/FEE Closed Loop' führt diesen " +
+        "Test ausschließlich nach explizitem Start und mit einem erreichbaren WinCC-Runtime-Adapter aus.";
+
+    public string HmiClosedLoopPrerequisites =>
+        "Voraussetzungen: (1) WinCC Runtime und PLC/PLCSIM Advanced laufen und kommunizieren; (2) ein " +
+        "projektspezifischer Runtime-Adapter stellt den unten dokumentierten Named-Pipe-Vertrag bereit; (3) das " +
+        "Runtime-Tag der HMI-Taste ist schreib- und lesbar; (4) FEE ist verbunden und enthält die passenden " +
+        "Interface-Signale; (5) die Signalwege HMI -> PLC-Ausgang -> FEE-Modell -> PLC-Eingang sind im Projekt " +
+        "konfiguriert. Der Test liest zuerst alle Ausgangswerte, schreibt dann den HMI-Trigger, beobachtet die " +
+        "ausgewählten FEE-Signale bis zum Timeout und stellt den ursprünglichen HMI-Wert in einem finally-Pfad " +
+        "wieder her. Ein leeres Erwartungsfeld bedeutet: Der Wert muss sich gegenüber dem Anfangswert ändern. " +
+        "TIA Openness allein kann keine laufende HMI-Taste bedienen; ohne Runtime-Adapter wird deshalb kein " +
+        "Testerfolg vorgetäuscht.";
+
+    private string _hmiPipeName = "VIBN_Tools.WinCC.Runtime";
+    public string HmiPipeName { get => _hmiPipeName; set { _hmiPipeName = value; OnPropertyChanged(); } }
+
+    private string _hmiTag = string.Empty;
+    public string HmiTag { get => _hmiTag; set { _hmiTag = value; OnPropertyChanged(); } }
+
+    private string _hmiTriggerValue = "1";
+    public string HmiTriggerValue { get => _hmiTriggerValue; set { _hmiTriggerValue = value; OnPropertyChanged(); } }
+
+    private TiaHmiFeeSignalVM? _selectedHmiOutputSignal;
+    public TiaHmiFeeSignalVM? SelectedHmiOutputSignal { get => _selectedHmiOutputSignal; set { _selectedHmiOutputSignal = value; OnPropertyChanged(); } }
+
+    private TiaHmiFeeSignalVM? _selectedHmiFeedbackSignal;
+    public TiaHmiFeeSignalVM? SelectedHmiFeedbackSignal { get => _selectedHmiFeedbackSignal; set { _selectedHmiFeedbackSignal = value; OnPropertyChanged(); } }
+
+    private string _expectedHmiOutputValue = string.Empty;
+    public string ExpectedHmiOutputValue { get => _expectedHmiOutputValue; set { _expectedHmiOutputValue = value; OnPropertyChanged(); } }
+
+    private string _expectedHmiFeedbackValue = string.Empty;
+    public string ExpectedHmiFeedbackValue { get => _expectedHmiFeedbackValue; set { _expectedHmiFeedbackValue = value; OnPropertyChanged(); } }
+
+    private int _hmiTimeoutSeconds = 10;
+    public int HmiTimeoutSeconds { get => _hmiTimeoutSeconds; set { _hmiTimeoutSeconds = Math.Clamp(value, 1, 120); OnPropertyChanged(); } }
 
     public string ProgramInventoryInfo =>
         "Diese beiden Funktionen sind momentan eine schreibgeschützte Bestandsaufnahme: Sie laden Name und " +
@@ -802,6 +859,130 @@ public sealed class TiaPortalPageVM : MvvmBase, IAsyncDisposable
         StatusText = progress.Operation;
     }
 
+    private async Task LoadHmiFeeSignalsAsync()
+    {
+        if (IsBusy)
+            return;
+        await RunBusyAsync("FEE-Signale für den HMI-Test werden gelesen …", async () =>
+        {
+            var signals = await _feeSignalCatalog.LoadAsync(CancellationToken.None);
+            var rows = signals
+                .Select(signal => new TiaHmiFeeSignalVM(
+                    signal.Guid,
+                    signal.InterfaceName,
+                    signal.Tag,
+                    signal.Location,
+                    signal.IoType))
+                .OrderBy(item => item.InterfaceName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Tag, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            HmiFeeSignals.ReplaceWith(rows);
+            SelectedHmiOutputSignal = rows.FirstOrDefault(item =>
+                item.IoType.Contains("Output", StringComparison.OrdinalIgnoreCase) ||
+                item.IoType.Equals("Q", StringComparison.OrdinalIgnoreCase));
+            SelectedHmiFeedbackSignal = rows.FirstOrDefault(item =>
+                item.IoType.Contains("Input", StringComparison.OrdinalIgnoreCase) ||
+                item.IoType.Equals("I", StringComparison.OrdinalIgnoreCase));
+            StatusText = $"{rows.Length} FEE-Signal(e) geladen. Auswahl und Erwartungswerte fachlich prüfen.";
+        });
+    }
+
+    private async Task ProbeHmiAdapterAsync()
+    {
+        if (IsBusy)
+            return;
+        await RunBusyAsync("WinCC-Runtime-Adapter wird geprüft …", async () =>
+        {
+            var adapter = new NamedPipeHmiRuntimeAdapter(HmiPipeName);
+            var result = await adapter.ProbeAsync(CancellationToken.None);
+            StatusText = result.Success
+                ? $"WinCC-Runtime-Adapter bereit: {result.Message}"
+                : result.Message;
+            if (result.Success)
+                _log.Information("TIA HMI Closed Loop", StatusText);
+            else
+                _log.Warning("TIA HMI Closed Loop", StatusText);
+        });
+    }
+
+    private async Task RunHmiClosedLoopAsync()
+    {
+        if (IsBusy)
+            return;
+        if (string.IsNullOrWhiteSpace(HmiTag) ||
+            (SelectedHmiOutputSignal is null && SelectedHmiFeedbackSignal is null))
+        {
+            StatusText = "HMI-Test nicht gestartet: Runtime-Tag und mindestens ein FEE-Signal auswählen.";
+            return;
+        }
+
+        _hmiTestCancellation?.Dispose();
+        _hmiTestCancellation = new CancellationTokenSource();
+        try
+        {
+            await RunBusyAsync("HMI/FEE Closed-Loop-Test läuft …", async () =>
+            {
+                HmiTestObservations.Clear();
+                OperationProgress = 5;
+                var progress = new Progress<HmiClosedLoopObservation>(observation =>
+                {
+                    HmiTestObservations.Add(observation);
+                    OperationProgress = Math.Min(90, OperationProgress + 10);
+                });
+                var service = new HmiClosedLoopTestService(
+                    new NamedPipeHmiRuntimeAdapter(HmiPipeName),
+                    _feeSignalMonitor);
+                var definition = new HmiClosedLoopTestDefinition(
+                    HmiTag.Trim(),
+                    HmiTriggerValue,
+                    SelectedHmiOutputSignal?.Guid,
+                    ExpectedHmiOutputValue,
+                    SelectedHmiFeedbackSignal?.Guid,
+                    ExpectedHmiFeedbackValue,
+                    TimeSpan.FromSeconds(HmiTimeoutSeconds),
+                    TimeSpan.FromMilliseconds(200));
+                var result = await service.RunAsync(definition, progress, _hmiTestCancellation.Token);
+                OperationProgress = 100;
+                var findings = result.Observations
+                    .Where(item => !item.Successful)
+                    .Select(item => new QualityFinding(
+                        "TIA HMI Closed Loop",
+                        "HMI_CLOSED_LOOP_STEP",
+                        QualityStatus.Failed,
+                        $"{item.Step}: {item.Value}"))
+                    .ToArray();
+                var status = result.Success && result.HmiValueRestored
+                    ? QualityStatus.Passed
+                    : QualityStatus.Failed;
+                QualityEvidenceStore.Instance.Upsert(new QualityEvidence(
+                    "TIA HMI Closed Loop",
+                    $"{HmiTag} / FEE",
+                    status,
+                    result.Summary,
+                    DateTimeOffset.UtcNow,
+                    findings));
+                StatusText = result.Success && result.HmiValueRestored
+                    ? $"HMI/FEE-Test bestanden: {result.Summary}"
+                    : $"HMI/FEE-Test nicht bestanden: {result.Summary}";
+                if (status == QualityStatus.Passed)
+                    _log.Information("TIA HMI Closed Loop", StatusText);
+                else
+                    _log.Warning("TIA HMI Closed Loop", StatusText);
+            });
+        }
+        finally
+        {
+            _hmiTestCancellation?.Dispose();
+            _hmiTestCancellation = null;
+        }
+    }
+
+    private void CancelHmiClosedLoop()
+    {
+        _hmiTestCancellation?.Cancel();
+        StatusText = "HMI-Test wird abgebrochen; der ursprüngliche Runtime-Wert wird weiterhin zurückgesetzt.";
+    }
+
     private async Task RunBusyAsync(string status, Func<Task> action)
     {
         if (IsBusy)
@@ -856,6 +1037,16 @@ public sealed record TiaCompileMessageRowVM(
 
     public bool IsRelevant => IsError || WarningCount > 0 ||
                               State.Contains("Warning", StringComparison.OrdinalIgnoreCase);
+}
+
+public sealed record TiaHmiFeeSignalVM(
+    Guid Guid,
+    string InterfaceName,
+    string Tag,
+    string Location,
+    string IoType)
+{
+    public string DisplayName => $"{InterfaceName} · {Tag} · {Location} · {IoType}";
 }
 
 public sealed class TiaAxisSelectionRowVM : MvvmBase

@@ -426,11 +426,7 @@ public sealed class ViCoRelatedPathResolver : IViCoRelatedPathResolver
         string? planningRoot = null)
     {
         var projectService = new FileSystemProjectCatalogService(new ViCoPathsOptions(simulationRoot, string.Empty));
-        var catalog = await projectService.LoadAsync(cancellationToken);
-        var projects = catalog.Projects.ToDictionary(
-            item => item.DisplayName,
-            item => item.FullPath,
-            StringComparer.OrdinalIgnoreCase);
+        var projectCatalogTask = projectService.LoadAsync(cancellationToken);
         var commissioningTask = LoadPairsOrScanAsync(
             cacheRoot,
             "ComissioningFoldersName.txt",
@@ -447,7 +443,12 @@ public sealed class ViCoRelatedPathResolver : IViCoRelatedPathResolver
             2,
             true,
             cancellationToken);
-        await Task.WhenAll(commissioningTask, planningTask);
+        await Task.WhenAll(projectCatalogTask, commissioningTask, planningTask);
+        var catalog = await projectCatalogTask;
+        var projects = catalog.Projects.ToDictionary(
+            item => item.DisplayName,
+            item => item.FullPath,
+            StringComparer.OrdinalIgnoreCase);
         var commissioning = await commissioningTask;
         var planning = await planningTask;
         return new ViCoRelatedPathResolver(simulationRoot, projects, commissioning, planning);
